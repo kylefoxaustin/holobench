@@ -287,26 +287,35 @@ class Session:
     # -- snapshots (savevm/loadvm; needs the scratch qcow2) -----------------
 
     @staticmethod
-    async def _create_snapshot_disk(path: Path, size: str = "256M") -> None:
-        proc = await asyncio.create_subprocess_exec(
-            "qemu-img", "create", "-f", "qcow2", str(path), size,
-            stdout=asyncio.subprocess.DEVNULL, stderr=asyncio.subprocess.PIPE,
-        )
+    async def _run_qemu_img(*args: str, what: str) -> None:
+        try:
+            proc = await asyncio.create_subprocess_exec(
+                "qemu-img", *args,
+                stdout=asyncio.subprocess.DEVNULL, stderr=asyncio.subprocess.PIPE,
+            )
+        except FileNotFoundError as exc:
+            # qemu-img not installed -> degrade cleanly instead of a raw 500.
+            raise SessionError(
+                f"{what} needs qemu-img, which is not installed "
+                f"(install qemu-utils)"
+            ) from exc
         _, err = await proc.communicate()
         if proc.returncode != 0:
-            raise SessionError(f"qemu-img create failed: {err.decode(errors='replace')}")
+            raise SessionError(f"{what} failed: {err.decode(errors='replace')}")
 
-    @staticmethod
-    async def _create_overlay(golden: Path, overlay: Path) -> None:
-        """Fresh qcow2 overlay over the golden disk (writes isolated)."""
-        proc = await asyncio.create_subprocess_exec(
-            "qemu-img", "create", "-f", "qcow2",
-            "-b", str(golden.resolve()), "-F", "raw", str(overlay),
-            stdout=asyncio.subprocess.DEVNULL, stderr=asyncio.subprocess.PIPE,
+    @classmethod
+    async def _create_snapshot_disk(cls, path: Path, size: str = "256M") -> None:
+        await cls._run_qemu_img(
+            "create", "-f", "qcow2", str(path), size, what="snapshot disk create"
         )
-        _, err = await proc.communicate()
-        if proc.returncode != 0:
-            raise SessionError(f"qemu-img overlay create failed: {err.decode(errors='replace')}")
+
+    @classmethod
+    async def _create_overlay(cls, golden: Path, overlay: Path) -> None:
+        """Fresh qcow2 overlay over the golden disk (writes isolated)."""
+        await cls._run_qemu_img(
+            "create", "-f", "qcow2", "-b", str(golden.resolve()), "-F", "raw",
+            str(overlay), what="disk overlay create",
+        )
 
     async def snapshot_save(self, name: str) -> str:
         return await self.hmp(f"savevm {name}")
