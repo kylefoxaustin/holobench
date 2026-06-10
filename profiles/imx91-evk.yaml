@@ -1,0 +1,61 @@
+# Holobench board profile — i.MX 91 EVK
+#
+# Values confirmed 2026-06-09 by the 91 emulator session on the message bus +
+# its reference launcher tests/boot-imx91/run.sh (binary `-machine help`).
+# Source of truth: kylefoxaustin/qemu-imx91 (branch imx91-dev). Fully verified.
+#
+# Boot artifacts (Image, dtb, initrd) are read from assets/imx91-evk/ — the Image
+# and dtb are read-only symlinks into the BSP deploy dir; initrd.cpio.gz is built
+# by tools/make-initramfs.sh from the BSP rootfs with a drop-to-shell /init.
+
+id:           imx91-evk
+display_name: "i.MX 91 EVK"
+soc:          "i.MX 91"
+description:  "Cortex-A55 application processor, entry/edge tier. Virtual EVK."
+
+qemu:
+  binary:  /home/kyle/Documents/GitHub/91emulator/build/qemu-system-aarch64
+  machine: imx91-11x11-evk        # the only i.MX 91 machine; single Cortex-A55
+  memory:  "4G"
+  smp:     1
+  audio:   none                   # never let QEMU grab the host audio backend
+  # Second LPUART padded with `-serial null` (console is ttyLP0 = first serial).
+  extra_args: ["-serial", "null"]
+
+boot:
+  mode: direct-kernel
+  artifacts:
+    flash_bin: null
+    kernel:    Image
+    dtb:       imx91-11x11-evk.dtb
+    initrd:    initrd.cpio.gz
+    rootfs:    null
+    disk:      disk.img          # golden SD card for image-swap/reinstall (overlay-backed)
+  append: "earlycon=lpuart32,mmio32,0x44380010 console=ttyLP0,115200 cpuidle.off=1 rdinit=/init ignore_loglevel"
+  command_template: null
+
+serial:
+  - { name: "A-core console", chardev: console0, role: a-core, default: true }
+
+# LCDIF present; framebuffer is read via QMP screendump (no VNC confirmed yet).
+display: { enabled: true, device: "lcdif", vnc: false }
+
+# 91 has TWO NICs: FEC (eth0) + ENET_QoS (eth1) -> two user-mode NICs.
+net: { user_nics: 2 }
+
+file_injection:
+  nine_p: { enabled: true, mount_tag: holobench }
+  tftp:   { enabled: true }
+  nfs:    { enabled: true }
+  image_swap: { enabled: true, target_drive: sd }
+
+power: { warm_reset: true, cold_cycle: true, pause: true, reinstall: true }
+
+introspection:
+  qmp_events: true
+  memory_map: true
+  device_tree: true
+  gdbstub: { enabled: true }
+  snapshots: true
+
+reservation: { default_minutes: 60, max_minutes: 240 }

@@ -1,0 +1,20 @@
+#!/bin/busybox sh
+# Holobench initramfs /init for a BARE busybox initramfs (only /bin/busybox, no
+# /bin/sh yet — so the shebang must invoke busybox directly). Installs the applet
+# symlinks, brings up the basics, and drops to an interactive shell on console.
+/bin/busybox --install -s /bin 2>/dev/null
+mount -t proc proc /proc 2>/dev/null
+mount -t sysfs sysfs /sys 2>/dev/null
+mount -t devtmpfs devtmpfs /dev 2>/dev/null
+mkdir -p /mnt 2>/dev/null
+mount -t 9p -o trans=virtio,version=9p2000.L holobench /mnt 2>/dev/null \
+  && echo "[holobench] 9p file share mounted at /mnt"
+exec >/dev/console 2>&1
+
+echo
+echo "=== HOLOBENCH: i.MX userspace reached ==="
+/bin/busybox uname -srm
+echo "=== launching interactive shell on console ==="
+echo
+
+exec /bin/busybox sh

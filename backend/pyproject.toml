@@ -1,0 +1,24 @@
+[build-system]
+requires = ["setuptools>=68"]
+build-backend = "setuptools.build_meta"
+
+[project]
+name = "holobench"
+version = "0.0.0"
+description = "A virtual-EVK board farm front end for QEMU machine models"
+requires-python = ">=3.10"
+dependencies = [
+    "fastapi",
+    "uvicorn[standard]",
+    "pydantic>=2",
+    "pyyaml",
+    "qemu.qmp",
+    "python-multipart",
+]
+
+[project.scripts]
+holobench = "holobench.cli:main"
+
+[tool.setuptools.packages.find]
+where = ["."]
+include = ["holobench*"]

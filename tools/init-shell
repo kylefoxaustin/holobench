@@ -1,0 +1,25 @@
+#!/bin/sh
+# Minimal Holobench initramfs /init: bring up the basics and drop to a shell on
+# the console. Used to prove a board boots to a usable Linux prompt. Not a soak
+# battery — just an interactive shell.
+PATH=/sbin:/usr/sbin:/bin:/usr/bin; export PATH
+# On a bare busybox initramfs, install the applet symlinks first so mount/uname
+# etc. exist. Harmless on a full rootfs (no /bin/busybox -> guard skips it).
+[ -x /bin/busybox ] && /bin/busybox --install -s /bin 2>/dev/null
+mount -t proc proc /proc 2>/dev/null
+mount -t sysfs sysfs /sys 2>/dev/null
+mount -t devtmpfs devtmpfs /dev 2>/dev/null
+mkdir -p /run /tmp 2>/dev/null
+
+# Auto-mount the Holobench virtio-9p file-injection share, if present.
+if mount -t 9p -o trans=virtio,version=9p2000.L holobench /mnt 2>/dev/null; then
+    echo "[holobench] 9p file share mounted at /mnt"
+fi
+
+echo
+echo "=== HOLOBENCH: i.MX userspace reached ==="
+uname -srm 2>/dev/null
+echo "=== launching interactive shell on console ==="
+echo
+
+exec /bin/sh

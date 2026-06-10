@@ -1,0 +1,58 @@
+# Holobench board profile — i.MX 93 EVK
+#
+# Values confirmed 2026-06-09 by the 93 emulator session on the message bus.
+# Source of truth: kylefoxaustin/qemu-imx93 (branch imx93-dev). Fully verified.
+#
+# Assets staged into assets/imx93-evk/ (same pattern as imx91): Image + dtb as
+# read-only symlinks into the BSP deploy dir, initrd.cpio.gz built via
+# tools/make-initramfs.sh from the BSP rootfs. (Not yet staged on this host.)
+
+id:           imx93-evk
+display_name: "i.MX 93 EVK"
+soc:          "i.MX 93"
+description:  "2x Cortex-A55 + Cortex-M33, Ethos-U65 NPU. Virtual EVK."
+
+qemu:
+  binary:  /home/kyle/Documents/GitHub/93emulator/build-imx93/qemu-system-aarch64
+  machine: imx93-11x11-evk        # the only i.MX 93 machine
+  memory:  "4G"
+  smp:     3                       # fixed topology: 2x A55 + 1x M33 (model requires 3)
+  audio:   none
+  # Second LPUART padded with `-serial null` (console is ttyLP0 = first serial).
+  extra_args: ["-serial", "null"]
+
+boot:
+  mode: direct-kernel
+  artifacts:
+    flash_bin: null
+    kernel:    Image
+    dtb:       imx93-11x11-evk.dtb
+    initrd:    initrd.cpio.gz
+    rootfs:    null
+  append: "console=ttyLP0,115200 cpuidle.off=1 rdinit=/init ignore_loglevel"
+  command_template: null
+
+serial:
+  - { name: "A-core console", chardev: console0, role: a-core, default: true }
+
+# LCDIF present; framebuffer via QMP screendump (no VNC confirmed yet).
+display: { enabled: true, device: "lcdif", vnc: false }
+
+net: { user_nics: 1 }
+
+file_injection:
+  nine_p: { enabled: true, mount_tag: holobench }
+  tftp:   { enabled: true }
+  nfs:    { enabled: true }
+  image_swap: { enabled: true, target_drive: sd }
+
+power: { warm_reset: true, cold_cycle: true, pause: true, reinstall: true }
+
+introspection:
+  qmp_events: true
+  memory_map: true
+  device_tree: true
+  gdbstub: { enabled: true }
+  snapshots: true
+
+reservation: { default_minutes: 60, max_minutes: 240 }

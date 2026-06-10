@@ -1,0 +1,52 @@
+# Holobench plumbing profile — stock QEMU `virt` machine.
+#
+# NOT a board. This exists only to prove the orchestrator + QMP control plane
+# against an UNMODIFIED upstream QEMU machine (the strongest possible evidence
+# that Holobench is board-agnostic and Prime-Directive clean). It boots no OS;
+# `virt` simply sits with no bootable device while QMP stays fully responsive.
+#
+# `qemu.binary` points at a locally-built qemu-system-aarch64 because this host
+# has no system QEMU. Any stock qemu-system-aarch64 works; override the path to
+# match your machine. (We use the 91 emulator's build read-only, only with the
+# stock `virt` machine — never its i.MX models.)
+
+id:           virt-smoke
+display_name: "QEMU virt (smoke)"
+soc:          "ARM virt"
+description:  "Stock upstream virt machine — Phase 0 QMP plumbing test, not a board."
+
+qemu:
+  binary:  /home/kyle/Documents/GitHub/91emulator/build/qemu-system-aarch64
+  machine: virt
+  memory:  "512M"
+  smp:     1
+  extra_args: []
+
+boot:
+  mode: direct-kernel       # no artifacts -> resolver adds no boot args
+  artifacts: { flash_bin: null, kernel: null, dtb: null, rootfs: null }
+  command_template: null
+
+serial:
+  - { name: "console", chardev: console0, role: a-core, default: true }
+
+display: { enabled: false, device: null, vnc: false }
+
+net: { user_nics: 0 }
+
+file_injection:
+  nine_p: { enabled: false, mount_tag: holobench }
+  tftp:   { enabled: false }
+  nfs:    { enabled: false }
+  image_swap: { enabled: false, target_drive: null }
+
+power: { warm_reset: true, cold_cycle: true, pause: true, reinstall: false }
+
+introspection:
+  qmp_events: true
+  memory_map: true
+  device_tree: true
+  gdbstub: { enabled: true }
+  snapshots: true
+
+reservation: { default_minutes: 30, max_minutes: 60 }

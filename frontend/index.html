@@ -1,0 +1,429 @@
+<!DOCTYPE html>
+<html lang="en" class="h-full">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>Holobench — Virtual EVK</title>
+  <!-- All deps vendored locally (frontend/vendor) so Holobench runs fully offline. -->
+  <script src="/vendor/tailwind.js"></script>
+  <link rel="stylesheet" href="/vendor/xterm.css" />
+  <!-- UMD globals: Terminal, FitAddon, React, ReactDOM, htm -->
+  <script src="/vendor/xterm.js"></script>
+  <script src="/vendor/addon-fit.js"></script>
+  <script src="/vendor/react.js"></script>
+  <script src="/vendor/react-dom.js"></script>
+  <script src="/vendor/htm.js"></script>
+  <style>
+    html, body, #root { height: 100%; background:#0b0f17; }
+    .xterm { padding: 8px; }
+  </style>
+</head>
+<body class="h-full text-slate-200">
+  <div id="root" class="h-full"></div>
+
+  <script type="module">
+    const React = window.React;
+    const { useState, useEffect, useRef, useCallback } = React;
+    const { createRoot } = window.ReactDOM;
+    const html = window.htm.bind(React.createElement);
+
+    const api = (p, opts) => fetch(p, opts).then(r => r.ok ? r.json() : r.json().then(e => Promise.reject(e)));
+
+    function Console({ session, chardev }) {
+      const elRef = useRef(null);
+      const termRef = useRef(null);
+      const wsRef = useRef(null);
+
+      useEffect(() => {
+        const term = new window.Terminal({
+          convertEol: false, cursorBlink: true, fontSize: 13,
+          fontFamily: "ui-monospace, SFMono-Regular, Menlo, monospace",
+          theme: { background: "#0b0f17", foreground: "#cbd5e1" },
+        });
+        const fit = new window.FitAddon.FitAddon();
+        term.loadAddon(fit);
+        term.open(elRef.current);
+        try { fit.fit(); } catch {}
+        termRef.current = term;
+        const onResize = () => { try { fit.fit(); } catch {} };
+        window.addEventListener("resize", onResize);
+
+        const proto = location.protocol === "https:" ? "wss" : "ws";
+        const q = chardev ? `?chardev=${encodeURIComponent(chardev)}` : "";
+        const ws = new WebSocket(`${proto}://${location.host}/api/sessions/${session.id}/console${q}`);
+        ws.binaryType = "arraybuffer";
+        wsRef.current = ws;
+        ws.onmessage = (e) => {
+          if (e.data instanceof ArrayBuffer) term.write(new Uint8Array(e.data));
+          else term.write(e.data);
+        };
+        ws.onclose = () => term.write("\r\n\x1b[33m[holobench: console disconnected]\x1b[0m\r\n");
+        const disp = term.onData((d) => { if (ws.readyState === 1) ws.send(d); });
+
+        return () => {
+          window.removeEventListener("resize", onResize);
+          disp.dispose(); ws.close(); term.dispose();
+        };
+      }, [session.id, chardev]);
+
+      return html`<div ref=${elRef} class="h-full w-full"></div>`;
+    }
+
+    function Display({ session }) {
+      const [ts, setTs] = useState(Date.now());
+      useEffect(() => {
+        const id = setInterval(() => setTs(Date.now()), 1500);
+        return () => clearInterval(id);
+      }, [session.id]);
+      const src = `/api/sessions/${session.id}/screen.png?ts=${ts}`;
+      return html`
+        <div class="h-full flex flex-col">
+          <div class="text-xs text-slate-500 mb-1">LCD / framebuffer
+            <span class="text-slate-600">— screendump · ~1.5s</span></div>
+          <div class="flex-1 min-h-0 flex items-center justify-center bg-black rounded border border-slate-800 overflow-hidden">
+            <img src=${src} alt="framebuffer" class="max-h-full max-w-full object-contain"
+                 style=${{ imageRendering: "pixelated" }} />
+          </div>
+        </div>`;
+    }
+
+    function fmtSize(n) {
+      return n > 1e6 ? (n / 1e6).toFixed(1) + " MB" : n > 1e3 ? (n / 1e3).toFixed(1) + " KB" : n + " B";
+    }
+
+    function fmtDur(sec) {
+      sec = Math.max(0, Math.round(sec));
+      const h = Math.floor(sec / 3600), m = Math.floor((sec % 3600) / 60), s = sec % 60;
+      const p = (n) => String(n).padStart(2, "0");
+      return h > 0 ? `${h}:${p(m)}:${p(s)}` : `${p(m)}:${p(s)}`;
+    }
+
+    function Files({ session }) {
+      const [files, setFiles] = useState([]);
+      const [busy, setBusy] = useState(false);
+      const [drag, setDrag] = useState(false);
+      const inputRef = useRef(null);
+
+      const refresh = useCallback(() => {
+        fetch(`/api/sessions/${session.id}/files`)
+          .then(r => r.json()).then(d => setFiles(d.files || [])).catch(() => {});
+      }, [session.id]);
+      useEffect(() => { refresh(); const id = setInterval(refresh, 3000); return () => clearInterval(id); }, [session.id]);
+
+      const upload = async (list) => {
+        if (!list || !list.length) return;
+        setBusy(true);
+        for (const f of list) {
+          const fd = new FormData(); fd.append("file", f);
+          await fetch(`/api/sessions/${session.id}/files`, { method: "POST", body: fd }).catch(() => {});
+        }
+        setBusy(false); refresh();
+      };
+      const del = async (name) => {
+        await fetch(`/api/sessions/${session.id}/files/${encodeURIComponent(name)}`, { method: "DELETE" }).catch(() => {});
+        refresh();
+      };
+
+      const has9p = session.file_injection && session.file_injection.nine_p;
+      const hint = has9p ? "live at /mnt · virtio-9p" : "fetch via tftp · 10.0.2.2";
+      const emptyHint = has9p
+        ? "no files yet — drop one, then `ls /mnt` in the console"
+        : "no files yet — drop one, then `tftp -g -r <name> 10.0.2.2` in the guest";
+      return html`
+        <div class="h-full flex flex-col">
+          <div class="text-xs text-slate-500 mb-1">Files → guest
+            <span class="text-slate-600">— ${hint}</span></div>
+          <div onClick=${() => inputRef.current.click()}
+               onDragOver=${e => { e.preventDefault(); setDrag(true); }}
+               onDragLeave=${() => setDrag(false)}
+               onDrop=${e => { e.preventDefault(); setDrag(false); upload(e.dataTransfer.files); }}
+               class="rounded border border-dashed ${drag ? "border-emerald-500 bg-emerald-950/30" : "border-slate-700"} p-3 text-center text-sm text-slate-400 cursor-pointer">
+            ${busy ? "Uploading…" : "Drop files here or click to upload"}
+            <input ref=${inputRef} type="file" multiple class="hidden"
+                   onChange=${e => upload(e.target.files)} />
+          </div>
+          <ul class="mt-2 text-sm overflow-auto flex-1 min-h-0">
+            ${files.length === 0 && html`<li class="text-slate-600 px-1">${emptyHint}</li>`}
+            ${files.map(f => html`
+              <li key=${f.name} class="flex justify-between items-center py-0.5 px-1 hover:bg-slate-800/50 rounded">
+                <span class="truncate">${f.name} <span class="text-slate-600 text-xs">${fmtSize(f.size)}</span></span>
+                <button onClick=${() => del(f.name)} class="text-rose-400 text-xs hover:text-rose-300 px-1">✕</button>
+              </li>`)}
+          </ul>
+        </div>`;
+    }
+
+    function TextPanel({ session, kind, label }) {
+      const [text, setText] = useState("loading…");
+      const load = useCallback(() => {
+        fetch(`/api/sessions/${session.id}/introspect/${kind}`)
+          .then(r => r.json()).then(d => setText(d.text || "(empty)"))
+          .catch(() => setText("(unavailable)"));
+      }, [session.id, kind]);
+      useEffect(() => { load(); }, [load]);
+      return html`
+        <div class="h-full flex flex-col">
+          <div class="flex items-center justify-between mb-1">
+            <div class="text-xs text-slate-500">${label}</div>
+            <button onClick=${load} class="text-xs text-slate-400 hover:text-slate-200">↻ refresh</button>
+          </div>
+          <pre class="flex-1 min-h-0 overflow-auto text-[11px] leading-tight bg-black rounded border border-slate-800 p-2 text-slate-300">${text}</pre>
+        </div>`;
+    }
+
+    function EventsPanel({ session }) {
+      const [evs, setEvs] = useState([]);
+      useEffect(() => {
+        const load = () => fetch(`/api/sessions/${session.id}/events`)
+          .then(r => r.json()).then(d => setEvs(d.events || [])).catch(() => {});
+        load(); const id = setInterval(load, 2000); return () => clearInterval(id);
+      }, [session.id]);
+      return html`
+        <div class="h-full flex flex-col">
+          <div class="text-xs text-slate-500 mb-1">QMP event stream <span class="text-slate-600">— live, read-only</span></div>
+          <ul class="flex-1 min-h-0 overflow-auto text-[11px] font-mono bg-black rounded border border-slate-800 p-2">
+            ${evs.length === 0 && html`<li class="text-slate-600">no events yet — try Reset / Pause / Resume</li>`}
+            ${evs.slice().reverse().map((e, i) => html`
+              <li key=${i} class="py-0.5">
+                <span class="text-emerald-400">${e.event}</span>
+                ${e.data && Object.keys(e.data).length > 0 && html`<span class="text-slate-500"> ${JSON.stringify(e.data)}</span>`}
+              </li>`)}
+          </ul>
+        </div>`;
+    }
+
+    function DebugPanel({ session }) {
+      const port = session.gdb && session.gdb.port;
+      const connect = `target remote localhost:${port}`;
+      return html`
+        <div class="h-full flex flex-col">
+          <div class="text-xs text-slate-500 mb-1">Source debug — gdbstub
+            <span class="text-slate-600">— ${port ? `listening on 127.0.0.1:${port}` : "disabled"}</span></div>
+          <div class="flex-1 min-h-0 overflow-auto bg-black rounded border border-slate-800 p-3 text-sm text-slate-300 space-y-3">
+            <div>
+              <div class="text-slate-500 text-xs mb-1">Attach a cross-gdb to the running guest:</div>
+              <pre class="bg-slate-900 rounded p-2 text-emerald-300 text-[12px] select-all">aarch64-linux-gnu-gdb vmlinux\n(gdb) ${connect}</pre>
+            </div>
+            <div class="text-slate-500 text-xs">
+              The board keeps running; gdb attaches on demand. Set breakpoints in
+              guest code, inspect registers/memory — source-level debugging of an
+              emulated SoC, no JTAG probe required.
+            </div>
+          </div>
+        </div>`;
+    }
+
+    function SnapshotsPanel({ session }) {
+      const [snaps, setSnaps] = useState([]);
+      const [name, setName] = useState("");
+      const [busy, setBusy] = useState(false);
+      const refresh = useCallback(() => fetch(`/api/sessions/${session.id}/snapshots`)
+        .then(r => r.json()).then(d => setSnaps(d.snapshots || [])).catch(() => {}), [session.id]);
+      useEffect(() => { refresh(); }, [refresh]);
+      const save = async () => {
+        if (!name) return; setBusy(true);
+        await fetch(`/api/sessions/${session.id}/snapshots`, {
+          method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ name }),
+        }).catch(() => {});
+        setName(""); setBusy(false); refresh();
+      };
+      const load = async (t) => { setBusy(true); await fetch(`/api/sessions/${session.id}/snapshots/${encodeURIComponent(t)}/load`, { method: "POST" }).catch(() => {}); setBusy(false); };
+      const del = async (t) => { await fetch(`/api/sessions/${session.id}/snapshots/${encodeURIComponent(t)}`, { method: "DELETE" }).catch(() => {}); refresh(); };
+      return html`
+        <div class="h-full flex flex-col">
+          <div class="text-xs text-slate-500 mb-1">Snapshots <span class="text-slate-600">— savevm/loadvm · bookmark &amp; jump back</span></div>
+          <div class="flex gap-1 mb-2">
+            <input value=${name} onChange=${e => setName(e.target.value)} placeholder="name (A-Za-z0-9 _ - .)"
+              class="flex-1 bg-slate-800 border border-slate-700 rounded px-2 py-1 text-sm" />
+            <button disabled=${busy || !name} onClick=${save} class="px-3 py-1 rounded bg-emerald-700 hover:bg-emerald-600 text-sm disabled:opacity-50">${busy ? "…" : "Save"}</button>
+          </div>
+          <ul class="flex-1 min-h-0 overflow-auto text-sm">
+            ${snaps.length === 0 && html`<li class="text-slate-600 px-1">no snapshots — Save bookmarks full VM state; Load jumps back</li>`}
+            ${snaps.map(s => html`
+              <li key=${s.tag} class="flex justify-between items-center py-0.5 px-1 hover:bg-slate-800/50 rounded font-mono text-[12px]">
+                <span class="truncate">${s.tag}</span>
+                <span class="flex gap-2">
+                  <button disabled=${busy} onClick=${() => load(s.tag)} class="text-emerald-400 hover:text-emerald-300 text-xs">load</button>
+                  <button onClick=${() => del(s.tag)} class="text-rose-400 hover:text-rose-300 text-xs">✕</button>
+                </span>
+              </li>`)}
+          </ul>
+        </div>`;
+    }
+
+    function RightPanel({ session }) {
+      const fi = session.file_injection || {}, ins = session.introspection || {};
+      const tabs = [];
+      if (session.display && session.display.enabled) tabs.push(["lcd", "LCD"]);
+      if (ins.memory_map) tabs.push(["mem", "Memory"]);
+      if (ins.device_tree) tabs.push(["dev", "Devices"]);
+      if (ins.qmp_events) tabs.push(["evt", "Events"]);
+      if (session.gdb && session.gdb.enabled) tabs.push(["dbg", "Debug"]);
+      if (ins.snapshots) tabs.push(["snap", "Snapshots"]);
+      if (fi.nine_p || fi.tftp) tabs.push(["files", "Files"]);
+      const [active, setActive] = useState(tabs.length ? tabs[0][0] : null);
+      if (!tabs.length) return null;
+      const cur = tabs.some(t => t[0] === active) ? active : tabs[0][0];
+      return html`
+        <div class="w-[44%] max-w-[620px] min-h-0 flex flex-col">
+          <div class="flex gap-1 mb-2 flex-wrap">
+            ${tabs.map(([k, label]) => html`
+              <button key=${k} onClick=${() => setActive(k)}
+                class="px-3 py-1 rounded-t text-sm ${cur === k ? "bg-slate-800 text-slate-100" : "bg-slate-900 text-slate-500 hover:text-slate-300"}">
+                ${label}
+              </button>`)}
+          </div>
+          <div class="flex-1 min-h-0">
+            ${cur === "lcd" && html`<${Display} session=${session} />`}
+            ${cur === "mem" && html`<${TextPanel} session=${session} kind="mtree" label="Memory map — info mtree" />`}
+            ${cur === "dev" && html`<${TextPanel} session=${session} kind="qtree" label="Device tree — info qtree" />`}
+            ${cur === "evt" && html`<${EventsPanel} session=${session} />`}
+            ${cur === "dbg" && html`<${DebugPanel} session=${session} />`}
+            ${cur === "snap" && html`<${SnapshotsPanel} session=${session} />`}
+            ${cur === "files" && html`<${Files} session=${session} />`}
+          </div>
+        </div>`;
+    }
+
+    function Badge({ ok, children }) {
+      const cls = ok ? "bg-emerald-900 text-emerald-300" : "bg-slate-700 text-slate-300";
+      return html`<span class="px-2 py-0.5 rounded text-xs ${cls}">${children}</span>`;
+    }
+
+    function App() {
+      const [profiles, setProfiles] = useState([]);
+      const [selected, setSelected] = useState("");
+      const [session, setSession] = useState(null);
+      const [tab, setTab] = useState(null);
+      const [busy, setBusy] = useState(false);
+      const [err, setErr] = useState(null);
+      const [now, setNow] = useState(() => Date.now() / 1000);
+      useEffect(() => {
+        const id = setInterval(() => setNow(Date.now() / 1000), 1000);
+        return () => clearInterval(id);
+      }, []);
+
+      const refreshProfiles = useCallback(() => {
+        api("/api/profiles").then(ps => {
+          setProfiles(ps);
+          if (ps.length && !selected) setSelected(ps[0].id);
+        }).catch(e => setErr(e.detail || String(e)));
+      }, [selected]);
+
+      useEffect(() => { refreshProfiles(); }, []);
+
+      const launch = async () => {
+        setBusy(true); setErr(null);
+        try {
+          const s = await api("/api/sessions", {
+            method: "POST", headers: { "Content-Type": "application/json" },
+            body: JSON.stringify({ profile_id: selected }),
+          });
+          setSession(s);
+          focusDefaultTab(s);
+        } catch (e) { setErr(e.detail || String(e)); }
+        finally { setBusy(false); }
+      };
+
+      const focusDefaultTab = (s) => {
+        const def = (s.serial || []).find(x => x.default) || (s.serial || [])[0];
+        setTab(def ? def.chardev : null);
+      };
+
+      const action = async (verb) => {
+        if (!session) return;
+        setBusy(true); setErr(null);
+        try {
+          const r = await api(`/api/sessions/${session.id}/actions/${verb}`, { method: "POST" });
+          if (verb === "stop") { setSession(null); setTab(null); }
+          else if (verb === "reinstall") { setSession(r); focusDefaultTab(r); }
+          else setSession(s => ({ ...s, state: r.state }));
+        } catch (e) { setErr(e.detail || String(e)); }
+        finally { setBusy(false); }
+      };
+
+      const extend = async () => {
+        if (!session) return;
+        setErr(null);
+        try {
+          const r = await api(`/api/sessions/${session.id}/extend?minutes=30`, { method: "POST" });
+          setSession(s => ({ ...s, reservation: r.reservation }));
+        } catch (e) { setErr(e.detail || String(e)); }
+      };
+
+      const sel = profiles.find(p => p.id === selected);
+
+      return html`
+        <div class="h-full flex flex-col">
+          <header class="flex items-center gap-3 px-4 py-3 border-b border-slate-800 bg-slate-900/60">
+            <div class="font-semibold text-lg">🛰️ Holobench <span class="text-slate-500 text-sm font-normal">virtual EVK</span></div>
+            <div class="flex-1"></div>
+            ${!session && html`
+              <select class="bg-slate-800 border border-slate-700 rounded px-2 py-1 text-sm"
+                      value=${selected} onChange=${e => setSelected(e.target.value)}>
+                ${profiles.map(p => html`<option key=${p.id} value=${p.id}>${p.display_name} — ${p.machine}</option>`)}
+              </select>
+              ${sel && html`<${Badge} ok=${sel.assets_ready}>${sel.assets_ready ? "assets ready" : "no assets"}<//>`}
+              <button disabled=${busy || !selected} onClick=${launch}
+                class="px-3 py-1 rounded bg-emerald-600 hover:bg-emerald-500 disabled:opacity-50 text-sm font-medium">
+                ${busy ? "Reserving…" : "Reserve & Boot"}
+              </button>
+            `}
+            ${session && (() => {
+              const rem = session.reservation ? session.reservation.expires_at - now : null;
+              const low = rem !== null && rem < 120;
+              return html`
+              <span class="text-sm text-slate-400">${session.display_name}</span>
+              <${Badge} ok=${session.state === "running"}>${session.state}<//>
+              <span class="text-xs text-slate-500">pid ${session.pid}</span>
+              ${rem !== null && html`
+                <span class="px-2 py-0.5 rounded text-xs font-mono ${low ? "bg-rose-900 text-rose-200" : "bg-slate-700 text-slate-200"}"
+                      title="reservation remaining">⏱ ${fmtDur(rem)}</span>
+                <button onClick=${extend} class="px-2 py-1 rounded bg-slate-700 hover:bg-slate-600 text-xs">+30m</button>`}
+              <button disabled=${busy} onClick=${() => action("reset")} class="px-2 py-1 rounded bg-amber-700 hover:bg-amber-600 text-sm">Reset</button>
+              <button disabled=${busy} onClick=${() => action("reinstall")} class="px-2 py-1 rounded bg-amber-800 hover:bg-amber-700 text-sm" title="cold cycle: fresh boot">Reinstall</button>
+              ${session.state === "running"
+                ? html`<button disabled=${busy} onClick=${() => action("pause")} class="px-2 py-1 rounded bg-slate-700 hover:bg-slate-600 text-sm">Pause</button>`
+                : html`<button disabled=${busy} onClick=${() => action("resume")} class="px-2 py-1 rounded bg-slate-700 hover:bg-slate-600 text-sm">Resume</button>`}
+              <button disabled=${busy} onClick=${() => action("stop")} class="px-2 py-1 rounded bg-rose-700 hover:bg-rose-600 text-sm">Power off</button>`;
+            })()}
+          </header>
+
+          ${err && html`<div class="px-4 py-2 bg-rose-950 text-rose-300 text-sm border-b border-rose-900">${err}</div>`}
+
+          <main class="flex-1 min-h-0 p-3">
+            ${!session && html`
+              <div class="h-full flex items-center justify-center text-slate-500">
+                <div class="text-center">
+                  <div class="text-5xl mb-3">🖥️</div>
+                  <div>Pick a board and <span class="text-emerald-400">Reserve &amp; Boot</span> to open its console.</div>
+                  <div class="text-xs mt-2 text-slate-600">No silicon. A QEMU machine model behind a board-farm UX.</div>
+                </div>
+              </div>
+            `}
+            ${session && html`
+              <div class="h-full flex gap-3">
+                <div class="flex-1 min-h-0 flex flex-col">
+                  ${session.serial.length > 1 && html`
+                    <div class="flex gap-1 mb-2">
+                      ${session.serial.map(p => html`
+                        <button key=${p.chardev} onClick=${() => setTab(p.chardev)}
+                          class="px-3 py-1 rounded-t text-sm ${tab === p.chardev ? "bg-slate-800 text-slate-100" : "bg-slate-900 text-slate-500"}">
+                          ${p.name}
+                        </button>`)}
+                    </div>`}
+                  <div class="flex-1 min-h-0 rounded border border-slate-800 overflow-hidden bg-[#0b0f17]">
+                    <${Console} key=${session.id + ":" + (tab||"")} session=${session} chardev=${tab} />
+                  </div>
+                </div>
+                <${RightPanel} session=${session} />
+              </div>
+            `}
+          </main>
+        </div>`;
+    }
+
+    createRoot(document.getElementById("root")).render(html`<${App} />`);
+  </script>
+</body>
+</html>

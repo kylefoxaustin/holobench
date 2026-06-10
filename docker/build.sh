@@ -1,0 +1,55 @@
+#!/bin/bash
+# Build a fat, self-contained Holobench "virtual EVK" image.
+#
+# Usage:
+#   docker/build.sh [QEMU_BOARD] [ASSET_BOARD ...]
+#
+#   QEMU_BOARD   profile whose forked qemu-system-aarch64 to BAKE IN  (default: imx91-evk)
+#   ASSET_BOARD  profiles whose boot artifacts to bake in             (default: same as QEMU_BOARD)
+#
+# The baked qemu must register the machine of every ASSET_BOARD. The imx91 build
+# registers BOTH imx91-11x11-evk and imx93-11x11-evk, so:
+#   docker/build.sh imx91-evk imx91-evk imx93-evk
+# yields a 2-board image. (i.MX95 needs its own qemu + M33 firmware — bake it as
+# its own image: docker/build.sh imx95-evk.)
+set -euo pipefail
+
+REPO="$(cd "$(dirname "$0")/.." && pwd)"
+cd "$REPO"
+
+QEMU_BOARD="${1:-imx91-evk}"; shift || true
+ASSET_BOARDS=("$@"); [ ${#ASSET_BOARDS[@]} -eq 0 ] && ASSET_BOARDS=("$QEMU_BOARD")
+IMAGE="${IMAGE:-holobench:$QEMU_BOARD}"
+
+# Resolve the forked qemu binary from the QEMU_BOARD profile's qemu.binary.
+QEMU_BIN="$(grep -E '^\s*binary:' "profiles/$QEMU_BOARD.yaml" | head -1 | sed -E 's/^\s*binary:\s*//; s/\s+#.*//' | tr -d '"')"
+[ -x "$QEMU_BIN" ] || { echo "error: qemu binary not found/executable: $QEMU_BIN (is the $QEMU_BOARD emulator built?)"; exit 1; }
+
+STAGE="$(mktemp -d)"; trap 'rm -rf "$STAGE"' EXIT
+echo "staging build context in $STAGE ..."
+
+# App (dereference any symlinks; skip venv/caches/big assets).
+cp -rL backend frontend profiles docs tools README.md CLAUDE.md ROADMAP.md "$STAGE"/ 2>/dev/null || true
+cp docker/Dockerfile "$STAGE"/Dockerfile
+cp docker/.dockerignore "$STAGE"/.dockerignore
+
+# Baked forked QEMU.
+mkdir -p "$STAGE/qemu"
+cp -L "$QEMU_BIN" "$STAGE/qemu/qemu-system-aarch64"
+
+# Baked boot artifacts (real files, not the repo's symlinks).
+for b in "${ASSET_BOARDS[@]}"; do
+  src="assets/$b"
+  [ -d "$src" ] || { echo "error: no staged assets at $src (run tools/make-initramfs.sh + symlink Image/dtb first)"; exit 1; }
+  mkdir -p "$STAGE/assets/$b"
+  cp -L "$src"/Image "$src"/*.dtb "$src"/initrd.cpio.gz "$STAGE/assets/$b/"
+  [ -f "$src/disk.img" ] && cp -L "$src/disk.img" "$STAGE/assets/$b/"   # image-swap golden
+  echo "  baked assets: $b"
+done
+
+echo "building $IMAGE (board qemu: $QEMU_BOARD; boards: ${ASSET_BOARDS[*]}) ..."
+docker build -t "$IMAGE" "$STAGE"
+echo
+echo "Built $IMAGE. Run it:"
+echo "  docker run --rm -p 8080:8080 $IMAGE"
+echo "  # open http://localhost:8080  (auth: add -e HOLOBENCH_TOKEN=secret)"

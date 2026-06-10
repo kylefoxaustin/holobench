@@ -1,0 +1,17 @@
+# Python
+.venv/
+__pycache__/
+*.py[cod]
+*.egg-info/
+.pytest_cache/
+
+# Holobench session runtime
+/tmp/holobench/
+
+# Board assets (boot artifacts live outside the repo; never commit binaries)
+assets/
+*.img
+*.bin
+flash.bin
+Image
+*.dtb

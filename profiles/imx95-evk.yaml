@@ -1,0 +1,77 @@
+# Holobench board profile — i.MX 95 EVK
+#
+# Values confirmed 2026-06-09 by the 95 emulator session on the message bus.
+# Source of truth: kylefoxaustin/qemu-imx95 (branch imx95-netc). Fully verified.
+#
+# 95-SPECIFIC LANDMINE encoded below: the `-device loader,file=<m33_image.elf>,
+# cpu-num=6` is LOAD-BEARING. The Cortex-M33 System Manager (CPU#6, max_cpus=7)
+# boots first and serves Linux SCMI (clocks/perf/reset) over MU; WITHOUT it the
+# A55 SCMI binding fails and Linux will not boot. 91/93 have no SM (direct CCM).
+# Also: cpuidle.off=1 is REQUIRED (cpuidle kills the GIC cpuif on the SCMI-IRQ
+# target CPU -> hard hang). Many 95 features need a PATCHED dtb (smmu phandles
+# stripped, EVK-disabled nodes set okay) — point dtb at your patch-dtb.py output.
+#
+# Assets staged into assets/imx95-evk/. NOTE the 95 kernel comes from the booted
+# kernel's OWN build tree ($KBUILD/arch/arm64/boot/Image, vermagic-matched), not
+# the BSP deploy dir. (Not yet staged on this host — fill the Image/dtb paths.)
+
+id:           imx95-evk
+display_name: "i.MX 95 EVK"
+soc:          "i.MX 95"
+description:  "6x Cortex-A55 + Cortex-M33 System Manager, eIQ Neutron NPU. Virtual EVK."
+
+qemu:
+  binary:  /home/kyle/Documents/GitHub/95emulator/build/qemu-system-aarch64
+  machine: imx95-19x19-evk        # the only i.MX 95 machine (19x19 EVK)
+  memory:  "2G"
+  # smp omitted: machine default (6x A55 + M33 = max_cpus 7). The M33 is CPU#6.
+  audio:   none
+  # LOAD-BEARING M33 System Manager firmware (see header) + null-padded 2nd
+  # LPUART. Override the loader path to match your imx-sm build. (NICs are in
+  # the net: section below; ENETC auto-attaches to the user NIC.)
+  extra_args:
+    - "-device"
+    - "loader,file=/home/kyle/Documents/nxp/sources/imx-sm/build/mx95evk/m33_image.elf,cpu-num=6"
+    - "-serial"
+    - "null"
+
+boot:
+  mode: direct-kernel
+  artifacts:
+    flash_bin: null
+    kernel:    Image                  # from $KBUILD/arch/arm64/boot/Image
+    dtb:       imx95-19x19-evk.dtb     # base; use a patch-dtb.py output for feature DTBs
+    initrd:    initrd.cpio.gz
+    rootfs:    null
+  append: "console=ttyLP0,115200 cpuidle.off=1 rdinit=/init ignore_loglevel"
+  command_template: null
+
+serial:
+  - { name: "A-core console", chardev: console0, role: a-core, default: true }
+
+# DPU scans out a real framebuffer (Weston/six-Tux); read via QMP screendump.
+display: { enabled: true, device: "dpu", vnc: false }
+
+# ENETC (eth0) -> one user-mode NIC.
+net: { user_nics: 1 }
+
+file_injection:
+  # virtio-9p enabled 2026-06-09: the 95 session added virtio-mmio transports to
+  # the fsl-imx95 machine (commit 5b23f5405da) — 4 slots @0x70000000, modern
+  # virtio-1.0, DT nodes injected via arm_boot_info.modify_dtb so the guest
+  # enumerates them on a normal boot. Parity with 91/93.
+  nine_p: { enabled: true, mount_tag: holobench, device: virtio-9p-device }
+  tftp:   { enabled: true }
+  nfs:    { enabled: true }
+  image_swap: { enabled: true, target_drive: sd }
+
+power: { warm_reset: true, cold_cycle: true, pause: true, reinstall: true }
+
+introspection:
+  qmp_events: true
+  memory_map: true
+  device_tree: true
+  gdbstub: { enabled: true }
+  snapshots: true
+
+reservation: { default_minutes: 60, max_minutes: 240 }

@@ -1,0 +1,17 @@
+# Run a pre-built Holobench image. Build it first with the staging script
+# (it bakes in the forked QEMU + board artifacts that a plain compose build
+# can't stage):
+#
+#   docker/build.sh imx91-evk            # -> image holobench:imx91-evk
+#   docker compose -f docker/compose.yaml up
+#
+# Then open http://localhost:8080
+services:
+  holobench:
+    image: holobench:imx91-evk
+    ports:
+      - "8080:8080"
+    # Uncomment to require auth on /api/* (the UI page stays open to load):
+    # environment:
+    #   HOLOBENCH_TOKEN: "change-me"
+    restart: unless-stopped
