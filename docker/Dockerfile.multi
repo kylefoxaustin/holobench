@@ -1,0 +1,28 @@
+# Holobench — multi-board image (i.MX 91 + 93 + 95 in one container).
+#
+# Unlike the single-board Dockerfile, this does NOT set HOLOBENCH_QEMU (which
+# would force one binary for every board). Instead docker/build-multi.sh bakes
+# the per-board QEMU builds at distinct paths and rewrites each staged profile's
+# `binary:` to point at the right one (the i.MX91 build serves imx91 + imx93; the
+# i.MX95 build serves imx95). So each profile resolves its own baked binary.
+FROM ubuntu:22.04
+
+ENV DEBIAN_FRONTEND=noninteractive
+RUN apt-get update && apt-get install -y --no-install-recommends \
+      python3 python3-pip \
+      qemu-system-arm qemu-utils \
+      ca-certificates \
+      libsdl2-2.0-0 libgtk-3-0 libgdk-pixbuf-2.0-0 libcairo2 libx11-6 \
+      libvirglrenderer1 libpulse0 libsndio7.0 \
+    && rm -rf /var/lib/apt/lists/*
+
+COPY . /opt/holobench
+RUN pip3 install --no-cache-dir --upgrade pip setuptools wheel \
+    && pip3 install --no-cache-dir -e /opt/holobench/backend
+
+ENV HOLOBENCH_ASSET_ROOT=/opt/holobench/assets \
+    PYTHONUNBUFFERED=1
+
+WORKDIR /opt/holobench
+EXPOSE 8080
+CMD ["holobench", "serve", "--host", "0.0.0.0", "--port", "8080"]
