@@ -42,9 +42,13 @@ for b in "${ASSET_BOARDS[@]}"; do
   src="assets/$b"
   [ -d "$src" ] || { echo "error: no staged assets at $src (run tools/make-initramfs.sh + symlink Image/dtb first)"; exit 1; }
   mkdir -p "$STAGE/assets/$b"
-  cp -L "$src"/Image "$src"/*.dtb "$src"/initrd.cpio.gz "$STAGE/assets/$b/"
-  [ -f "$src/disk.img" ] && cp -L "$src/disk.img" "$STAGE/assets/$b/"   # image-swap golden
-  echo "  baked assets: $b"
+  cp -L "$src"/Image "$STAGE/assets/$b/"
+  cp -L "$src"/*.dtb "$STAGE/assets/$b/"
+  # Optional artifacts — boards vary: initramfs boot vs SD/disk boot vs data disk.
+  for opt in initrd.cpio.gz disk.img disk.wic; do
+    [ -f "$src/$opt" ] && cp -L "$src/$opt" "$STAGE/assets/$b/"
+  done
+  echo "  baked assets: $b ($(ls "$STAGE/assets/$b" | tr '\n' ' '))"
 done
 
 echo "building $IMAGE (board qemu: $QEMU_BOARD; boards: ${ASSET_BOARDS[*]}) ..."
