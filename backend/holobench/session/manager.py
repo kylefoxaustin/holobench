@@ -64,9 +64,11 @@ class Session:
         base_dir: Optional[Path] = None,
         asset_dir: Optional[Path] = None,
         session_id: Optional[str] = None,
+        owner: Optional[str] = None,
     ) -> None:
         self.profile = profile
         self.id = session_id or f"{profile.id}-{uuid.uuid4().hex[:8]}"
+        self.owner = owner  # username that reserved this board (None in open mode)
         self.state = SessionState.CREATED
 
         # Reservation: a slot of default_minutes, extendable up to max_minutes
@@ -436,9 +438,15 @@ class SessionManager:
         self._sessions: dict[str, Session] = {}
 
     async def launch(
-        self, profile: Profile, *, asset_dir: Optional[Path] = None
+        self,
+        profile: Profile,
+        *,
+        asset_dir: Optional[Path] = None,
+        owner: Optional[str] = None,
     ) -> Session:
-        session = Session(profile, base_dir=self.base_dir, asset_dir=asset_dir)
+        session = Session(
+            profile, base_dir=self.base_dir, asset_dir=asset_dir, owner=owner
+        )
         await session.launch()
         self._sessions[session.id] = session
         return session
@@ -448,15 +456,18 @@ class SessionManager:
             raise SessionError(f"no session '{session_id}'")
         return self._sessions[session_id]
 
+    def peek(self, session_id: str) -> Optional[Session]:
+        return self._sessions.get(session_id)
+
     def list(self) -> list[Session]:
         return list(self._sessions.values())
 
     async def reinstall(self, session_id: str) -> Session:
         """Cold cycle: tear the session down and relaunch the same board fresh."""
         old = self.get(session_id)
-        profile, asset_dir = old.profile, old.asset_dir
+        profile, asset_dir, owner = old.profile, old.asset_dir, old.owner
         await self.destroy(session_id)
-        return await self.launch(profile, asset_dir=asset_dir)
+        return await self.launch(profile, asset_dir=asset_dir, owner=owner)
 
     async def destroy(self, session_id: str, *, cleanup: bool = True) -> None:
         session = self.get(session_id)

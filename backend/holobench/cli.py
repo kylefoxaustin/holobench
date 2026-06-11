@@ -213,6 +213,37 @@ def cmd_serve(args: argparse.Namespace) -> int:
     return 0
 
 
+def cmd_user(args: argparse.Namespace) -> int:
+    import getpass
+
+    from .auth import UserStore
+    from .auth.store import default_users_path
+
+    store = UserStore()
+    if args.user_cmd == "list":
+        users = store.list()
+        if not users:
+            print(f"(no users — open mode; file: {default_users_path()})")
+            return 0
+        for u in users:
+            print(f"{u.username:20} {u.role}")
+        return 0
+    if args.user_cmd == "add":
+        pw = args.password or getpass.getpass(f"password for {args.name}: ")
+        if not pw:
+            _print_err("empty password")
+            return 1
+        store.add(args.name, pw, role="admin" if args.admin else "user")
+        print(f"added {args.name} ({'admin' if args.admin else 'user'}) -> {store.path}")
+        print("auth is now ENFORCED. Set HOLOBENCH_SECRET for stable logins across restarts.")
+        return 0
+    if args.user_cmd == "remove":
+        print("removed" if store.remove(args.name) else f"no such user '{args.name}'")
+        return 0
+    _print_err("usage: holobench user {add|list|remove}")
+    return 2
+
+
 def build_parser() -> argparse.ArgumentParser:
     parser = argparse.ArgumentParser(prog="holobench", description=__doc__)
     sub = parser.add_subparsers(dest="cmd", required=True)
@@ -243,6 +274,18 @@ def build_parser() -> argparse.ArgumentParser:
     p.add_argument("--host", default="127.0.0.1")
     p.add_argument("--port", type=int, default=8080)
     p.set_defaults(func=cmd_serve)
+
+    p = sub.add_parser("user", help="manage farm users (auth)")
+    usub = p.add_subparsers(dest="user_cmd", required=True)
+    pa = usub.add_parser("add", help="add a user (enables enforced auth)")
+    pa.add_argument("name")
+    pa.add_argument("--admin", action="store_true", help="make this user an admin")
+    pa.add_argument("--password", help="set password non-interactively (else prompt)")
+    pa.set_defaults(func=cmd_user)
+    usub.add_parser("list", help="list users").set_defaults(func=cmd_user)
+    pr = usub.add_parser("remove", help="remove a user")
+    pr.add_argument("name")
+    pr.set_defaults(func=cmd_user)
 
     p = sub.add_parser("ps", help="list running sessions")
     p.set_defaults(func=cmd_ps)

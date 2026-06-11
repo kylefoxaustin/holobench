@@ -22,6 +22,7 @@ from typing import Optional
 from fastapi import (
     FastAPI,
     HTTPException,
+    Request,
     Response,
     UploadFile,
     WebSocket,
@@ -31,16 +32,26 @@ from fastapi.responses import FileResponse, JSONResponse
 from fastapi.staticfiles import StaticFiles
 from pydantic import BaseModel
 
+from ..auth import AuthService
 from ..profiles import ProfileError, list_profiles, load_profile
 from ..profiles.loader import default_asset_dir
 from ..session.manager import Session, SessionError, SessionManager
 
 _FRONTEND_DIR = Path(__file__).resolve().parents[3] / "frontend"
 
+# Quota/scheduler limits (0 = unlimited). Per-user concurrent sessions + global.
+_MAX_SESSIONS_PER_USER = int(os.environ.get("HOLOBENCH_MAX_PER_USER", "0"))
+_MAX_SESSIONS_TOTAL = int(os.environ.get("HOLOBENCH_MAX_SESSIONS", "0"))
+
+# Paths under /api that don't require authentication.
+_OPEN_PATHS = {"/api/login"}
+_SESSION_PATH_RE = re.compile(r"^/api/sessions/([^/]+)(?:/|$)")
+
 
 @asynccontextmanager
 async def lifespan(app: FastAPI):
     app.state.manager = SessionManager()
+    app.state.auth = AuthService()
     reaper = asyncio.create_task(app.state.manager.run_reaper())
     try:
         yield
@@ -58,20 +69,33 @@ app = FastAPI(title="Holobench", version="0.0.0", lifespan=lifespan)
 app_ref = app
 
 
-def _auth_token() -> Optional[str]:
-    """The required bearer token, or None to run open (single-user dev)."""
-    return os.environ.get("HOLOBENCH_TOKEN")
+def _request_token(request: Request) -> Optional[str]:
+    auth = request.headers.get("authorization", "")
+    if auth.startswith("Bearer "):
+        return auth[7:]
+    return request.cookies.get("hb_token") or request.query_params.get("token")
 
 
 @app.middleware("http")
-async def auth_middleware(request, call_next):
-    """Swappable auth gate. Off by default; set HOLOBENCH_TOKEN to require a
-    `Authorization: Bearer <token>` on /api/* (the static UI stays open so the
-    page can load). Replace this with a real provider for shared deployment."""
-    token = _auth_token()
-    if token and request.url.path.startswith("/api"):
-        if request.headers.get("authorization") != f"Bearer {token}":
+async def auth_middleware(request: Request, call_next):
+    """Auth + ownership gate for /api/* (the static UI stays open so it can load).
+
+    Open mode (no users configured) lets everything through as a synthetic admin.
+    Once users exist, /api/* requires a valid token, and /api/sessions/<id>/*
+    additionally requires that the session belongs to the caller (admins bypass).
+    """
+    path = request.url.path
+    if path.startswith("/api") and path not in _OPEN_PATHS:
+        auth: AuthService = request.app.state.auth
+        user = auth.resolve(_request_token(request))
+        if user is None:
             return JSONResponse({"detail": "unauthorized"}, status_code=401)
+        request.state.user = user
+        m = _SESSION_PATH_RE.match(path)
+        if m and not user.is_admin:
+            sess = request.app.state.manager.peek(m.group(1))
+            if sess is not None and sess.owner not in (None, user.username):
+                return JSONResponse({"detail": "not your session"}, status_code=403)
     return await call_next(request)
 
 
@@ -87,6 +111,11 @@ class SnapshotRequest(BaseModel):
     name: str
 
 
+class LoginRequest(BaseModel):
+    username: str
+    password: str
+
+
 def _session_view(s: Session) -> dict:
     return {
         "id": s.id,
@@ -95,6 +124,7 @@ def _session_view(s: Session) -> dict:
         "soc": s.profile.soc,
         "state": s.state.value,
         "pid": s.pid,
+        "owner": s.owner,
         "serial": [
             {"name": p.name, "chardev": p.chardev, "role": p.role, "default": p.default}
             for p in s.profile.serial
@@ -133,6 +163,33 @@ def _get_session(session_id: str) -> Session:
         raise HTTPException(status_code=404, detail=str(exc))
 
 
+# --- auth ------------------------------------------------------------------
+
+
+@app.post("/api/login")
+def login(req: LoginRequest, request: Request) -> dict:
+    auth: AuthService = request.app.state.auth
+    if not auth.enabled:
+        # Open mode: no users configured, login is a no-op admin.
+        return {"token": None, "user": {"username": "local", "role": "admin"}}
+    token = auth.login(req.username, req.password)
+    if not token:
+        raise HTTPException(status_code=401, detail="invalid credentials")
+    user = auth.store.get(req.username)
+    return {"token": token, "user": {"username": user.username, "role": user.role}}
+
+
+@app.get("/api/me")
+def me(request: Request) -> dict:
+    auth: AuthService = request.app.state.auth
+    user = request.state.user
+    return {
+        "username": user.username,
+        "role": user.role,
+        "auth_enabled": auth.enabled,
+    }
+
+
 # --- profiles --------------------------------------------------------------
 
 
@@ -161,19 +218,36 @@ def get_profiles() -> list[dict]:
 
 
 @app.get("/api/sessions")
-def get_sessions() -> list[dict]:
-    return [_session_view(s) for s in app_ref.state.manager.list()]
+def get_sessions(request: Request) -> list[dict]:
+    user = request.state.user
+    sessions = app_ref.state.manager.list()
+    if not user.is_admin:
+        sessions = [s for s in sessions if s.owner in (None, user.username)]
+    return [_session_view(s) for s in sessions]
 
 
 @app.post("/api/sessions")
-async def launch_session(req: LaunchRequest) -> dict:
+async def launch_session(req: LaunchRequest, request: Request) -> dict:
+    user = request.state.user
+    mgr = app_ref.state.manager
+    # Quotas (0 = unlimited).
+    if _MAX_SESSIONS_TOTAL and len(mgr.list()) >= _MAX_SESSIONS_TOTAL:
+        raise HTTPException(status_code=429, detail="board farm at capacity")
+    if _MAX_SESSIONS_PER_USER:
+        mine = sum(1 for s in mgr.list() if s.owner == user.username)
+        if mine >= _MAX_SESSIONS_PER_USER:
+            raise HTTPException(
+                status_code=429,
+                detail=f"per-user session limit reached ({_MAX_SESSIONS_PER_USER})",
+            )
     try:
         profile = load_profile(req.profile_id)
     except ProfileError as exc:
         raise HTTPException(status_code=404, detail=str(exc))
     asset_dir = Path(req.assets) if req.assets else default_asset_dir(profile.id)
+    owner = user.username if request.app.state.auth.enabled else None
     try:
-        session = await app_ref.state.manager.launch(profile, asset_dir=asset_dir)
+        session = await mgr.launch(profile, asset_dir=asset_dir, owner=owner)
     except SessionError as exc:
         raise HTTPException(status_code=500, detail=str(exc))
     return _session_view(session)
@@ -428,17 +502,21 @@ async def console_ws(
     chardev: Optional[str] = None,
     token: Optional[str] = None,
 ):
-    expected = _auth_token()
-    if expected and token != expected:
+    auth: AuthService = websocket.app.state.auth
+    user = auth.resolve(token or websocket.cookies.get("hb_token"))
+    if user is None:
         await websocket.close(code=4401, reason="unauthorized")
         return
-    await websocket.accept()
-    mgr = app_ref.state.manager
+    mgr = websocket.app.state.manager
     try:
         session = mgr.get(session_id)
     except SessionError:
         await websocket.close(code=4404, reason="no such session")
         return
+    if not user.is_admin and session.owner not in (None, user.username):
+        await websocket.close(code=4403, reason="not your session")
+        return
+    await websocket.accept()
 
     tap = session.get_tap(chardev)
     if tap is None:

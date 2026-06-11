@@ -27,7 +27,23 @@
     const { createRoot } = window.ReactDOM;
     const html = window.htm.bind(React.createElement);
 
-    const api = (p, opts) => fetch(p, opts).then(r => r.ok ? r.json() : r.json().then(e => Promise.reject(e)));
+    let authToken = localStorage.getItem("hb_token") || null;
+    const setToken = (t) => {
+      authToken = t || null;
+      if (t) localStorage.setItem("hb_token", t); else localStorage.removeItem("hb_token");
+    };
+    const authHeaders = (extra) => {
+      const h = { ...(extra || {}) };
+      if (authToken) h["Authorization"] = "Bearer " + authToken;
+      return h;
+    };
+    const api = (p, opts = {}) =>
+      fetch(p, { ...opts, headers: authHeaders(opts.headers) })
+        .then(r => r.ok ? r.json() : r.json().then(e => Promise.reject({ ...e, status: r.status })));
+    const authFetch = (p, opts = {}) => fetch(p, { ...opts, headers: authHeaders(opts.headers) });
+    // For <img>/WebSocket which can't set headers — the backend also reads ?token=.
+    const withToken = (url) =>
+      authToken ? url + (url.includes("?") ? "&" : "?") + "token=" + encodeURIComponent(authToken) : url;
 
     function Console({ session, chardev }) {
       const elRef = useRef(null);
@@ -50,7 +66,7 @@
 
         const proto = location.protocol === "https:" ? "wss" : "ws";
         const q = chardev ? `?chardev=${encodeURIComponent(chardev)}` : "";
-        const ws = new WebSocket(`${proto}://${location.host}/api/sessions/${session.id}/console${q}`);
+        const ws = new WebSocket(withToken(`${proto}://${location.host}/api/sessions/${session.id}/console${q}`));
         ws.binaryType = "arraybuffer";
         wsRef.current = ws;
         ws.onmessage = (e) => {
@@ -75,7 +91,7 @@
         const id = setInterval(() => setTs(Date.now()), 1500);
         return () => clearInterval(id);
       }, [session.id]);
-      const src = `/api/sessions/${session.id}/screen.png?ts=${ts}`;
+      const src = withToken(`/api/sessions/${session.id}/screen.png?ts=${ts}`);
       return html`
         <div class="h-full flex flex-col">
           <div class="text-xs text-slate-500 mb-1">LCD / framebuffer
@@ -105,8 +121,7 @@
       const inputRef = useRef(null);
 
       const refresh = useCallback(() => {
-        fetch(`/api/sessions/${session.id}/files`)
-          .then(r => r.json()).then(d => setFiles(d.files || [])).catch(() => {});
+        api(`/api/sessions/${session.id}/files`).then(d => setFiles(d.files || [])).catch(() => {});
       }, [session.id]);
       useEffect(() => { refresh(); const id = setInterval(refresh, 3000); return () => clearInterval(id); }, [session.id]);
 
@@ -115,12 +130,12 @@
         setBusy(true);
         for (const f of list) {
           const fd = new FormData(); fd.append("file", f);
-          await fetch(`/api/sessions/${session.id}/files`, { method: "POST", body: fd }).catch(() => {});
+          await authFetch(`/api/sessions/${session.id}/files`, { method: "POST", body: fd }).catch(() => {});
         }
         setBusy(false); refresh();
       };
       const del = async (name) => {
-        await fetch(`/api/sessions/${session.id}/files/${encodeURIComponent(name)}`, { method: "DELETE" }).catch(() => {});
+        await authFetch(`/api/sessions/${session.id}/files/${encodeURIComponent(name)}`, { method: "DELETE" }).catch(() => {});
         refresh();
       };
 
@@ -156,8 +171,8 @@
     function TextPanel({ session, kind, label }) {
       const [text, setText] = useState("loading…");
       const load = useCallback(() => {
-        fetch(`/api/sessions/${session.id}/introspect/${kind}`)
-          .then(r => r.json()).then(d => setText(d.text || "(empty)"))
+        api(`/api/sessions/${session.id}/introspect/${kind}`)
+          .then(d => setText(d.text || "(empty)"))
           .catch(() => setText("(unavailable)"));
       }, [session.id, kind]);
       useEffect(() => { load(); }, [load]);
@@ -174,8 +189,8 @@
     function EventsPanel({ session }) {
       const [evs, setEvs] = useState([]);
       useEffect(() => {
-        const load = () => fetch(`/api/sessions/${session.id}/events`)
-          .then(r => r.json()).then(d => setEvs(d.events || [])).catch(() => {});
+        const load = () => api(`/api/sessions/${session.id}/events`)
+          .then(d => setEvs(d.events || [])).catch(() => {});
         load(); const id = setInterval(load, 2000); return () => clearInterval(id);
       }, [session.id]);
       return html`
@@ -217,18 +232,18 @@
       const [snaps, setSnaps] = useState([]);
       const [name, setName] = useState("");
       const [busy, setBusy] = useState(false);
-      const refresh = useCallback(() => fetch(`/api/sessions/${session.id}/snapshots`)
-        .then(r => r.json()).then(d => setSnaps(d.snapshots || [])).catch(() => {}), [session.id]);
+      const refresh = useCallback(() => api(`/api/sessions/${session.id}/snapshots`)
+        .then(d => setSnaps(d.snapshots || [])).catch(() => {}), [session.id]);
       useEffect(() => { refresh(); }, [refresh]);
       const save = async () => {
         if (!name) return; setBusy(true);
-        await fetch(`/api/sessions/${session.id}/snapshots`, {
+        await api(`/api/sessions/${session.id}/snapshots`, {
           method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ name }),
         }).catch(() => {});
         setName(""); setBusy(false); refresh();
       };
-      const load = async (t) => { setBusy(true); await fetch(`/api/sessions/${session.id}/snapshots/${encodeURIComponent(t)}/load`, { method: "POST" }).catch(() => {}); setBusy(false); };
-      const del = async (t) => { await fetch(`/api/sessions/${session.id}/snapshots/${encodeURIComponent(t)}`, { method: "DELETE" }).catch(() => {}); refresh(); };
+      const load = async (t) => { setBusy(true); await authFetch(`/api/sessions/${session.id}/snapshots/${encodeURIComponent(t)}/load`, { method: "POST" }).catch(() => {}); setBusy(false); };
+      const del = async (t) => { await authFetch(`/api/sessions/${session.id}/snapshots/${encodeURIComponent(t)}`, { method: "DELETE" }).catch(() => {}); refresh(); };
       return html`
         <div class="h-full flex flex-col">
           <div class="text-xs text-slate-500 mb-1">Snapshots <span class="text-slate-600">— savevm/loadvm · bookmark &amp; jump back</span></div>
@@ -290,6 +305,38 @@
       return html`<span class="px-2 py-0.5 rounded text-xs ${cls}">${children}</span>`;
     }
 
+    function Login({ onLogin }) {
+      const [u, setU] = useState(""); const [p, setP] = useState("");
+      const [err, setErr] = useState(null); const [busy, setBusy] = useState(false);
+      const submit = async (e) => {
+        if (e) e.preventDefault();
+        setBusy(true); setErr(null);
+        try {
+          const r = await api("/api/login", {
+            method: "POST", headers: { "Content-Type": "application/json" },
+            body: JSON.stringify({ username: u, password: p }),
+          });
+          setToken(r.token); onLogin();
+        } catch (ex) { setErr(ex.detail || "login failed"); setBusy(false); }
+      };
+      return html`
+        <div class="h-full flex items-center justify-center">
+          <form onSubmit=${submit} class="bg-slate-900 border border-slate-800 rounded-lg p-6 w-80 space-y-3">
+            <div class="text-lg font-semibold">🛰️ Holobench <span class="text-slate-500 text-sm font-normal">virtual EVK</span></div>
+            <div class="text-xs text-slate-500">Sign in to the board farm</div>
+            ${err && html`<div class="text-rose-400 text-sm">${err}</div>`}
+            <input autoFocus value=${u} onChange=${e => setU(e.target.value)} placeholder="username"
+              class="w-full bg-slate-800 border border-slate-700 rounded px-2 py-1.5 text-sm" />
+            <input type="password" value=${p} onChange=${e => setP(e.target.value)} placeholder="password"
+              class="w-full bg-slate-800 border border-slate-700 rounded px-2 py-1.5 text-sm" />
+            <button disabled=${busy} type="submit"
+              class="w-full px-3 py-1.5 rounded bg-emerald-600 hover:bg-emerald-500 text-sm font-medium disabled:opacity-50">
+              ${busy ? "Signing in…" : "Sign in"}
+            </button>
+          </form>
+        </div>`;
+    }
+
     function App() {
       const [profiles, setProfiles] = useState([]);
       const [selected, setSelected] = useState("");
@@ -302,6 +349,13 @@
         const id = setInterval(() => setNow(Date.now() / 1000), 1000);
         return () => clearInterval(id);
       }, []);
+      // undefined = checking, null = needs login, object = authenticated
+      const [me, setMe] = useState(undefined);
+      const loadMe = useCallback(() => {
+        api("/api/me").then(setMe).catch(() => setMe(null));
+      }, []);
+      useEffect(() => { loadMe(); }, [loadMe]);
+      const logout = () => { setToken(null); setSession(null); setMe(null); };
 
       const refreshProfiles = useCallback(() => {
         api("/api/profiles").then(ps => {
@@ -353,11 +407,19 @@
 
       const sel = profiles.find(p => p.id === selected);
 
+      if (me === undefined)
+        return html`<div class="h-full flex items-center justify-center text-slate-500">Loading…</div>`;
+      if (me === null) return html`<${Login} onLogin=${loadMe} />`;
+
       return html`
         <div class="h-full flex flex-col">
           <header class="flex items-center gap-3 px-4 py-3 border-b border-slate-800 bg-slate-900/60">
             <div class="font-semibold text-lg">🛰️ Holobench <span class="text-slate-500 text-sm font-normal">virtual EVK</span></div>
             <div class="flex-1"></div>
+            ${me && me.auth_enabled && html`
+              <span class="text-xs text-slate-400">${me.username}${me.role === "admin" ? " · admin" : ""}</span>
+              <button onClick=${logout} class="px-2 py-1 rounded bg-slate-800 hover:bg-slate-700 text-xs">Logout</button>
+              <span class="text-slate-700">|</span>`}
             ${!session && html`
               <select class="bg-slate-800 border border-slate-700 rounded px-2 py-1 text-sm"
                       value=${selected} onChange=${e => setSelected(e.target.value)}>

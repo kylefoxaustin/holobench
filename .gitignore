@@ -8,6 +8,10 @@ __pycache__/
 # Holobench session runtime
 /tmp/holobench/
 
+# User credentials (auth) — never commit
+data/
+holobench-users.yaml
+
 # Board assets (boot artifacts live outside the repo; never commit binaries)
 assets/
 *.img

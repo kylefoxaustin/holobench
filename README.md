@@ -123,8 +123,21 @@ holobench launch imx91-evk --hold 30  # boot + prove QMP control, print console
 holobench ps | status | reset | stop  # act on a running session by id
 ```
 
-Enable auth for shared use: `HOLOBENCH_TOKEN=… holobench serve` (then `/api/*`
-requires `Authorization: Bearer …`; the UI page stays open to load).
+## Multi-user / auth
+
+Holobench runs **open** (no login) until you create a user — then it enforces
+per-user login and **session ownership** (you only see/control your own boards;
+admins see all). Dependency-free (stdlib PBKDF2 + HMAC-signed tokens).
+
+```bash
+holobench user add alice --admin        # prompts for a password; switches auth ON
+holobench user add bob                   # a regular user
+holobench user list
+export HOLOBENCH_SECRET=…                 # stable token-signing key across restarts
+holobench serve                          # UI now shows a login screen
+```
+Quotas (0 = unlimited): `HOLOBENCH_MAX_PER_USER`, `HOLOBENCH_MAX_SESSIONS`.
+Users live in `data/users.yaml` (gitignored) or `$HOLOBENCH_USERS`.
 
 ## Run as a container (self-contained "virtual EVK")
 
