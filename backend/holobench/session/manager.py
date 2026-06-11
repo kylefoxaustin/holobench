@@ -309,6 +309,9 @@ class Session:
             "create", "-f", "qcow2", str(path), size, what="snapshot disk create"
         )
 
+    # The QEMU SD-card model requires the image size to be a multiple of 512 KiB.
+    _SD_ALIGN = 512 * 1024
+
     @classmethod
     async def _create_overlay(cls, golden: Path, overlay: Path) -> None:
         """Fresh qcow2 overlay over the golden disk (writes isolated)."""
@@ -316,6 +319,15 @@ class Session:
             "create", "-f", "qcow2", "-b", str(golden.resolve()), "-F", "raw",
             str(overlay), what="disk overlay create",
         )
+        # Round the overlay's virtual size up to a 512 KiB boundary so it's a
+        # valid -drive if=sd image (the extra space is unpartitioned/zero-filled,
+        # so it never touches the golden's data or partition table).
+        size = golden.stat().st_size
+        rounded = -(-size // cls._SD_ALIGN) * cls._SD_ALIGN
+        if rounded != size:
+            await cls._run_qemu_img(
+                "resize", str(overlay), str(rounded), what="disk overlay resize"
+            )
 
     async def snapshot_save(self, name: str) -> str:
         return await self.hmp(f"savevm {name}")

@@ -1,0 +1,61 @@
+# Holobench board profile — i.MX 91 EVK, BOOT FROM SD (full BSP rootfs).
+#
+# Unlike imx91-evk (which boots an initramfs to a shell), this boots the full
+# NXP BSP root filesystem off an SD card image — the real "flashed board" flow.
+# The SD image is the image-swap GOLDEN, so each session runs on a copy-on-write
+# qcow2 overlay (writes isolated) and "Reinstall" drops the overlay = factory
+# reset to the golden OS. No initrd: the kernel mounts root straight off the SD.
+#
+# assets/imx91-evk-sd/: Image + dtb (symlinks into the BSP deploy) and disk.wic
+# (the decompressed imx-image-core .wic SD image, the golden).
+#
+# root= partition: set to the wic's rootfs partition (verify with `fdisk -l`).
+
+id:           imx91-evk-sd
+display_name: "i.MX 91 EVK (SD boot)"
+soc:          "i.MX 91"
+description:  "Cortex-A55, full BSP rootfs booted from SD. Reinstall = factory reset."
+
+qemu:
+  binary:  /home/kyle/Documents/GitHub/91emulator/build/qemu-system-aarch64
+  machine: imx91-11x11-evk
+  memory:  "4G"
+  smp:     1
+  audio:   none
+  extra_args: ["-serial", "null"]
+
+boot:
+  mode: direct-kernel
+  artifacts:
+    flash_bin: null
+    kernel:    Image
+    dtb:       imx91-11x11-evk.dtb
+    initrd:    null                 # no initramfs — root comes from the SD
+    rootfs:    null
+    disk:      disk.wic             # golden SD image (image-swap overlay-backed)
+  append: "earlycon=lpuart32,mmio32,0x44380010 console=ttyLP0,115200 cpuidle.off=1 root=/dev/mmcblk0p2 rootwait rw"
+  command_template: null
+
+serial:
+  - { name: "A-core console", chardev: console0, role: a-core, default: true }
+
+display: { enabled: true, device: "lcdif", vnc: false }
+
+net: { user_nics: 2 }
+
+file_injection:
+  nine_p: { enabled: true, mount_tag: holobench, device: virtio-9p-device }
+  tftp:   { enabled: true }
+  nfs:    { enabled: false }
+  image_swap: { enabled: true, target_drive: sd }   # overlay over disk.wic golden
+
+power: { warm_reset: true, cold_cycle: true, pause: true, reinstall: true }
+
+introspection:
+  qmp_events: true
+  memory_map: true
+  device_tree: true
+  gdbstub: { enabled: true }
+  snapshots: true
+
+reservation: { default_minutes: 60, max_minutes: 240 }
