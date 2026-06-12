@@ -96,11 +96,18 @@ QEMU i.MX SoC models, through stock interfaces only.
 | 3 | File injection — virtio-9p (`/mnt`) + user-net TFTP + disk image-swap | ✅ |
 | 4 | Reservations + "remaining time" countdown + extend + factory-reset reinstall | ✅ |
 | 5 | Introspection — memory map, device tree, live QMP events, gdbstub, snapshots | ✅ |
+| 5+ | **Virtual camera** — feed host images through the ISI into the guest's V4L2 capture (`/dev/video0`) | ✅ |
 | 6 | Auth scaffold + offline-vendored UI (deploy hardening) | ◐ in progress |
 
 Boards: **i.MX 91 / 93 / 95**, each in two flavors — a quick **busybox** profile
 and a **full BSP distro** (`-sd`) profile that boots the real NXP `.wic`. All
 capabilities work on all three.
+
+The **virtual camera** (on the `-sd` boards) feeds uploaded raw frames through
+the board's real ISI capture pipeline — the guest captures them on `/dev/video0`
+in place of a sensor (drive a V4L2 → NPU vision pipeline with images of your
+choosing, impossible on a fixed physical board farm). Validated byte-exact on all
+three. See the **Camera** panel; each board ships its exact capture recipe.
 
 ## Quickstart
 
@@ -112,7 +119,8 @@ holobench serve --host 0.0.0.0 --port 8080   # serve the farm on your LAN
 ```
 Open the URL → pick a board → **Reserve & Boot** → the serial console streams
 live and the right-hand tabs show LCD / Memory / Devices / Events / Debug /
-Snapshots / Files. Type at the guest shell; drop a file to see it at `/mnt`.
+Snapshots / Files / Camera. Type at the guest shell; drop a file to see it at
+`/mnt`.
 
 Boot artifacts live in `assets/<profile-id>/` (kernel `Image`, `dtb`, and an
 `initrd.cpio.gz` built by `tools/make-initramfs.sh` from a BSP rootfs). Each
@@ -214,8 +222,11 @@ holobench/
                bridges/ (console tap)  api/ (FastAPI app)  cli.py
     tests/     pytest (profile + command-resolver unit tests)
   frontend/    index.html (React+htm+Tailwind+xterm.js)  vendor/ (offline deps)
-  tools/       make-initramfs.sh  make-golden-disk.sh  init-shell  init-busybox
+  vendor/      camera/ (GPL-2.0 ISI capture helpers: source + static aarch64 bin)
+  tools/       make-initramfs.sh  make-golden-disk.sh  build-capture-helpers.sh
+               init-shell  init-busybox
   assets/      <profile-id>/ boot artifacts (gitignored)
+  LICENSE      Apache-2.0
 ```
 
 ## Related repos (the boards Holobench drives)
