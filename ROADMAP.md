@@ -180,26 +180,38 @@ and it turned out to be a real BSP/driver matter, not a Holobench one:
   (`tests/camera/v4l2_cap.c` → 655 KB **static** aarch64 ELF, 0 deps): byte-exact
   on the same boot media-ctl failed. `imx-image-full` *does* ship media-ctl/
   v4l2-ctl — but they're insufficient for this driver.
-- **91 (single-pipe ISI): no capture tool in the rootfs at all.** The 91 BSP
-  builds only **imx-image-core**, which ships `gst-launch` but **no `media-ctl`,
-  no `v4l2-ctl`**. Sensor `-device` is unnecessary (the `imx93.isi` model streams
-  without the sensor subdev). Untested: whether `gst v4l2src` alone captures
-  (links may be on-by-default on the single-pipe ISI) — 91 will check post-soak.
-- **93:** same shared `imx93.isi`; same core-rootfs tooling question as 91.
+- **91 (single-pipe ISI): no capture tool in the rootfs at all — CONFIRMED.**
+  The 91 BSP builds only **imx-image-core**: `gst-launch` is present but the
+  **`v4l2src` plugin is missing** (gst-alone tested → "no element v4l2src"), and
+  there's **no `media-ctl`, no `v4l2-ctl`**. Sensor `-device` is unnecessary (the
+  `imx93.isi` model streams without the sensor subdev).
+- **93: symmetric with 91 — CONFIRMED.** Same `imx93.isi`, same core-rootfs with
+  no turnkey capture tool.
 
-**DECISION FOR KYLE — how to provide an in-guest capture tool (coupling posture):**
-1. **Holobench-authored helper** (Apache-2.0, static aarch64, staged via the 9p
-   share or baked) — cleanest boundary, but reproducing the crossbar setup is
-   non-trivial (95 spent ~10 boots); effectively needs 95's source as reference.
-2. **Bundle 95's `v4l2_cap.c`** (prebuilt static binary or their public-repo
-   source) — fastest, proven; mild coupling to their repo file.
+**Unanimous (2026-06-12): all three boards need a bundled static capture client.**
+No shipped turnkey path exists — 91/93 ship no usable capture tool in core; the
+95's media-ctl EPIPEs on its crossbar. Each emulator has a **validated, byte-exact,
+fully-static, zero-dep** `v4l2_cap.c` in its **public** repo and offered it
+(91: `tests/camera-imx91/v4l2_cap.c`; 93: `tests/camera-imx93/v4l2_cap.c`;
+95: `tests/camera/v4l2_cap.c`). 91/93 are single-pipe (simple); 95 is the crossbar
+variant (does per-stream `SUBDEV_S_FMT`). Build: `aarch64-linux-gnu-gcc -O2 -static
+-o imxNN-isi-capture <file>`; run: `./imxNN-isi-capture cap /dev/video0`.
+
+**DECISION FOR KYLE — how to provide the in-guest capture client (coupling posture):**
+1. **Holobench-authored helper** (Apache-2.0, one static aarch64 binary covering
+   single-pipe + crossbar) — cleanest boundary, but reproduces the union of the
+   three clients; the 95 crossbar setup is non-trivial (95 spent ~10 boots),
+   effectively needs their source as reference.
+2. **Bundle the emulators' `v4l2_cap.c`** (public, validated, static, zero-dep) —
+   fastest, proven; mild coupling + a licensing check (what license those files
+   carry vs Holobench's Apache-2.0 distribution).
 3. **Document-only** — the panel feeds frames; the user brings their own client.
 4. **BSP fix** — 91/93 grow `imx-image-full`; a working media-ctl path for the 95
    crossbar (escalation; not near-term).
 
 Until decided: 95 `camera.capture_hint` states the truth (programmatic client
-required); 91/93 stay disabled (no shipped tool + gst-alone untested). The FEED
-side is done — this is purely the capture-tool decision.
+required); 91/93 stay disabled (the FEED works, but no shipped capture tool). This
+is purely the capture-client decision — the feed side is done and validated.
 
 #### (original notes)
 ### Virtual camera (feed host images through the ISI) — *plumbing DONE, enablement pending*
