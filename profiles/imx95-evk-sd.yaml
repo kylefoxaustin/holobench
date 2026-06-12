@@ -69,24 +69,31 @@ file_injection:
 # LAUNCH-ONLY (frames read in realize(); stage-then-reboot). FORMAT-AGNOSTIC
 # opaque byte copy: a frame whose size != 1843200 silently shows the gradient.
 # NB the DT puts the sensor on lpi2c3 but QEMU's bus alias is "lpi2c1".
-# In-guest capture (imx-image-full ships the tools): media-ctl -l/-V to enable
-# the ov5640->csi->isi links + set UYVY pad fmts, then v4l2-ctl --stream-mmap
-# (or gst-launch v4l2src). frames scan out in lexical order, looping.
-# NB the UNCONFIGURED /dev/video0 default is 1920x1080 YUYV (bpl 3840, 2bpp,
-# 4147200); the 640x480x6 below is what the media-ctl -V recipe negotiates and
-# what 95 validated byte-exact — so frames must be 640x480 and the recipe must
-# set that. capture_hint left unset until 95emulator hands over the exact,
-# entity-name-validated media-ctl block (then it ships verbatim in the panel).
+# IN-GUEST CAPTURE — the catch (95emulator validated empirically on this golden):
+# the imx95 ISI is the 8-channel CROSSBAR variant, and media-ctl CANNOT satisfy
+# its per-stream link_validate (the full -l/-V sequence applies but STREAMON
+# EPIPEs). Capture works ONLY via a programmatic V4L2 client that does per-stream
+# SUBDEV_S_FMT + link-enable + REQBUFS/STREAMON/DQBUF (95 proved it byte-exact on
+# the same boot media-ctl failed). So we do NOT ship a media-ctl recipe here.
+# Bundling a capture helper (3rd-party static binary vs a Holobench-authored one)
+# is a coupling-posture decision for Kyle — see ROADMAP. The FEED side (this
+# profile + -global frames=) is validated byte-exact; only the in-guest capture
+# tool is pending that decision.
+# Frame size: stage 1843200 (640x480x6) — 95's SAFE over-provision; the model
+# reads min(host_frame, width*height*bpp), so 1843200 covers both the 2bpp and
+# 6bpp pipe negotiations without ever tripping the short-read gradient fallback.
+# (Unconfigured /dev/video0 default is 1920x1080x2; the client sets 640x480.)
 camera:
   enabled: true
   isi_type: "imx95.isi"
   dtb: imx95-19x19-evk-ov5640.dtb          # golden base + ov5640 overlay (deploy artifact)
-  qemu_device: "ov5640,bus=lpi2c1,address=0x3c"
+  qemu_device: "ov5640,bus=lpi2c1,address=0x3c"   # graph scaffolding (no pixels)
   width: 640
   height: 480
-  bytes_per_pixel: 6                       # bpl 3840 / width 640 (model-reported)
+  bytes_per_pixel: 6                       # safe over-provision (640x480x6=1843200)
   pixel_format: "YUYV"                     # informational; trust guest G_FMT/stride
   runtime_settable: false                  # LAUNCH-ONLY: stage frames, then (re)boot
+  capture_hint: "imx95 ISI is an 8-ch crossbar — media-ctl can't satisfy link_validate (STREAMON EPIPEs). Capture needs a programmatic V4L2 client (per-stream SUBDEV_S_FMT + link enable + REQBUFS/STREAMON/DQBUF); a bundled helper is pending. The frame FEED is validated byte-exact. Stage 640x480 frames (1843200 B)."
 
 power: { warm_reset: true, cold_cycle: true, pause: true, reinstall: true }
 

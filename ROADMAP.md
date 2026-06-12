@@ -166,6 +166,42 @@ Tasks (all read-only, all stock interfaces)
 - An external gdb attaches to the advertised stub port.
 - A user can snapshot a boot state and jump back to it.
 
+### Virtual camera (feed host images through the ISI) — *feed DONE; in-guest capture tool = a Kyle decision*
+
+**Status 2026-06-12:** plumbing complete + tested; **95 enabled** (`1474277`) and
+the frame FEED is validated **byte-exact** by 95emulator (5/5 staged frames
+DQBUF'd through the ISI). The remaining gap is the **in-guest capture client**,
+and it turned out to be a real BSP/driver matter, not a Holobench one:
+
+- **95 (8-ch crossbar ISI): `media-ctl` cannot drive it.** 95 ran the full
+  `-l/-V` sequence on the golden full image — the formats apply but `STREAMON`
+  EPIPEs; the crossbar's per-stream `link_validate` needs programmatic
+  `SUBDEV_S_FMT`. The **only** working capture is a small V4L2 C client
+  (`tests/camera/v4l2_cap.c` → 655 KB **static** aarch64 ELF, 0 deps): byte-exact
+  on the same boot media-ctl failed. `imx-image-full` *does* ship media-ctl/
+  v4l2-ctl — but they're insufficient for this driver.
+- **91 (single-pipe ISI): no capture tool in the rootfs at all.** The 91 BSP
+  builds only **imx-image-core**, which ships `gst-launch` but **no `media-ctl`,
+  no `v4l2-ctl`**. Sensor `-device` is unnecessary (the `imx93.isi` model streams
+  without the sensor subdev). Untested: whether `gst v4l2src` alone captures
+  (links may be on-by-default on the single-pipe ISI) — 91 will check post-soak.
+- **93:** same shared `imx93.isi`; same core-rootfs tooling question as 91.
+
+**DECISION FOR KYLE — how to provide an in-guest capture tool (coupling posture):**
+1. **Holobench-authored helper** (Apache-2.0, static aarch64, staged via the 9p
+   share or baked) — cleanest boundary, but reproducing the crossbar setup is
+   non-trivial (95 spent ~10 boots); effectively needs 95's source as reference.
+2. **Bundle 95's `v4l2_cap.c`** (prebuilt static binary or their public-repo
+   source) — fastest, proven; mild coupling to their repo file.
+3. **Document-only** — the panel feeds frames; the user brings their own client.
+4. **BSP fix** — 91/93 grow `imx-image-full`; a working media-ctl path for the 95
+   crossbar (escalation; not near-term).
+
+Until decided: 95 `camera.capture_hint` states the truth (programmatic client
+required); 91/93 stay disabled (no shipped tool + gst-alone untested). The FEED
+side is done — this is purely the capture-tool decision.
+
+#### (original notes)
 ### Virtual camera (feed host images through the ISI) — *plumbing DONE, enablement pending*
 
 *Added 2026-06-11. All three emulator forks shipped an ISI host-frame-source
