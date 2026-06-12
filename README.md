@@ -209,6 +209,29 @@ Full-distro images are large (the `.wic` dominates); a busybox image is ~1.7 GB.
 > models land in stock QEMU. For a tiny image, stage no qemu/assets and mount
 > them at run time instead.
 
+### Try it without building — pull the prebuilt "virtual EVK"
+
+A prebuilt full-distro **i.MX 95** image is published to GHCR (no build, no
+GitHub account, no login needed):
+
+```bash
+docker pull ghcr.io/kylefoxaustin/holobench:imx95-sd        # ~15 GB, one time
+docker run --rm -p 8080:8080 ghcr.io/kylefoxaustin/holobench:imx95-sd
+# open http://localhost:8080 → "i.MX 95 EVK (SD boot, full distro)" → Reserve & Boot
+```
+
+Then (right-hand tabs): **Console** (log in as `root`, no password), **LCD**,
+**Files** (drop a file → `/mnt`), introspection, and **Camera** — drop a raw
+**640×480** frame (exactly **1843200 B**), reboot to arm, then in the console:
+`insmod /mnt/ov5640.ko && /mnt/imx95-isi-capture cap /dev/video0`.
+
+**Host requirements:** **x86-64 Linux** + Docker, ~**30 GB** free disk, ~**8 GB**
+free RAM. (The image runs an aarch64 board under x86-64 QEMU/TCG — Apple-Silicon/
+ARM hosts would nest-emulate and crawl.) First boot takes ~1–2 min (full SoC
+emulation). Add `-e HOLOBENCH_TOKEN=secret` to require a login on the web UI.
+
+> Pinned tag: `ghcr.io/kylefoxaustin/holobench:imx95-sd-v0.1.0`.
+
 ## Repo layout
 
 ```
