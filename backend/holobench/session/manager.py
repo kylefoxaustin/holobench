@@ -109,6 +109,10 @@ class Session:
                 else asset_dir / disk_name
             )
             disk_overlay = self.work_dir / "disk-overlay.qcow2"
+        # Virtual camera: a per-session dir the ISI host-frame-source reads.
+        self.camera_frames_dir: Optional[Path] = (
+            self.work_dir / "frames" if profile.camera.enabled else None
+        )
         self.runtime = SessionRuntime(
             work_dir=self.work_dir,
             qmp_socket=self.work_dir / "qmp.sock",
@@ -121,6 +125,7 @@ class Session:
             gdb_port=gdb_port,
             snapshot_disk=snapshot_disk,
             disk_overlay=disk_overlay,
+            camera_frames_dir=self.camera_frames_dir,
         )
         self.argv: list[str] = []
         self._proc: Optional[asyncio.subprocess.Process] = None
@@ -140,6 +145,8 @@ class Session:
         self.work_dir.mkdir(parents=True, exist_ok=True)
         if self.share_dir is not None:
             self.share_dir.mkdir(parents=True, exist_ok=True)
+        if self.camera_frames_dir is not None:
+            self.camera_frames_dir.mkdir(parents=True, exist_ok=True)
         if self.runtime.snapshot_disk is not None:
             await self._create_snapshot_disk(self.runtime.snapshot_disk)
         if self.runtime.disk_overlay is not None:

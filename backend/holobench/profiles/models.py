@@ -121,6 +121,42 @@ class FileInjection(_Strict):
     image_swap: ImageSwap = Field(default_factory=ImageSwap)
 
 
+# --- Virtual camera --------------------------------------------------------
+
+
+class CameraSpec(_Strict):
+    """Feed host image frames through the board's ISI capture pipeline so the
+    guest captures them via V4L2 (/dev/video0) instead of a real sensor.
+
+    Holobench drives the emulator's standard ISI host-frame-source property:
+    ``-global driver=<isi_type>,property=frames,value=<session frames dir>``.
+    No model change — this is the stock property the imx9x ISI models expose.
+
+    Every value here is a board fact (CONFIRM with the emulator repo, never
+    guess): the QOM ``isi_type``, the frame ``width``/``height``/
+    ``bytes_per_pixel`` the model expects (a frame whose size != W*H*bpp falls
+    back to the model's gradient test pattern), and optionally a camera-enabled
+    ``dtb`` whose sensor/CSI node surfaces the V4L2 node in the guest.
+    """
+
+    enabled: bool = False
+    isi_type: Optional[str] = None       # -global driver=<type>, e.g. "imx95.isi"
+    width: Optional[int] = None
+    height: Optional[int] = None
+    bytes_per_pixel: Optional[int] = None
+    pixel_format: Optional[str] = None   # informational, e.g. "RGB888" (host convert)
+    dtb: Optional[str] = None            # optional camera dtb override (sensor/CSI)
+    # frames read at device init vs re-globbed each frame tick. If False, staged
+    # frames apply only at (re)launch; the UI says "reboot to apply".
+    runtime_settable: bool = False
+
+    @property
+    def frame_bytes(self) -> Optional[int]:
+        if self.width and self.height and self.bytes_per_pixel:
+            return self.width * self.height * self.bytes_per_pixel
+        return None
+
+
 # --- Power -----------------------------------------------------------------
 
 
@@ -169,6 +205,7 @@ class Profile(_Strict):
     display: DisplaySpec = Field(default_factory=DisplaySpec)
     net: NetSpec = Field(default_factory=NetSpec)
     file_injection: FileInjection = Field(default_factory=FileInjection)
+    camera: CameraSpec = Field(default_factory=CameraSpec)
     power: PowerSpec = Field(default_factory=PowerSpec)
     introspection: Introspection = Field(default_factory=Introspection)
     reservation: Reservation = Field(default_factory=Reservation)

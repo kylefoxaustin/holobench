@@ -166,12 +166,31 @@ Tasks (all read-only, all stock interfaces)
 - An external gdb attaches to the advertised stub port.
 - A user can snapshot a boot state and jump back to it.
 
-### Candidate — Virtual camera (feed host images through the ISI) — *ready to build*
+### Virtual camera (feed host images through the ISI) — *plumbing DONE, enablement pending*
 
 *Added 2026-06-11. All three emulator forks shipped an ISI host-frame-source
-tonight (91 `8281c330bb`, 93 `a569c85e87`, 95 `a15281f2559`). The user-facing
-interface is identical across all three; only the model internals + frame
-geometry differ — i.e. a textbook board-agnostic-with-profile-data feature.*
+(91 `8281c330bb`, 93 `a569c85e87`, 95 `a15281f2559`). The user-facing interface
+is identical across all three; only model internals + frame geometry differ —
+a board-agnostic-with-profile-data feature.*
+
+**Built 2026-06-12 (board-agnostic, tested):** `CameraSpec` profile model;
+`command.py` emits `-global driver=<isi_type>,property=frames,value=<session
+frames dir>` + an optional sensor-`dtb` override; per-session frames dir;
+REST frame upload/list/delete with exact-size validation (a mismatched frame
+silently shows the gradient, so we reject it); a **Camera** UI panel. Disabled
+in every profile until per-board capture geometry is pinned.
+
+**Enablement blocker (per 95emulator, hw/display/imx95_isi.c):** frame geometry
+is **runtime-derived** from whatever the booted sensor dtb + V4L2 client
+negotiate (`CHNL_IMG_CFG` / `CHNL_OUT_BUF_PITCH`), **not** a device constant; the
+model does a **format-agnostic opaque byte copy** (raw must be byte-exact to the
+negotiated fourcc/stride — no host convert) and is **LAUNCH-ONLY** (stage frames,
+then reboot). 95's validated path used ov5640 @ 640×480×6, but our drone-sizer
+deploy ships **os08a20 / ox03c10 / ox05b1s / ap1302**, no ov5640. So enabling on
+the 95 = pick a sensor dtb → boot → read the guest `G_FMT` geometry → set
+`camera.{dtb,width,height,bytes_per_pixel}` → verify a staged `.raw` flows. Per
+board: confirm each `isi_type` + sensor dtb with its emulator (91/93 facts still
+pending on the bus).
 
 - **Standard interface (confirmed by all three E-repos):** a `frames` string
   property on the board's ISI, set via `-global driver=<isi-type>,property=frames,value=<path>`
@@ -184,13 +203,13 @@ geometry differ — i.e. a textbook board-agnostic-with-profile-data feature.*
   (8-channel `imx95.isi`, separate model); 93 = single-channel width×bpp. ISI
   type string differs per board (`imx93.isi` / `imx95.isi`) — `-global` needs the
   dotted type name.
-- **Holobench shape:** a profile block (e.g. `camera: { enabled, isi_type, width,
-  height, bpp }`), `command.py` emits the `-global …frames=<session frames dir>`,
-  a per-session frames dir, and a UI panel to upload frames (PNG→raw convert
-  host-side, or accept `*.raw`). Use case: drive the guest V4L2 → NPU vision
-  pipeline with real images — impossible on a fixed physical board farm.
-- **Not started** — needs a Kyle call on scope (raw-only vs PNG convert, default
-  resolutions) before implementing; the interface above is locked.
+- **Use case:** drive the guest V4L2 → NPU vision pipeline with real images —
+  impossible on a fixed physical board farm. Frames scan out in lexical filename
+  order, looping (zero-pad: `frame000.raw`…).
+- **Follow-ups:** confirm 91/93 `isi_type` + geometry + sensor dtb; verify + flip
+  `camera.enabled` per board; optional live-swap (95 would add a property setter
+  that reopens — small model change, not there today); optional host-side
+  image→raw convert once a target fourcc/stride is fixed per sensor.
 
 ---
 

@@ -43,6 +43,8 @@ class SessionRuntime:
     snapshot_disk: Optional[Path] = None
     # Per-session qcow2 overlay over the golden disk (image-swap / reinstall).
     disk_overlay: Optional[Path] = None
+    # Per-session dir of raw frames fed to the board's ISI (virtual camera).
+    camera_frames_dir: Optional[Path] = None
 
 
 class CommandError(Exception):
@@ -83,7 +85,11 @@ def _boot_args(profile: Profile, rt: SessionRuntime) -> list[str]:
 
     flash = _resolve_artifact(art.flash_bin, rt.asset_dir)
     kernel = _resolve_artifact(art.kernel, rt.asset_dir)
-    dtb = _resolve_artifact(art.dtb, rt.asset_dir)
+    # A camera profile may need a sensor/CSI-enabled dtb to surface the V4L2
+    # capture node in the guest; that override wins over the board's default dtb.
+    cam = profile.camera
+    dtb_name = cam.dtb if (cam.enabled and cam.dtb) else art.dtb
+    dtb = _resolve_artifact(dtb_name, rt.asset_dir)
     initrd = _resolve_artifact(art.initrd, rt.asset_dir)
     rootfs = _resolve_artifact(art.rootfs, rt.asset_dir)
 
@@ -204,6 +210,17 @@ def build_command(profile: Profile, rt: SessionRuntime) -> list[str]:
             f"local,id=hbfs0,path={rt.share_dir},security_model=none",
             "-device",
             f"{nine_p.device},fsdev=hbfs0,mount_tag={nine_p.mount_tag}",
+        ]
+
+    # Virtual camera: feed the per-session frames dir to the board's ISI via the
+    # standard host-frame-source property. Always emitted when enabled (an empty
+    # dir / size-mismatched frame just makes the model scan its gradient test
+    # pattern), so a board boots fine before any frame is staged.
+    cam = profile.camera
+    if cam.enabled and cam.isi_type and rt.camera_frames_dir is not None:
+        argv += [
+            "-global",
+            f"driver={cam.isi_type},property=frames,value={rt.camera_frames_dir}",
         ]
 
     argv += _boot_args(profile, rt)

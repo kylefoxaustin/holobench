@@ -197,6 +197,78 @@
         </div>`;
     }
 
+    function Camera({ session }) {
+      const cam = session.camera || {};
+      const [frames, setFrames] = useState([]);
+      const [busy, setBusy] = useState(false);
+      const [drag, setDrag] = useState(false);
+      const [err, setErr] = useState("");
+      const inputRef = useRef(null);
+
+      const refresh = useCallback(() => {
+        api(`/api/sessions/${session.id}/camera/frames`)
+          .then(d => setFrames(d.frames || []))
+          .catch(e => setErr(`couldn't list frames: ${e.detail || e.status || e}`));
+      }, [session.id]);
+      useEffect(() => { refresh(); const id = setInterval(refresh, 3000); return () => clearInterval(id); }, [session.id]);
+
+      const upload = async (list) => {
+        if (!list || !list.length) return;
+        setBusy(true); setErr("");
+        const failed = [];
+        for (const f of list) {
+          const fd = new FormData(); fd.append("file", f);
+          try {
+            const r = await authFetch(`/api/sessions/${session.id}/camera/frames`, { method: "POST", body: fd });
+            if (!r.ok) { const e = await r.json().catch(() => ({})); failed.push(`${f.name}: ${e.detail || r.status}`); }
+          } catch (e) { failed.push(`${f.name}: ${e}`); }
+        }
+        setBusy(false);
+        setErr(failed.length ? `upload failed — ${failed.join("; ")}` : "");
+        refresh();
+      };
+      const onPick = (e) => { const fl = e.target.files; e.target.value = ""; upload(fl); };
+      const del = async (name) => {
+        setErr("");
+        try {
+          const r = await authFetch(`/api/sessions/${session.id}/camera/frames/${encodeURIComponent(name)}`, { method: "DELETE" });
+          if (!r.ok) { const e = await r.json().catch(() => ({})); setErr(`delete failed: ${e.detail || r.status}`); }
+        } catch (e) { setErr(`delete failed: ${e}`); }
+        refresh();
+      };
+
+      const geom = cam.width && cam.height
+        ? `${cam.width}×${cam.height}${cam.bytes_per_pixel ? "×" + cam.bytes_per_pixel + "bpp" : ""}${cam.pixel_format ? " " + cam.pixel_format : ""}`
+        : "geometry unset";
+      const applies = cam.runtime_settable ? "applied live each frame tick" : "applied on next (re)boot";
+      const captureCmd = "v4l2-ctl --stream-mmap --stream-count=1 --stream-to=frame.out -d /dev/video0";
+      return html`
+        <div class="h-full flex flex-col">
+          <div class="text-xs text-slate-500 mb-1">Virtual camera → ISI capture
+            <span class="text-slate-600">— ${cam.isi_type || "isi"} · ${geom}</span></div>
+          <div onClick=${() => inputRef.current.click()}
+               onDragOver=${e => { e.preventDefault(); setDrag(true); }}
+               onDragLeave=${() => setDrag(false)}
+               onDrop=${e => { e.preventDefault(); setDrag(false); upload(e.dataTransfer.files); }}
+               class="rounded border border-dashed ${drag ? "border-emerald-500 bg-emerald-950/30" : "border-slate-700"} p-3 text-center text-sm text-slate-400 cursor-pointer">
+            ${busy ? "Uploading…" : `Drop raw frames here or click — exactly ${geom}`}
+            <input ref=${inputRef} type="file" multiple class="hidden" onChange=${onPick} />
+          </div>
+          ${err && html`<div class="mt-2 text-xs text-rose-400 break-words">${err}</div>`}
+          <div class="mt-2 text-xs text-slate-600 break-words">
+            Frames scan out in filename order, looping (${applies}). Capture in the guest:
+            <code class="text-slate-500">${captureCmd}</code></div>
+          <ul class="mt-2 text-sm overflow-auto flex-1 min-h-0">
+            ${frames.length === 0 && html`<li class="text-slate-600 px-1">no frames yet — drop raw ${geom} frames; empty = gradient test pattern</li>`}
+            ${frames.map((f, i) => html`
+              <li key=${f.name} class="flex justify-between items-center py-0.5 px-1 hover:bg-slate-800/50 rounded">
+                <span class="truncate"><span class="text-slate-600">${i + 1}.</span> ${f.name} <span class="text-slate-600 text-xs">${fmtSize(f.size)}</span></span>
+                <button onClick=${() => del(f.name)} class="text-rose-400 text-xs hover:text-rose-300 px-1">✕</button>
+              </li>`)}
+          </ul>
+        </div>`;
+    }
+
     function TextPanel({ session, kind, label }) {
       const [text, setText] = useState("loading…");
       const load = useCallback(() => {
@@ -305,6 +377,7 @@
       if (session.gdb && session.gdb.enabled) tabs.push(["dbg", "Debug"]);
       if (ins.snapshots) tabs.push(["snap", "Snapshots"]);
       if (fi.nine_p || fi.tftp) tabs.push(["files", "Files"]);
+      if (session.camera && session.camera.enabled) tabs.push(["cam", "Camera"]);
       const [active, setActive] = useState(tabs.length ? tabs[0][0] : null);
       if (!tabs.length) return null;
       const cur = tabs.some(t => t[0] === active) ? active : tabs[0][0];
@@ -325,6 +398,7 @@
             ${cur === "dbg" && html`<${DebugPanel} session=${session} />`}
             ${cur === "snap" && html`<${SnapshotsPanel} session=${session} />`}
             ${cur === "files" && html`<${Files} session=${session} />`}
+            ${cur === "cam" && html`<${Camera} session=${session} />`}
           </div>
         </div>`;
     }

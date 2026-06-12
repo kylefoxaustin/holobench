@@ -57,6 +57,24 @@ file_injection:
   nfs:    { enabled: false }
   image_swap: { enabled: true, target_drive: emmc } # 95 roots from eMMC (mmcblk0), not SD
 
+# Virtual camera — feed host frames through the ISI (-global driver=imx95.isi,
+# property=frames,value=<session frames dir>). Facts confirmed by 95emulator
+# (hw/display/imx95_isi.c): isi_type "imx95.isi"; LAUNCH-ONLY (frames read in
+# realize(), so stage-then-reboot, not live); FORMAT-AGNOSTIC opaque byte copy;
+# a frame whose size != width*height*bpp silently falls back to the gradient.
+# DISABLED until the capture chain is pinned: geometry is RUNTIME-DERIVED from
+# whatever the booted sensor dtb + V4L2 client negotiate (CHNL_IMG_CFG /
+# CHNL_OUT_BUF_PITCH), NOT a constant. 95's validated path used ov5640 @
+# 640x480x6 — but THIS deploy ships os08a20/ox03c10/ox05b1s/ap1302, no ov5640.
+# TODO(tag): pick a sensor dtb (camera.dtb), boot it, read the guest's G_FMT,
+# set width/height/bytes_per_pixel to match, verify a staged .raw flows, enable.
+camera:
+  enabled: false
+  isi_type: "imx95.isi"
+  runtime_settable: false          # LAUNCH-ONLY: stage frames, then (re)boot
+  # dtb: imx95-19x19-evk-os08a20.dtb   # CONFIRM sensor dtb with 95emulator
+  # width: ?   height: ?   bytes_per_pixel: ?   pixel_format: ?   # from guest G_FMT
+
 power: { warm_reset: true, cold_cycle: true, pause: true, reinstall: true }
 
 introspection:

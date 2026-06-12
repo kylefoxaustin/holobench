@@ -146,6 +146,50 @@ def test_image_swap_drive_attachment(tmp_path):
     assert "emmc,drive=hbdisk" not in sd
 
 
+def test_virtual_camera_global_and_dtb_override(tmp_path):
+    # Camera enabled -> -global host-frame-source on the declared isi_type,
+    # pointed at the per-session frames dir; camera.dtb overrides the boot dtb.
+    f = tmp_path / "cam.yaml"
+    f.write_text(
+        "id: cam\ndisplay_name: Cam\nsoc: x\n"
+        "qemu:\n  machine: virt\n"
+        "boot:\n  mode: direct-kernel\n"
+        "  artifacts: {kernel: Image, dtb: plain.dtb}\n"
+        "camera:\n"
+        "  enabled: true\n  isi_type: imx95.isi\n"
+        "  width: 640\n  height: 480\n  bytes_per_pixel: 6\n"
+        "  pixel_format: RGB16\n  dtb: camera.dtb\n"
+    )
+    p = load_profile_file(f)
+    assert p.camera.frame_bytes == 640 * 480 * 6
+    frames = tmp_path / "frames"
+    rt = SessionRuntime(
+        work_dir=tmp_path,
+        qmp_socket=tmp_path / "qmp.sock",
+        asset_dir=Path("/assets"),
+        camera_frames_dir=frames,
+    )
+    argv = build_command(p, rt)
+    glob = [a for a in argv if a.startswith("driver=imx95.isi")]
+    assert glob and "property=frames" in glob[0] and str(frames) in glob[0]
+    assert argv[argv.index("-global") + 1] == glob[0]
+    # camera.dtb wins over boot.artifacts.dtb.
+    assert argv[argv.index("-dtb") + 1] == "/assets/camera.dtb"
+
+
+def test_no_camera_global_when_disabled(tmp_path):
+    p = load_profile("imx91-evk")  # no camera block -> disabled
+    rt = SessionRuntime(
+        work_dir=tmp_path,
+        qmp_socket=tmp_path / "qmp.sock",
+        serial_sockets={"console0": tmp_path / "console0.sock"},
+        asset_dir=Path("/assets"),
+        camera_frames_dir=tmp_path / "frames",
+    )
+    argv = build_command(p, rt)
+    assert not any(a.startswith("driver=") and "property=frames" in a for a in argv)
+
+
 def test_flash_mode_uses_bios(tmp_path):
     f = tmp_path / "fl.yaml"
     f.write_text(
