@@ -30,16 +30,39 @@ class AuthService:
         env_secret = secret or os.environ.get("HOLOBENCH_SECRET")
         if env_secret:
             self.secret = env_secret
+        elif self.store.configured:
+            # Enforced auth, no env secret: persist an auto-generated key next to
+            # the user store (0600) so logins survive a restart. A single explicit
+            # HOLOBENCH_SECRET is still preferred for multi-worker/multi-host
+            # (shared key); this removes the silent-logout footgun for a single
+            # enforced instance.
+            self.secret = self._load_or_create_persistent_secret()
         else:
-            # Ephemeral per-process secret: fine for a single dev instance, but
-            # tokens won't survive a restart / multiple workers. Set
-            # HOLOBENCH_SECRET for a real deployment.
+            # Open mode (no users) — tokens are unused; an ephemeral key is fine.
             self.secret = secrets.token_hex(32)
-            if self.store.configured:
-                log.warning(
-                    "HOLOBENCH_SECRET not set — using an ephemeral signing key; "
-                    "logins won't survive a restart. Set HOLOBENCH_SECRET in prod."
-                )
+
+    def _load_or_create_persistent_secret(self) -> str:
+        path = self.store.path.parent / "secret"
+        try:
+            if path.exists():
+                existing = path.read_text().strip()
+                if existing:
+                    return existing
+            path.parent.mkdir(parents=True, exist_ok=True)
+            s = secrets.token_hex(32)
+            path.write_text(s)
+            try:
+                os.chmod(path, 0o600)
+            except OSError:
+                pass
+            log.info("generated a persistent signing key at %s (override with HOLOBENCH_SECRET)", path)
+            return s
+        except OSError:
+            log.warning(
+                "could not persist a signing key (%s); using an ephemeral one — "
+                "logins won't survive a restart. Set HOLOBENCH_SECRET.", path
+            )
+            return secrets.token_hex(32)
 
     @property
     def enabled(self) -> bool:

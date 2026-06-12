@@ -16,6 +16,8 @@ from __future__ import annotations
 import asyncio
 import os
 import re
+import time
+from urllib.parse import urlparse
 from contextlib import asynccontextmanager
 from pathlib import Path
 from typing import Optional
@@ -48,6 +50,34 @@ _MAX_SESSIONS_TOTAL = int(os.environ.get("HOLOBENCH_MAX_SESSIONS", "0"))
 # default; the server resolves assets from the trusted profile id. Only honor a
 # request `assets` path if an operator explicitly opts in (trusted/CLI use).
 _ALLOW_CLIENT_ASSETS = os.environ.get("HOLOBENCH_ALLOW_CLIENT_ASSETS") == "1"
+
+# --- login brute-force throttle (in-memory, per ip+username) ---------------
+_LOGIN_MAX_FAILS = int(os.environ.get("HOLOBENCH_LOGIN_MAX_FAILS", "5"))
+_LOGIN_WINDOW_S = int(os.environ.get("HOLOBENCH_LOGIN_WINDOW_S", "60"))
+_login_fails: dict[str, list[float]] = {}
+
+
+def _login_throttled(key: str) -> bool:
+    now = time.time()
+    hits = [t for t in _login_fails.get(key, []) if now - t < _LOGIN_WINDOW_S]
+    _login_fails[key] = hits
+    return len(hits) >= _LOGIN_MAX_FAILS
+
+
+def _login_record_fail(key: str) -> None:
+    _login_fails.setdefault(key, []).append(time.time())
+
+
+def _origin_ok(headers) -> bool:
+    """Reject cross-origin (CSWSH) browser connections. Non-browser clients send
+    no Origin and pass. Override the allowlist with HOLOBENCH_ALLOWED_ORIGINS."""
+    origin = headers.get("origin")
+    if not origin:
+        return True  # curl / native ws clients
+    allowed = os.environ.get("HOLOBENCH_ALLOWED_ORIGINS")
+    if allowed:
+        return origin in {o.strip() for o in allowed.split(",") if o.strip()}
+    return urlparse(origin).netloc == headers.get("host")
 
 # Paths under /api that don't require authentication.
 _OPEN_PATHS = {"/api/login"}
@@ -189,9 +219,18 @@ def login(req: LoginRequest, request: Request) -> dict:
     if not auth.enabled:
         # Open mode: no users configured, login is a no-op admin.
         return {"token": None, "user": {"username": "local", "role": "admin"}}
+    ip = request.client.host if request.client else "?"
+    key = f"{ip}:{req.username}"
+    if _login_throttled(key):
+        raise HTTPException(
+            status_code=429,
+            detail=f"too many failed logins; wait {_LOGIN_WINDOW_S}s",
+        )
     token = auth.login(req.username, req.password)
     if not token:
+        _login_record_fail(key)
         raise HTTPException(status_code=401, detail="invalid credentials")
+    _login_fails.pop(key, None)  # reset on success
     user = auth.store.get(req.username)
     return {"token": token, "user": {"username": user.username, "role": user.role}}
 
@@ -614,6 +653,10 @@ async def console_ws(
     chardev: Optional[str] = None,
     token: Optional[str] = None,
 ):
+    # Reject cross-origin browser connections (CSWSH) before doing anything.
+    if not _origin_ok(websocket.headers):
+        await websocket.close(code=4403, reason="bad origin")
+        return
     auth: AuthService = websocket.app.state.auth
     user = auth.resolve(token or websocket.cookies.get("hb_token"))
     if user is None:
