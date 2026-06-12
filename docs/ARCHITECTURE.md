@@ -19,7 +19,7 @@ profile (data) ──▶ Session manager ──▶ QEMU process
                           │
         ┌────────────┬────┴─────┬──────────────┬───────────────┐
    console bridge  display    power/files    introspection   scheduler
-     (serial)      (VNC)       (QMP+host)      (QMP/info)     (reservations)
+     (serial)    (screendump)  (QMP+host)      (QMP/info)     (reservations)
         │            │            │                │               │
         └────────────┴── mediated WS / REST ───────┴───────────────┘
                                  │
@@ -44,10 +44,14 @@ xterm.js. Supports multiple UARTs (A-core console, M-core, debug) as separate
 tabs when the profile declares them. This bridge is **read/write of terminal
 bytes only** — it is not a control channel.
 
-**Display bridge.** QEMU is started with a VNC server on a per-session port. The
-backend runs websockify to bridge RFB → WebSocket; the frontend renders it with
-noVNC. This is the "LCD / framebuffer" panel. Absent on profiles with no
-display device (panel hidden).
+**Display bridge.** The "LCD / framebuffer" panel. The backend captures the
+guest framebuffer with QMP `screendump` (of the LCDIF/DPU) to a PNG and serves
+it over REST; the frontend polls it into an `<img>`. This keeps the control
+surface to one standard QMP command and needs no extra port. (A live `-display
+vnc` → websockify → noVNC path is a latent option — `command.py` will emit
+`-display vnc` for a profile with `display.vnc: true` — but no shipped profile
+enables it and no bridge consumes it; screendump is the implemented path.) Absent
+on profiles with no display device (panel hidden).
 
 **Power / lifecycle.** Mapped to QMP and process control:
 - *Reset (warm):* QMP `system_reset`.
@@ -57,13 +61,17 @@ display device (panel hidden).
 
 **File injection.** Four mechanisms, all stock, chosen per use case and exposed
 in the UI the way the hardware farm exposes NFS/TFTP:
-- *virtio-9p* (`-fsdev`/`-virtfs`): a host dir mounted live in the guest. Best
-  for "drop a file, it's there." No reboot.
+- *virtio-9p* (`-fsdev`/`-virtfs`): a host dir mounted live in the guest at
+  `/mnt`. Best for "drop a file, it's there." No reboot. The busybox profiles
+  mount it from the initramfs (`tools/init-shell`); the full-distro (`-sd`)
+  profiles can't run that init, so they auto-mount via a `systemd.mount-extra=`
+  entry on the kernel cmdline — implemented, no image surgery.
 - *user-net TFTP* (`-netdev user,tftp=DIR`): the guest's u-boot `tftpboot` pulls
   from a per-session dir — mirrors the farm's "upload your Image/dtb via TFTP."
-- *host NFS export:* guest mounts it to `/mnt` — mirrors the farm's "NFS → /mnt."
-- *image swap:* attach/replace the SD/eMMC image — for flashing a full image /
-  "reinstall system."
+- *image swap:* a per-session qcow2 overlay over the profile's golden disk
+  (`if=sd` or `-device emmc`); "reinstall" drops the overlay = factory reset.
+- *host NFS export* (planned): mirror the farm's "NFS → /mnt." The profile has a
+  toggle but the bridge isn't wired yet; 9p covers the live-share use case today.
 
 **Introspection.** Read-only QMP / HMP `info`-class queries surfaced as a panel
 (see §6). The differentiator vs. physical hardware.
@@ -77,7 +85,7 @@ limits and fair-share. Designed-in from the session abstraction even if Phase 4.
 | Holobench capability | Stock QEMU mechanism | Notes |
 |---|---|---|
 | Serial console | `-chardev` (pty/socket) + `-serial` | one per declared UART |
-| LCD / framebuffer | `-vnc :N` / `-display vnc` | per-session port |
+| LCD / framebuffer | QMP `screendump` → PNG (poll) | `-display vnc` path latent, unused |
 | Warm reset | QMP `system_reset` | |
 | Pause / resume | QMP `stop` / `cont` | |
 | Cold cycle / reinstall | `quit` + relaunch / restore image | golden image per profile |
@@ -117,7 +125,8 @@ the browser touching QMP directly.
 - One QEMU **process** per session.
 - One **overlay image** per session (qcow2 backed by the profile's golden image)
   so writes never touch the shared base and "reinstall" = drop the overlay.
-- One **port range** per session (QMP, VNC, gdbstub, any user-net forwards).
+- One **port range** per session (QMP socket, gdbstub, any user-net forwards;
+  plus a VNC port only if a profile opts into the latent `-display vnc` path).
 - The session abstraction hides all of this so a future namespace/container
   backend is a drop-in.
 
@@ -138,8 +147,8 @@ board farm. This is the "why use the virtual one" story.
 ## 7. Security model
 
 - **QMP and serial control sockets never leave the backend.** The browser
-  receives only: terminal byte streams (console), RFB frames (display), and a
-  fixed set of scoped control verbs (reset/pause/cont/reinstall/upload). It can
+  receives only: terminal byte streams (console), framebuffer PNGs (display), and
+  a fixed set of scoped control verbs (reset/pause/cont/reinstall/upload). It can
   never issue an arbitrary monitor command.
 - **Uploads are hostile until proven otherwise:** size caps, confinement to the
   session's injection dir, no path traversal, type checks for Image/dtb.

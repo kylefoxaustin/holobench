@@ -51,7 +51,9 @@ serial:                        # one or more UARTs -> console tabs
 display:
   enabled:   bool              # false -> LCD panel hidden
   device:    string|null       # informational, e.g. "lcdif/dcss"
-  vnc:       bool              # true -> launch with -vnc, bridge to noVNC
+  vnc:       bool              # false (all shipped boards): LCD via QMP screendump
+                               # -> PNG. true emits -display vnc (latent; no bridge
+                               # consumes it yet) — leave false.
 
 # File injection ---------------------------------------------------------
 file_injection:
@@ -101,11 +103,16 @@ reservation:
   `{rootfs}`, `{session}` (session work dir). Prefer the derived form.
 - **`serial[].chardev`** must match a chardev id the model wires its UART to.
   Multiple entries become console tabs.
-- **`display.vnc: false`** on a headless/server profile hides the LCD panel
-  rather than showing a blank one.
+- **`display.enabled: false`** on a headless/server profile hides the LCD panel
+  rather than showing a blank one. `display.vnc` stays false on all boards (the
+  LCD panel is served by QMP `screendump` → PNG; the `-display vnc` path is
+  latent and unused).
 - **`file_injection`** toggles only expose mechanisms the board actually
-  supports. TFTP/NFS require the guest software (u-boot/Linux) to use them; 9p
-  requires the virtio-9p driver in the guest kernel.
+  supports. TFTP requires the guest software (u-boot/Linux) to use it; 9p
+  requires the virtio-9p driver in the guest kernel (`CONFIG_NET_9P`,
+  `CONFIG_NET_9P_VIRTIO`, `CONFIG_9P_FS`) and auto-mounts at `/mnt` (busybox via
+  the initramfs, full distro via `systemd.mount-extra=`). NFS is a planned toggle,
+  not yet wired.
 
 ## Capability degradation
 
