@@ -93,7 +93,8 @@ camera:
   bytes_per_pixel: 6                       # safe over-provision (640x480x6=1843200)
   pixel_format: "YUYV"                     # informational; trust guest G_FMT/stride
   runtime_settable: false                  # LAUNCH-ONLY: stage frames, then (re)boot
-  capture_hint: "imx95 ISI is an 8-ch crossbar — media-ctl can't satisfy link_validate (STREAMON EPIPEs). Capture needs a programmatic V4L2 client (per-stream SUBDEV_S_FMT + link enable + REQBUFS/STREAMON/DQBUF); a bundled helper is pending. The frame FEED is validated byte-exact. Stage 640x480 frames (1843200 B)."
+  capture_binary: imx95-isi-capture        # GPL-2.0 static helper, staged into /mnt
+  capture_hint: "Stage 640x480 frames (1843200 B), reboot, then in the console run: /mnt/imx95-isi-capture cap /dev/video0  (media-ctl can't drive the 8-ch crossbar — this helper does the per-stream link setup + DQBUF; writes captured frames to ./frame*.raw)"
 
 power: { warm_reset: true, cold_cycle: true, pause: true, reinstall: true }
 

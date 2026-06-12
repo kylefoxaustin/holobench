@@ -14,6 +14,7 @@ never leaves the backend; callers get mediated control verbs, not raw QMP.
 from __future__ import annotations
 
 import asyncio
+import os
 import shutil
 import socket
 import tempfile
@@ -32,6 +33,25 @@ from .command import SessionRuntime, build_command, command_str
 
 
 DEFAULT_BASE_DIR = Path(tempfile.gettempdir()) / "holobench"
+
+
+def _capture_helper_path(name: str) -> Optional[Path]:
+    """Locate a vendored static capture helper by filename.
+
+    Honors $HOLOBENCH_CAPTURE_DIR (set in the container), else resolves the repo's
+    vendor/camera/bin relative to this package (dev / pip -e install).
+    """
+    candidates = []
+    env = os.environ.get("HOLOBENCH_CAPTURE_DIR")
+    if env:
+        candidates.append(Path(env) / name)
+    # manager.py = backend/holobench/session/manager.py -> parents[3] = repo root
+    candidates.append(Path(__file__).resolve().parents[3] / "vendor" / "camera" / "bin" / name)
+    candidates.append(Path("/opt/holobench/vendor/camera/bin") / name)
+    for c in candidates:
+        if c.is_file():
+            return c
+    return None
 
 
 def _free_tcp_port() -> int:
@@ -158,6 +178,11 @@ class Session:
                 if any(self.camera_frames_dir.glob("*.raw"))
                 else None
             )
+            # Stage the GPL-2.0 static capture helper into the 9p share so the
+            # guest runs it from /mnt (the imx8-isi media links start disabled, so
+            # no shipped tool can capture; this standalone helper does the link
+            # setup + DQBUF itself). Staged whenever the camera is enabled.
+            self._stage_capture_helper()
         if self.runtime.snapshot_disk is not None:
             await self._create_snapshot_disk(self.runtime.snapshot_disk)
         if self.runtime.disk_overlay is not None:
@@ -190,6 +215,21 @@ class Session:
             await self._start_serial_taps()
         self._start_event_capture()
         self.state = SessionState.RUNNING
+
+    def _stage_capture_helper(self) -> None:
+        """Copy the board's static V4L2 capture helper into the 9p share (->/mnt)."""
+        cam = self.profile.camera
+        if not (cam.enabled and cam.capture_binary and self.share_dir is not None):
+            return
+        src = _capture_helper_path(cam.capture_binary)
+        if src is None:
+            return  # binary not built/available -> degrade (panel hint still shown)
+        try:
+            dest = self.share_dir / cam.capture_binary
+            shutil.copy2(src, dest)
+            dest.chmod(0o755)
+        except OSError:
+            pass
 
     def _start_event_capture(self) -> None:
         if self._qmp is None:

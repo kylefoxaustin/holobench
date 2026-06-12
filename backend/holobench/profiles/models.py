@@ -160,6 +160,11 @@ class CameraSpec(_Strict):
     # pad formats to match this geometry. Ship the exact, emulator-validated
     # command block here (entity/pad names are board facts).
     capture_hint: Optional[str] = None
+    # Static aarch64 capture helper (GPL-2.0, Kyle-authored, vendored from the
+    # emulator repos) staged into the session 9p share so the guest runs it from
+    # /mnt. Filename under vendor/camera/bin/, e.g. "imx95-isi-capture". A
+    # standalone tool shipped alongside Holobench (not linked) — license unaffected.
+    capture_binary: Optional[str] = None
 
     @property
     def frame_bytes(self) -> Optional[int]:

@@ -52,6 +52,24 @@ file_injection:
   nfs:    { enabled: false }
   image_swap: { enabled: true, target_drive: sd }   # overlay over disk.wic golden
 
+# Virtual camera — feed host frames through the ISI -> guest /dev/video0.
+# 91 uses the SHARED imx93.isi model (type "imx93.isi", NOT imx91.isi). Facts
+# validated byte-exact by 91emulator: mt9m114 dtb, 1280x720x3 (=2764800 B), no
+# sensor -device needed (the ISI streams without the subdev). Capture needs the
+# bundled GPL-2.0 helper (imx-image-core ships no media-ctl/v4l2-ctl/v4l2src).
+# Armed only when frames are staged (empty frames dir is fatal); stage + reboot.
+camera:
+  enabled: true
+  isi_type: "imx93.isi"
+  dtb: imx91-11x11-evk-mt9m114.dtb         # mt9m114 sensor wired to CSI->ISI (deploy artifact)
+  width: 1280
+  height: 720
+  bytes_per_pixel: 3                       # used=2764800 (validated byte-exact)
+  pixel_format: "RGB24"                    # informational; trust guest G_FMT/stride
+  runtime_settable: false                  # LAUNCH-ONLY: stage frames, then (re)boot
+  capture_binary: imx91-isi-capture        # GPL-2.0 static helper, staged into /mnt
+  capture_hint: "Stage 1280x720 frames (2764800 B), reboot, then in the console run: /mnt/imx91-isi-capture cap /dev/video0  (single-pipe ISI; the helper sets up the media links + DQBUFs to ./frame*.raw)"
+
 power: { warm_reset: true, cold_cycle: true, pause: true, reinstall: true }
 
 introspection:

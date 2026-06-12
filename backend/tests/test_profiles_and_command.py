@@ -194,6 +194,26 @@ def test_virtual_camera_global_and_dtb_override(tmp_path):
     assert argv_off[argv_off.index("-dtb") + 1] == "/assets/plain.dtb"
 
 
+def test_camera_enabled_boards_ship_their_capture_helper():
+    # Every camera-enabled profile must name a capture_binary that is actually
+    # vendored + built (static helper staged into the guest /mnt). Guards the bundle.
+    repo = Path(__file__).resolve().parents[2]
+    bindir = repo / "vendor" / "camera" / "bin"
+    for pid in list_profiles():
+        cam = load_profile(pid).camera
+        if not cam.enabled:
+            continue
+        assert cam.capture_binary, f"{pid}: camera enabled but no capture_binary"
+        b = bindir / cam.capture_binary
+        assert b.is_file(), f"{pid}: missing helper {b} (run tools/build-capture-helpers.sh)"
+
+
+def test_capture_helper_resolves():
+    from holobench.session.manager import _capture_helper_path
+    assert _capture_helper_path("imx95-isi-capture") is not None
+    assert _capture_helper_path("does-not-exist-xyz") is None
+
+
 def test_no_camera_global_when_disabled(tmp_path):
     p = load_profile("imx91-evk")  # no camera block -> disabled
     rt = SessionRuntime(

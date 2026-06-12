@@ -30,7 +30,13 @@ STAGE="$(mktemp -d)"; trap 'rm -rf "$STAGE"' EXIT
 echo "staging build context in $STAGE ..."
 
 # App (dereference any symlinks; skip venv/caches/big assets).
-cp -rL backend frontend profiles docs tools README.md CLAUDE.md ROADMAP.md "$STAGE"/ 2>/dev/null || true
+cp -rL backend frontend profiles docs tools vendor README.md CLAUDE.md ROADMAP.md "$STAGE"/ 2>/dev/null || true
+# Ensure the GPL-2.0 capture helpers exist (staged into guests at /mnt). Build if
+# the cross-compiler is present and they're missing; warn (don't fail) otherwise.
+if [ ! -x vendor/camera/bin/imx95-isi-capture ] && command -v aarch64-linux-gnu-gcc >/dev/null; then
+  tools/build-capture-helpers.sh && cp -rL vendor "$STAGE"/ 2>/dev/null || true
+fi
+[ -x "$STAGE/vendor/camera/bin/imx95-isi-capture" ] || echo "  warn: camera capture helpers not baked (build with tools/build-capture-helpers.sh)"
 cp docker/Dockerfile "$STAGE"/Dockerfile
 cp docker/.dockerignore "$STAGE"/.dockerignore
 

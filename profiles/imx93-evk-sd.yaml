@@ -50,6 +50,24 @@ file_injection:
   nfs:    { enabled: false }
   image_swap: { enabled: true, target_drive: sd }   # 93 roots from an SD card (mmcblk0)
 
+# Virtual camera — feed host frames through the ISI -> guest /dev/video0.
+# Shared imx93.isi model. 93emulator's "safe bet": frdm-ov5640 dtb @ 640x480x6
+# (=1843200 B, validated byte-exact). ov5640 is a kernel MODULE here -> the guest
+# must `modprobe ov5640` before capture. Capture needs the bundled GPL-2.0 helper
+# (imx-image-core ships no media-ctl/v4l2-ctl/v4l2src). Armed only when frames are
+# staged (empty frames dir is fatal); stage + reboot.
+camera:
+  enabled: true
+  isi_type: "imx93.isi"
+  dtb: imx93-11x11-frdm-ov5640.dtb         # ov5640 sensor wired to CSI->ISI (deploy artifact)
+  width: 640
+  height: 480
+  bytes_per_pixel: 6                       # validated byte-exact
+  pixel_format: "YUYV"                     # informational; trust guest G_FMT/stride
+  runtime_settable: false                  # LAUNCH-ONLY: stage frames, then (re)boot
+  capture_binary: imx93-isi-capture        # GPL-2.0 static helper, staged into /mnt
+  capture_hint: "Stage 640x480 frames (1843200 B), reboot, then in the console: modprobe ov5640 && /mnt/imx93-isi-capture cap /dev/video0  (the helper sets up the media links + DQBUFs to ./frame*.raw)"
+
 power: { warm_reset: true, cold_cycle: true, pause: true, reinstall: true }
 
 introspection:
