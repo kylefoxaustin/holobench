@@ -166,6 +166,32 @@ Tasks (all read-only, all stock interfaces)
 - An external gdb attaches to the advertised stub port.
 - A user can snapshot a boot state and jump back to it.
 
+### Candidate — Virtual camera (feed host images through the ISI) — *ready to build*
+
+*Added 2026-06-11. All three emulator forks shipped an ISI host-frame-source
+tonight (91 `8281c330bb`, 93 `a569c85e87`, 95 `a15281f2559`). The user-facing
+interface is identical across all three; only the model internals + frame
+geometry differ — i.e. a textbook board-agnostic-with-profile-data feature.*
+
+- **Standard interface (confirmed by all three E-repos):** a `frames` string
+  property on the board's ISI, set via `-global driver=<isi-type>,property=frames,value=<path>`
+  where `<path>` is a dir of sorted `*.raw` frames or one file of back-to-back
+  raw frames (the model loops). Whole-frame host reads — **never a chardev**
+  (their hard-won lesson: char-socket backend reads ~4KB/dispatch → multi-MB
+  frames crawl + deadlock).
+- **Per-board geometry → goes in the profile** (frames must match exactly or the
+  model falls back to its gradient): 91 = 1280×720×**3bpp**; 95 = 640×480×**6bpp**
+  (8-channel `imx95.isi`, separate model); 93 = single-channel width×bpp. ISI
+  type string differs per board (`imx93.isi` / `imx95.isi`) — `-global` needs the
+  dotted type name.
+- **Holobench shape:** a profile block (e.g. `camera: { enabled, isi_type, width,
+  height, bpp }`), `command.py` emits the `-global …frames=<session frames dir>`,
+  a per-session frames dir, and a UI panel to upload frames (PNG→raw convert
+  host-side, or accept `*.raw`). Use case: drive the guest V4L2 → NPU vision
+  pipeline with real images — impossible on a fixed physical board farm.
+- **Not started** — needs a Kyle call on scope (raw-only vs PNG convert, default
+  resolutions) before implementing; the interface above is locked.
+
 ---
 
 ## Phase 6 — Harden (v1.0)
