@@ -146,6 +146,11 @@ class CameraSpec(_Strict):
     bytes_per_pixel: Optional[int] = None
     pixel_format: Optional[str] = None   # informational, e.g. "RGB888" (host convert)
     dtb: Optional[str] = None            # optional camera dtb override (sensor/CSI)
+    # Sensor device model that must be present so the capture media graph links
+    # (it contributes no pixels — pure scaffolding). Emitted verbatim as
+    # `-device <qemu_device>`, e.g. "ov5640,bus=lpi2c1,address=0x3c". CONFIRM
+    # the bus/address with the emulator repo.
+    qemu_device: Optional[str] = None
     # frames read at device init vs re-globbed each frame tick. If False, staged
     # frames apply only at (re)launch; the UI says "reboot to apply".
     runtime_settable: bool = False

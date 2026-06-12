@@ -222,6 +222,10 @@ def build_command(profile: Profile, rt: SessionRuntime) -> list[str]:
             "-global",
             f"driver={cam.isi_type},property=frames,value={rt.camera_frames_dir}",
         ]
+        # Sensor device model: scaffolding so the capture media graph links
+        # (link_validate / STREAMON fail without a source subdev). No pixels.
+        if cam.qemu_device:
+            argv += ["-device", cam.qemu_device]
 
     argv += _boot_args(profile, rt)
     argv += list(q.extra_args)

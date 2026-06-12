@@ -159,6 +159,7 @@ def test_virtual_camera_global_and_dtb_override(tmp_path):
         "  enabled: true\n  isi_type: imx95.isi\n"
         "  width: 640\n  height: 480\n  bytes_per_pixel: 6\n"
         "  pixel_format: RGB16\n  dtb: camera.dtb\n"
+        "  qemu_device: ov5640,bus=lpi2c1,address=0x3c\n"
     )
     p = load_profile_file(f)
     assert p.camera.frame_bytes == 640 * 480 * 6
@@ -175,6 +176,9 @@ def test_virtual_camera_global_and_dtb_override(tmp_path):
     assert argv[argv.index("-global") + 1] == glob[0]
     # camera.dtb wins over boot.artifacts.dtb.
     assert argv[argv.index("-dtb") + 1] == "/assets/camera.dtb"
+    # sensor scaffolding device emitted verbatim.
+    assert "ov5640,bus=lpi2c1,address=0x3c" in argv
+    assert argv[argv.index("-device") + 1] == "ov5640,bus=lpi2c1,address=0x3c"
 
 
 def test_no_camera_global_when_disabled(tmp_path):
