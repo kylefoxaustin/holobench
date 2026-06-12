@@ -241,7 +241,11 @@
         ? `${cam.width}×${cam.height}${cam.bytes_per_pixel ? "×" + cam.bytes_per_pixel + "bpp" : ""}${cam.pixel_format ? " " + cam.pixel_format : ""}`
         : "geometry unset";
       const applies = cam.runtime_settable ? "applied live each frame tick" : "applied on next (re)boot";
-      const captureCmd = "v4l2-ctl --stream-mmap --stream-count=1 --stream-to=frame.out -d /dev/video0";
+      // imx8-isi media links start DISABLED, so a bare v4l2-ctl fails link_validate
+      // (EPIPE). Boards ship their exact media-ctl + v4l2-ctl recipe; fall back to a
+      // generic reminder if none is set yet.
+      const captureCmd = cam.capture_hint
+        || "links start disabled — media-ctl -l/-V to enable the sensor→ISI links and set the format, then v4l2-ctl --stream-mmap -d /dev/video0";
       return html`
         <div class="h-full flex flex-col">
           <div class="text-xs text-slate-500 mb-1">Virtual camera → ISI capture

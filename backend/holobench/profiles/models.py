@@ -154,6 +154,12 @@ class CameraSpec(_Strict):
     # frames read at device init vs re-globbed each frame tick. If False, staged
     # frames apply only at (re)launch; the UI says "reboot to apply".
     runtime_settable: bool = False
+    # Board-specific in-guest capture recipe shown in the Camera panel. The
+    # imx8-isi media links start DISABLED, so a bare `v4l2-ctl --stream-mmap`
+    # fails link_validate (EPIPE) until media-ctl enables the links + sets the
+    # pad formats to match this geometry. Ship the exact, emulator-validated
+    # command block here (entity/pad names are board facts).
+    capture_hint: Optional[str] = None
 
     @property
     def frame_bytes(self) -> Optional[int]:

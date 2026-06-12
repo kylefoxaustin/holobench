@@ -57,23 +57,36 @@ file_injection:
   nfs:    { enabled: false }
   image_swap: { enabled: true, target_drive: emmc } # 95 roots from eMMC (mmcblk0), not SD
 
-# Virtual camera — feed host frames through the ISI (-global driver=imx95.isi,
-# property=frames,value=<session frames dir>). Facts confirmed by 95emulator
-# (hw/display/imx95_isi.c): isi_type "imx95.isi"; LAUNCH-ONLY (frames read in
-# realize(), so stage-then-reboot, not live); FORMAT-AGNOSTIC opaque byte copy;
-# a frame whose size != width*height*bpp silently falls back to the gradient.
-# DISABLED until the capture chain is pinned: geometry is RUNTIME-DERIVED from
-# whatever the booted sensor dtb + V4L2 client negotiate (CHNL_IMG_CFG /
-# CHNL_OUT_BUF_PITCH), NOT a constant. 95's validated path used ov5640 @
-# 640x480x6 — but THIS deploy ships os08a20/ox03c10/ox05b1s/ap1302, no ov5640.
-# TODO(tag): pick a sensor dtb (camera.dtb), boot it, read the guest's G_FMT,
-# set width/height/bytes_per_pixel to match, verify a staged .raw flows, enable.
+# Virtual camera — feed host frames through the ISI so the guest captures them
+# via V4L2 (/dev/video0) in place of a real sensor: -global driver=imx95.isi,
+# property=frames,value=<session frames dir>. All facts confirmed + validated
+# end-to-end by 95emulator (hw/display/imx95_isi.c + hw/i2c/ov5640.c) on THIS
+# golden dtb: ov5640 is the only modeled sensor; it's pure graph scaffolding
+# (no pixels — the ISI scans our host frames). Capture comes up at 640x480,
+# bpl=3840 -> 6 bytes/px -> 1843200 bytes/frame; 5 staged frames DQBUF'd byte-
+# exact. The ov5640 dtb is a standard deploy artifact 95 minted next to the
+# others (golden base dtb + ov5640 overlay merged) — no test-tree coupling.
+# LAUNCH-ONLY (frames read in realize(); stage-then-reboot). FORMAT-AGNOSTIC
+# opaque byte copy: a frame whose size != 1843200 silently shows the gradient.
+# NB the DT puts the sensor on lpi2c3 but QEMU's bus alias is "lpi2c1".
+# In-guest capture (imx-image-full ships the tools): media-ctl -l/-V to enable
+# the ov5640->csi->isi links + set UYVY pad fmts, then v4l2-ctl --stream-mmap
+# (or gst-launch v4l2src). frames scan out in lexical order, looping.
+# NB the UNCONFIGURED /dev/video0 default is 1920x1080 YUYV (bpl 3840, 2bpp,
+# 4147200); the 640x480x6 below is what the media-ctl -V recipe negotiates and
+# what 95 validated byte-exact — so frames must be 640x480 and the recipe must
+# set that. capture_hint left unset until 95emulator hands over the exact,
+# entity-name-validated media-ctl block (then it ships verbatim in the panel).
 camera:
-  enabled: false
+  enabled: true
   isi_type: "imx95.isi"
-  runtime_settable: false          # LAUNCH-ONLY: stage frames, then (re)boot
-  # dtb: imx95-19x19-evk-os08a20.dtb   # CONFIRM sensor dtb with 95emulator
-  # width: ?   height: ?   bytes_per_pixel: ?   pixel_format: ?   # from guest G_FMT
+  dtb: imx95-19x19-evk-ov5640.dtb          # golden base + ov5640 overlay (deploy artifact)
+  qemu_device: "ov5640,bus=lpi2c1,address=0x3c"
+  width: 640
+  height: 480
+  bytes_per_pixel: 6                       # bpl 3840 / width 640 (model-reported)
+  pixel_format: "YUYV"                     # informational; trust guest G_FMT/stride
+  runtime_settable: false                  # LAUNCH-ONLY: stage frames, then (re)boot
 
 power: { warm_reset: true, cold_cycle: true, pause: true, reinstall: true }
 

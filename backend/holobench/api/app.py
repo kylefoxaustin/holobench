@@ -149,6 +149,7 @@ def _session_view(s: Session) -> dict:
             "pixel_format": s.profile.camera.pixel_format,
             "frame_bytes": s.profile.camera.frame_bytes,
             "runtime_settable": s.profile.camera.runtime_settable,
+            "capture_hint": s.profile.camera.capture_hint,
         },
         "introspection": {
             "memory_map": s.profile.introspection.memory_map,
