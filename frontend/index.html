@@ -118,32 +118,58 @@
       const [files, setFiles] = useState([]);
       const [busy, setBusy] = useState(false);
       const [drag, setDrag] = useState(false);
+      const [err, setErr] = useState("");
       const inputRef = useRef(null);
 
       const refresh = useCallback(() => {
-        api(`/api/sessions/${session.id}/files`).then(d => setFiles(d.files || [])).catch(() => {});
+        api(`/api/sessions/${session.id}/files`)
+          .then(d => setFiles(d.files || []))
+          .catch(e => setErr(`couldn't list files: ${e.detail || e.status || e}`));
       }, [session.id]);
       useEffect(() => { refresh(); const id = setInterval(refresh, 3000); return () => clearInterval(id); }, [session.id]);
 
       const upload = async (list) => {
         if (!list || !list.length) return;
-        setBusy(true);
+        setBusy(true); setErr("");
+        const failed = [];
         for (const f of list) {
           const fd = new FormData(); fd.append("file", f);
-          await authFetch(`/api/sessions/${session.id}/files`, { method: "POST", body: fd }).catch(() => {});
+          try {
+            const r = await authFetch(`/api/sessions/${session.id}/files`, { method: "POST", body: fd });
+            if (!r.ok) {
+              const e = await r.json().catch(() => ({}));
+              failed.push(`${f.name}: ${e.detail || r.status}`);
+            }
+          } catch (e) { failed.push(`${f.name}: ${e}`); }
         }
-        setBusy(false); refresh();
+        setBusy(false);
+        setErr(failed.length ? `upload failed — ${failed.join("; ")}` : "");
+        refresh();
       };
+      // Reset the input's value so picking the SAME file again still fires onChange.
+      const onPick = (e) => { const fl = e.target.files; e.target.value = ""; upload(fl); };
       const del = async (name) => {
-        await authFetch(`/api/sessions/${session.id}/files/${encodeURIComponent(name)}`, { method: "DELETE" }).catch(() => {});
+        setErr("");
+        try {
+          const r = await authFetch(`/api/sessions/${session.id}/files/${encodeURIComponent(name)}`, { method: "DELETE" });
+          if (!r.ok) { const e = await r.json().catch(() => ({})); setErr(`delete failed: ${e.detail || r.status}`); }
+        } catch (e) { setErr(`delete failed: ${e}`); }
         refresh();
       };
 
-      const has9p = session.file_injection && session.file_injection.nine_p;
+      const fi = session.file_injection || {};
+      const has9p = fi.nine_p;
+      const tag = fi.mount_tag || "holobench";
+      // Full-distro (image-swap/systemd) boards don't run Holobench's initramfs
+      // auto-mount, so the share lands on the host but the guest must mount it.
+      const fullDistro = has9p && fi.image_swap;
+      const mountCmd = `mount -t 9p -o trans=virtio,version=9p2000.L ${tag} /mnt`;
       const hint = has9p ? "live at /mnt · virtio-9p" : "fetch via tftp · 10.0.2.2";
-      const emptyHint = has9p
-        ? "no files yet — drop one, then `ls /mnt` in the console"
-        : "no files yet — drop one, then `tftp -g -r <name> 10.0.2.2` in the guest";
+      const emptyHint = !has9p
+        ? "no files yet — drop one, then `tftp -g -r <name> 10.0.2.2` in the guest"
+        : fullDistro
+          ? "no files yet — drop one, then in the console: " + mountCmd
+          : "no files yet — drop one, then `ls /mnt` in the console";
       return html`
         <div class="h-full flex flex-col">
           <div class="text-xs text-slate-500 mb-1">Files → guest
@@ -154,9 +180,12 @@
                onDrop=${e => { e.preventDefault(); setDrag(false); upload(e.dataTransfer.files); }}
                class="rounded border border-dashed ${drag ? "border-emerald-500 bg-emerald-950/30" : "border-slate-700"} p-3 text-center text-sm text-slate-400 cursor-pointer">
             ${busy ? "Uploading…" : "Drop files here or click to upload"}
-            <input ref=${inputRef} type="file" multiple class="hidden"
-                   onChange=${e => upload(e.target.files)} />
+            <input ref=${inputRef} type="file" multiple class="hidden" onChange=${onPick} />
           </div>
+          ${err && html`<div class="mt-2 text-xs text-rose-400 break-words">${err}</div>`}
+          ${fullDistro && html`<div class="mt-2 text-xs text-amber-400/80 break-words">
+            full distro: uploads land on the host share but the guest won't auto-mount.
+            Run once in the console: <code class="text-amber-300">${mountCmd}</code></div>`}
           <ul class="mt-2 text-sm overflow-auto flex-1 min-h-0">
             ${files.length === 0 && html`<li class="text-slate-600 px-1">${emptyHint}</li>`}
             ${files.map(f => html`

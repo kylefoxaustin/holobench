@@ -63,9 +63,9 @@ escalation path when something is genuinely missing from a model.
   ┌──────────────┐   WebSocket    ┌────────────────────┐  QMP sock   ┌───────────────┐
   │ xterm.js     │◀──────────────▶│  Console bridge     │◀──────────▶│  -serial      │
   │ (UART panel) │                │                     │            │  chardev      │
-  ├──────────────┤   WS (RFB)     ├────────────────────┤            ├───────────────┤
-  │ noVNC        │◀──────────────▶│  Display bridge      │◀──────────▶│  -display vnc │
-  │ (LCD panel)  │                │  (websockify)        │            │               │
+  ├──────────────┤  GET .png poll ├────────────────────┤  QMP        ├───────────────┤
+  │ <img> LCD    │◀──────────────▶│  Display bridge      │◀──────────▶│  screendump   │
+  │ (LCD panel)  │                │  (QMP screendump→PNG)│            │  (LCDIF/DPU)  │
   ├──────────────┤   REST/WS      ├────────────────────┤  QMP        ├───────────────┤
   │ controls     │◀──────────────▶│  Orchestrator        │◀──────────▶│  reset/stop/  │
   │ (power/files)│                │  + Session manager   │            │  cont/quit    │
@@ -93,12 +93,14 @@ QEMU i.MX SoC models, through stock interfaces only.
 | 0 | Launch from profile + QMP control (all 3 boards boot to a Linux prompt) | ✅ |
 | 1 | Live serial console in the browser (xterm.js, bidirectional) | ✅ |
 | 2 | LCD / framebuffer panel (QMP `screendump`) | ✅ |
-| 3 | File injection — virtio-9p (`/mnt`) + user-net TFTP | ✅ |
-| 4 | Reservations + "remaining time" countdown + extend + cold reinstall | ✅ |
+| 3 | File injection — virtio-9p (`/mnt`) + user-net TFTP + disk image-swap | ✅ |
+| 4 | Reservations + "remaining time" countdown + extend + factory-reset reinstall | ✅ |
 | 5 | Introspection — memory map, device tree, live QMP events, gdbstub, snapshots | ✅ |
 | 6 | Auth scaffold + offline-vendored UI (deploy hardening) | ◐ in progress |
 
-Boards: **i.MX 91 / 93 / 95** (9p on 91/93/95; everything else on all three).
+Boards: **i.MX 91 / 93 / 95**, each in two flavors — a quick **busybox** profile
+and a **full BSP distro** (`-sd`) profile that boots the real NXP `.wic`. All
+capabilities work on all three.
 
 ## Quickstart
 
@@ -106,6 +108,7 @@ Boards: **i.MX 91 / 93 / 95** (9p on 91/93/95; everything else on all three).
 cd backend && python -m venv ../.venv && . ../.venv/bin/activate
 pip install -e .
 holobench serve                 # → http://127.0.0.1:8080
+holobench serve --host 0.0.0.0 --port 8080   # serve the farm on your LAN
 ```
 Open the URL → pick a board → **Reserve & Boot** → the serial console streams
 live and the right-hand tabs show LCD / Memory / Devices / Events / Debug /
@@ -122,6 +125,29 @@ holobench command imx91-evk           # preview the resolved QEMU command line
 holobench launch imx91-evk --hold 30  # boot + prove QMP control, print console
 holobench ps | status | reset | stop  # act on a running session by id
 ```
+
+## Two flavors per board: quick busybox, or the real BSP distro
+
+Each SoC ships **two** profiles:
+
+- **`imx9x-evk`** — a tiny busybox initramfs. Boots to a shell in seconds; ideal
+  for "does it come up, can I drive QMP" and fast iteration.
+- **`imx9x-evk-sd`** — the **full NXP i.MX Release Distro** (the same `.wic` you'd
+  flash to a real EVK): systemd, Weston, OpenSSH, the lot, on an ext4 root over
+  SD (91/93) or eMMC (95). This is the "virtual EVK" in the truest sense — the
+  actual board software, in a browser tab, before you have silicon.
+
+**Factory reset, built in.** The full-distro boards run on a per-session **qcow2
+overlay over a read-only golden `.wic`** — so every session is isolated and
+disposable, and **Reinstall** (Phase 4 / the power menu) throws the overlay away
+and re-clones the golden. One click = a pristine, just-flashed board. A physical
+farm needs a re-image pipeline and minutes of downtime to do that; here it's
+instant and per-user.
+
+Golden images are built with `tools/make-golden-disk.sh` and live at
+`assets/<profile-id>/disk.wic`. Want this fully self-contained? `docker/build.sh
+imx95-evk-sd` bakes the forked QEMU + M33 firmware + the distro image into one
+runnable container (see below).
 
 ## Multi-user / auth
 
@@ -145,17 +171,22 @@ The fat image bakes in the board's QEMU build + boot artifacts, so a user just
 runs it and opens a browser — no setup, no host QEMU:
 
 ```bash
-docker/build.sh imx91-evk            # bakes the imx91 qemu + assets -> holobench:imx91-evk
+docker/build.sh imx91-evk            # busybox image  -> holobench:imx91-evk  (~1.7 GB)
 docker run --rm -p 8080:8080 holobench:imx91-evk
 # open http://localhost:8080 → Reserve & Boot
+
+docker/build.sh imx95-evk-sd         # full i.MX95 BSP distro -> holobench:imx95-sd (~15 GB)
+IMAGE=holobench:imx95-sd docker/build.sh imx95-evk-sd   # (IMAGE= overrides the tag)
 ```
 
 `docker/build.sh <qemu-board> [asset-boards…]` stages a clean build context: the
-Holobench app, the chosen board's forked `qemu-system-aarch64`, and the real boot
-artifacts (`Image`/`dtb`/`initrd.cpio.gz`/`disk.img`). The image uses TCG (no
-`/dev/kvm` needed). Add `-e HOLOBENCH_TOKEN=…` to require auth. `docker/compose.yaml`
-runs a pre-built image. Path overrides: `HOLOBENCH_QEMU` (binary) and
-`HOLOBENCH_ASSET_ROOT` (assets) — set automatically inside the image.
+Holobench app, the chosen board's forked `qemu-system-aarch64`, the real boot
+artifacts (`Image`/`dtb`/`initrd.cpio.gz`/`disk.wic`), and any loader firmware
+the profile references (e.g. the i.MX95 M33 System Manager elf). The image uses
+TCG (no `/dev/kvm` needed). Add `-e HOLOBENCH_TOKEN=…` to require auth.
+`docker/compose.yaml` runs a pre-built image. Path overrides: `HOLOBENCH_QEMU`
+(binary) and `HOLOBENCH_ASSET_ROOT` (assets) — set automatically inside the image.
+Full-distro images are large (the `.wic` dominates); a busybox image is ~1.7 GB.
 
 > The fat image embeds the emulator session's *forked* QEMU (the i.MX models
 > aren't upstreamed yet) — fine for local use/demos; revisit publishing once the
@@ -168,25 +199,49 @@ runs a pre-built image. Path overrides: `HOLOBENCH_QEMU` (binary) and
 holobench/
   README.md  CLAUDE.md  ROADMAP.md
   docs/        ARCHITECTURE.md  BOARD_PROFILES.md
-  profiles/    imx91-evk.yaml  imx93-evk.yaml  imx95-evk.yaml  virt-smoke.yaml
+  profiles/    imx9{1,3,5}-evk.yaml (busybox initramfs)
+               imx9{1,3,5}-evk-sd.yaml (full BSP distro, disk boot)  virt-smoke.yaml
   backend/     pyproject.toml
     holobench/ profiles/ (models+loader)  session/ (command+manager+control)
                bridges/ (console tap)  api/ (FastAPI app)  cli.py
     tests/     pytest (profile + command-resolver unit tests)
   frontend/    index.html (React+htm+Tailwind+xterm.js)  vendor/ (offline deps)
-  tools/       make-initramfs.sh  init-shell  init-busybox
+  tools/       make-initramfs.sh  make-golden-disk.sh  init-shell  init-busybox
   assets/      <profile-id>/ boot artifacts (gitignored)
 ```
 
 ## Related repos (the boards Holobench drives)
 
-- `kylefoxaustin/qemu-imx95`  (branch `imx95-netc`)
-- `kylefoxaustin/qemu-imx93`  (branch `imx93-dev`)
-- `kylefoxaustin/qemu-imx91`
+Holobench needs a QEMU that registers these machines. The i.MX 9x models aren't
+in upstream QEMU **yet** (they're being upstreamed), so today you build the
+companion forks and point each profile's `qemu.binary` at the result:
+
+| Repo | Branch | `-M` machine type |
+|---|---|---|
+| `kylefoxaustin/qemu-imx95` | `imx95-netc` | `imx95-19x19-evk` |
+| `kylefoxaustin/qemu-imx93` | `imx93-dev`  | `imx93-11x11-evk` |
+| `kylefoxaustin/qemu-imx91` | —            | `imx91-11x11-evk` |
 
 These are the source of truth for each board's machine type, serial topology,
 display device, and boot flow. Holobench consumes them via profiles. It never
-modifies them.
+modifies them. Want to see exactly what a profile resolves to before you boot?
+`holobench command imx95-evk-sd` prints the full stock-QEMU command line.
+
+### Board notes / gotchas (what an i.MX person will want to know)
+
+These live in the profiles, not in code — but they're the non-obvious bits that
+make these SoCs boot under emulation:
+
+- **i.MX 95** — the **M33 System Manager is load-bearing**: it's loaded as a
+  second CPU image (`-device loader,file=…m33_image.elf,cpu-num=6`) and serves
+  SCMI; without it the A-core Linux won't come up. Boots with `cpuidle.off=1`.
+  The full-distro variant roots from **eMMC** (`-device emmc` → `mmcblk0`), not SD.
+- **i.MX 93** — fixed **2×A55 + 1×M33** topology, so it always launches with
+  `-smp 3`. Full-distro variant roots from **SD** (`-drive if=sd` → `mmcblk0`).
+- **i.MX 91** — single A55; roots from **SD**. Two user NICs.
+
+All three use direct-kernel boot (`-kernel`/`-dtb`), TCG (no KVM), and a
+standard `-serial` chardev for the A-core console.
 
 ## License
 
