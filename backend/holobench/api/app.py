@@ -43,6 +43,11 @@ _FRONTEND_DIR = Path(__file__).resolve().parents[3] / "frontend"
 # Quota/scheduler limits (0 = unlimited). Per-user concurrent sessions + global.
 _MAX_SESSIONS_PER_USER = int(os.environ.get("HOLOBENCH_MAX_PER_USER", "0"))
 _MAX_SESSIONS_TOTAL = int(os.environ.get("HOLOBENCH_MAX_SESSIONS", "0"))
+# A client-supplied asset path would flow straight into the QEMU argv
+# (-kernel/-dtb/-drive) -> arbitrary host-file read. Ignore it over the API by
+# default; the server resolves assets from the trusted profile id. Only honor a
+# request `assets` path if an operator explicitly opts in (trusted/CLI use).
+_ALLOW_CLIENT_ASSETS = os.environ.get("HOLOBENCH_ALLOW_CLIENT_ASSETS") == "1"
 
 # Paths under /api that don't require authentication.
 _OPEN_PATHS = {"/api/login"}
@@ -256,7 +261,13 @@ async def launch_session(req: LaunchRequest, request: Request) -> dict:
         profile = load_profile(req.profile_id)
     except ProfileError as exc:
         raise HTTPException(status_code=404, detail=str(exc))
-    asset_dir = Path(req.assets) if req.assets else default_asset_dir(profile.id)
+    # Security: never let a client point QEMU at an arbitrary host path. The
+    # asset dir is resolved from the (validated) profile id unless an operator
+    # explicitly opted into trusting client asset paths.
+    if req.assets and _ALLOW_CLIENT_ASSETS:
+        asset_dir = Path(req.assets)
+    else:
+        asset_dir = default_asset_dir(profile.id)
     owner = user.username if request.app.state.auth.enabled else None
     try:
         session = await mgr.launch(profile, asset_dir=asset_dir, owner=owner)

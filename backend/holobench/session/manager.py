@@ -35,6 +35,38 @@ from .command import SessionRuntime, build_command, command_str
 DEFAULT_BASE_DIR = Path(tempfile.gettempdir()) / "holobench"
 
 
+def _qemu_preexec() -> None:  # pragma: no cover - runs in the forked child
+    """Resource limits applied to each QEMU child (after fork, before exec).
+
+    Safe-by-default: RLIMIT_CORE=0 always (a crashed multi-GB-RAM QEMU would
+    otherwise dump a multi-GB core — disk-fill DoS + guest-memory info-leak).
+    Deployment knobs (opt-in, so dev boots are never broken): HOLOBENCH_NICE
+    deprioritizes the board so one session can't peg an interactive host;
+    HOLOBENCH_MEM_CAP_MB sets a hard RLIMIT_AS ceiling. For real CPU/memory
+    isolation on a shared host, prefer cgroups (see docs/DEPLOY.md).
+    """
+    import os
+    import resource
+
+    try:
+        resource.setrlimit(resource.RLIMIT_CORE, (0, 0))
+    except Exception:
+        pass
+    try:
+        nice = int(os.environ.get("HOLOBENCH_NICE", "0") or 0)
+        if nice:
+            os.nice(nice)
+    except Exception:
+        pass
+    try:
+        cap_mb = os.environ.get("HOLOBENCH_MEM_CAP_MB")
+        if cap_mb:
+            b = int(cap_mb) * 1024 * 1024
+            resource.setrlimit(resource.RLIMIT_AS, (b, b))
+    except Exception:
+        pass
+
+
 def _capture_helper_path(name: str) -> Optional[Path]:
     """Locate a vendored static capture helper by filename.
 
@@ -196,7 +228,8 @@ class Session:
         log = self._log_path.open("wb")
         try:
             self._proc = await asyncio.create_subprocess_exec(
-                *self.argv, stdout=log, stderr=asyncio.subprocess.STDOUT
+                *self.argv, stdout=log, stderr=asyncio.subprocess.STDOUT,
+                preexec_fn=_qemu_preexec,
             )
         except FileNotFoundError as exc:
             self.state = SessionState.FAILED
