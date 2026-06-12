@@ -163,6 +163,7 @@ def test_virtual_camera_global_and_dtb_override(tmp_path):
     )
     p = load_profile_file(f)
     assert p.camera.frame_bytes == 640 * 480 * 6
+    # ARMED: rt.camera_frames_dir set (manager sets it only when frames are staged).
     frames = tmp_path / "frames"
     rt = SessionRuntime(
         work_dir=tmp_path,
@@ -179,6 +180,18 @@ def test_virtual_camera_global_and_dtb_override(tmp_path):
     # sensor scaffolding device emitted verbatim.
     assert "ov5640,bus=lpi2c1,address=0x3c" in argv
     assert argv[argv.index("-device") + 1] == "ov5640,bus=lpi2c1,address=0x3c"
+
+    # DISARMED: no staged frames -> rt.camera_frames_dir is None -> the camera
+    # apparatus is fully omitted (empty frames dir is a FATAL error in the ISI),
+    # and the board boots its plain dtb. This is the regression that bricked boot.
+    rt_off = SessionRuntime(
+        work_dir=tmp_path, qmp_socket=tmp_path / "qmp.sock",
+        asset_dir=Path("/assets"), camera_frames_dir=None,
+    )
+    argv_off = build_command(p, rt_off)
+    assert not any(a.startswith("driver=imx95.isi") for a in argv_off)
+    assert "ov5640,bus=lpi2c1,address=0x3c" not in argv_off
+    assert argv_off[argv_off.index("-dtb") + 1] == "/assets/plain.dtb"
 
 
 def test_no_camera_global_when_disabled(tmp_path):

@@ -86,9 +86,12 @@ def _boot_args(profile: Profile, rt: SessionRuntime) -> list[str]:
     flash = _resolve_artifact(art.flash_bin, rt.asset_dir)
     kernel = _resolve_artifact(art.kernel, rt.asset_dir)
     # A camera profile may need a sensor/CSI-enabled dtb to surface the V4L2
-    # capture node in the guest; that override wins over the board's default dtb.
+    # capture node in the guest; that override wins over the board's default dtb —
+    # but ONLY when the camera is "armed" (frames are staged: rt.camera_frames_dir
+    # set). With no staged frames we boot the plain board (the ISI model fatally
+    # errors on an empty frames dir, and an unused camera shouldn't alter boot).
     cam = profile.camera
-    dtb_name = cam.dtb if (cam.enabled and cam.dtb) else art.dtb
+    dtb_name = cam.dtb if (cam.enabled and cam.dtb and rt.camera_frames_dir is not None) else art.dtb
     dtb = _resolve_artifact(dtb_name, rt.asset_dir)
     initrd = _resolve_artifact(art.initrd, rt.asset_dir)
     rootfs = _resolve_artifact(art.rootfs, rt.asset_dir)
@@ -213,9 +216,10 @@ def build_command(profile: Profile, rt: SessionRuntime) -> list[str]:
         ]
 
     # Virtual camera: feed the per-session frames dir to the board's ISI via the
-    # standard host-frame-source property. Always emitted when enabled (an empty
-    # dir / size-mismatched frame just makes the model scan its gradient test
-    # pattern), so a board boots fine before any frame is staged.
+    # standard host-frame-source property. Only when ARMED — rt.camera_frames_dir
+    # is set by the session manager solely when *.raw frames are staged (the ISI
+    # model fatally errors on an empty frames dir). Disarmed -> none of this is
+    # emitted and the board boots normally; stage frames + reboot to arm.
     cam = profile.camera
     if cam.enabled and cam.isi_type and rt.camera_frames_dir is not None:
         argv += [

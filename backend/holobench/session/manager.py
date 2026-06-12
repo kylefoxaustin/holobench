@@ -146,7 +146,18 @@ class Session:
         if self.share_dir is not None:
             self.share_dir.mkdir(parents=True, exist_ok=True)
         if self.camera_frames_dir is not None:
+            # Keep the upload target dir present, but ARM the ISI host-frame-source
+            # only when frames are actually staged: the ISI model fatally errors on
+            # an empty frames dir, and an unused camera must not break a normal boot.
+            # No frames -> rt.camera_frames_dir = None -> build_command boots the
+            # plain board (no camera dtb/-device/-global). Stage frames + reboot to
+            # arm it (frames are launch-only anyway).
             self.camera_frames_dir.mkdir(parents=True, exist_ok=True)
+            self.runtime.camera_frames_dir = (
+                self.camera_frames_dir
+                if any(self.camera_frames_dir.glob("*.raw"))
+                else None
+            )
         if self.runtime.snapshot_disk is not None:
             await self._create_snapshot_disk(self.runtime.snapshot_disk)
         if self.runtime.disk_overlay is not None:
