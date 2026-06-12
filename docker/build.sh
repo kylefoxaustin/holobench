@@ -51,6 +51,18 @@ for b in "${ASSET_BOARDS[@]}"; do
   echo "  baked assets: $b ($(ls "$STAGE/assets/$b" | tr '\n' ' '))"
 done
 
+# Bake any loader firmware referenced in the QEMU_BOARD profile's extra_args
+# (e.g. the i.MX95 M33 System Manager elf, a host-absolute path) and rewrite the
+# staged profile to point at the in-container copy.
+loader_file="$(grep -oE 'loader,file=[^",]+' "profiles/$QEMU_BOARD.yaml" | head -1 | sed 's/loader,file=//')"
+if [ -n "$loader_file" ] && [ -f "$loader_file" ]; then
+  mkdir -p "$STAGE/extra"
+  cp -L "$loader_file" "$STAGE/extra/$(basename "$loader_file")"
+  sed -i "s|$loader_file|/opt/holobench/extra/$(basename "$loader_file")|" \
+    "$STAGE/profiles/$QEMU_BOARD.yaml"
+  echo "  baked loader firmware: $(basename "$loader_file")"
+fi
+
 echo "building $IMAGE (board qemu: $QEMU_BOARD; boards: ${ASSET_BOARDS[*]}) ..."
 docker build -t "$IMAGE" "$STAGE"
 echo

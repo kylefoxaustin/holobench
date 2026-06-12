@@ -1,0 +1,59 @@
+# Holobench board profile — i.MX 93 EVK, BOOT FROM SD (full BSP distro).
+#
+# Full-Linux counterpart to imx93-evk (busybox initramfs). Boots the NXP
+# imx-image-core rootfs off the BSP .wic — full systemd userspace. The wic is the
+# image-swap GOLDEN, so each session runs on a copy-on-write overlay and Reinstall
+# = factory reset. Same recipe as imx91-evk-sd (SD card -> /dev/mmcblk0), plus the
+# 93's fixed 2xA55+1xM33 topology (-smp 3).
+#
+# Assets (assets/imx93-evk-sd/): Image + imx93-11x11-evk.dtb (symlinks into the
+# BSP deploy) and disk.wic (decompressed imx-image-core .wic; p2 = ext4 root).
+
+id:           imx93-evk-sd
+display_name: "i.MX 93 EVK (SD boot, full distro)"
+soc:          "i.MX 93"
+description:  "2x Cortex-A55 + M33, full BSP distro from SD. Reinstall = factory reset."
+
+qemu:
+  binary:  /home/kyle/Documents/GitHub/93emulator/build-imx93/qemu-system-aarch64
+  machine: imx93-11x11-evk
+  memory:  "4G"
+  smp:     3                        # fixed topology: 2x A55 + 1x M33 (model requires 3)
+  audio:   none
+  extra_args: ["-serial", "null"]
+
+boot:
+  mode: direct-kernel
+  artifacts:
+    flash_bin: null
+    kernel:    Image
+    dtb:       imx93-11x11-evk.dtb
+    initrd:    null                 # no initramfs — root comes from the SD wic
+    rootfs:    null
+    disk:      disk.wic             # golden imx-image-core SD image (overlay-backed)
+  append: "console=ttyLP0,115200 cpuidle.off=1 root=/dev/mmcblk0p2 rootwait rw"
+  command_template: null
+
+serial:
+  - { name: "A-core console", chardev: console0, role: a-core, default: true }
+
+display: { enabled: true, device: "lcdif", vnc: false }
+
+net: { user_nics: 1 }
+
+file_injection:
+  nine_p: { enabled: true, mount_tag: holobench, device: virtio-9p-device }
+  tftp:   { enabled: true }
+  nfs:    { enabled: false }
+  image_swap: { enabled: true, target_drive: sd }   # 93 roots from an SD card (mmcblk0)
+
+power: { warm_reset: true, cold_cycle: true, pause: true, reinstall: true }
+
+introspection:
+  qmp_events: true
+  memory_map: true
+  device_tree: true
+  gdbstub: { enabled: true }
+  snapshots: true
+
+reservation: { default_minutes: 60, max_minutes: 240 }
