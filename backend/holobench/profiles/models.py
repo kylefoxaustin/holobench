@@ -165,6 +165,12 @@ class CameraSpec(_Strict):
     # /mnt. Filename under vendor/camera/bin/, e.g. "imx95-isi-capture". A
     # standalone tool shipped alongside Holobench (not linked) — license unaffected.
     capture_binary: Optional[str] = None
+    # Guest kernel modules (sensor drivers) the rootfs doesn't ship, staged into
+    # the 9p share so the guest `insmod /mnt/<name>` to bind the sensor (without
+    # it the media graph never forms / no /dev/media0). Asset-relative .ko names,
+    # resolved like the dtb; MUST match the booted Image's vermagic (so symlink
+    # them from the same kernel tree that builds the Image).
+    guest_modules: list[str] = Field(default_factory=list)
 
     @property
     def frame_bytes(self) -> Optional[int]:

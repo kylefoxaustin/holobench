@@ -94,7 +94,8 @@ camera:
   pixel_format: "YUYV"                     # informational; trust guest G_FMT/stride
   runtime_settable: false                  # LAUNCH-ONLY: stage frames, then (re)boot
   capture_binary: imx95-isi-capture        # GPL-2.0 static helper, staged into /mnt
-  capture_hint: "Stage 640x480 frames (1843200 B), reboot, then in the console run: /mnt/imx95-isi-capture cap /dev/video0  (media-ctl can't drive the 8-ch crossbar — this helper does the per-stream link setup + DQBUF; writes captured frames to ./frame*.raw)"
+  guest_modules: [ov5640.ko]               # rootfs lacks the sensor driver; insmod from /mnt
+  capture_hint: "Stage 640x480 frames (1843200 B), reboot, then in the console: insmod /mnt/ov5640.ko && /mnt/imx95-isi-capture cap /dev/video0  (media-ctl can't drive the 8-ch crossbar — the helper does the per-stream link setup + DQBUF; captured frames land in ./frame*.raw). Validated byte-exact."
 
 power: { warm_reset: true, cold_cycle: true, pause: true, reinstall: true }
 

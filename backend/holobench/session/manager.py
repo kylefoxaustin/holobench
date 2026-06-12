@@ -217,19 +217,33 @@ class Session:
         self.state = SessionState.RUNNING
 
     def _stage_capture_helper(self) -> None:
-        """Copy the board's static V4L2 capture helper into the 9p share (->/mnt)."""
+        """Stage the V4L2 capture helper + any sensor .ko into the 9p share (->/mnt)."""
         cam = self.profile.camera
-        if not (cam.enabled and cam.capture_binary and self.share_dir is not None):
+        if not (cam.enabled and self.share_dir is not None):
             return
-        src = _capture_helper_path(cam.capture_binary)
-        if src is None:
-            return  # binary not built/available -> degrade (panel hint still shown)
-        try:
-            dest = self.share_dir / cam.capture_binary
-            shutil.copy2(src, dest)
-            dest.chmod(0o755)
-        except OSError:
-            pass
+        # The static capture helper (vendored, GPL-2.0).
+        if cam.capture_binary:
+            src = _capture_helper_path(cam.capture_binary)
+            if src is not None:
+                try:
+                    dest = self.share_dir / cam.capture_binary
+                    shutil.copy2(src, dest)
+                    dest.chmod(0o755)
+                except OSError:
+                    pass
+        # Sensor kernel modules the rootfs lacks (resolved from the asset dir,
+        # like the dtb); the guest insmods /mnt/<name> to bind the sensor.
+        for mod in cam.guest_modules:
+            src = (
+                Path(mod)
+                if Path(mod).is_absolute() or self.asset_dir is None
+                else self.asset_dir / mod
+            )
+            try:
+                if src.is_file():
+                    shutil.copy2(src, self.share_dir / Path(mod).name)
+            except OSError:
+                pass
 
     def _start_event_capture(self) -> None:
         if self._qmp is None:
