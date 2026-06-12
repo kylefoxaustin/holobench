@@ -17,4 +17,8 @@ echo "=== HOLOBENCH: i.MX userspace reached ==="
 echo "=== launching interactive shell on console ==="
 echo
 
+# Quiet recurring kernel console spam (e.g. the i.MX95 ELE FW-version retry) so
+# the interactive shell stays usable. Full log is still in `dmesg`.
+dmesg -n 3 2>/dev/null || echo 3 > /proc/sys/kernel/printk 2>/dev/null
+
 exec /bin/busybox sh

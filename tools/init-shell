@@ -22,4 +22,8 @@ uname -srm 2>/dev/null
 echo "=== launching interactive shell on console ==="
 echo
 
+# Quiet recurring kernel console spam so the interactive shell stays usable;
+# full log is still in `dmesg`.
+dmesg -n 3 2>/dev/null || echo 3 > /proc/sys/kernel/printk 2>/dev/null
+
 exec /bin/sh
