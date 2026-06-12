@@ -51,6 +51,9 @@ for b in "${ASSET_BOARDS[@]}"; do
   mkdir -p "$STAGE/assets/$b"
   cp -L "$src"/Image "$STAGE/assets/$b/"
   cp -L "$src"/*.dtb "$STAGE/assets/$b/"
+  # Virtual-camera sensor modules the guest insmods from /mnt (camera.guest_modules);
+  # resolved from the asset dir at runtime, so they must be baked alongside.
+  cp -L "$src"/*.ko "$STAGE/assets/$b/" 2>/dev/null || true
   # Optional artifacts — boards vary: initramfs boot vs SD/disk boot vs data disk.
   for opt in initrd.cpio.gz disk.img disk.wic; do
     [ -f "$src/$opt" ] && cp -L "$src/$opt" "$STAGE/assets/$b/"
