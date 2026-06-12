@@ -51,22 +51,24 @@ file_injection:
   image_swap: { enabled: true, target_drive: sd }   # 93 roots from an SD card (mmcblk0)
 
 # Virtual camera — feed host frames through the ISI -> guest /dev/video0.
-# Shared imx93.isi model. 93emulator's "safe bet": frdm-ov5640 dtb @ 640x480x6
-# (=1843200 B, validated byte-exact). ov5640 is a kernel MODULE here -> the guest
-# must `modprobe ov5640` before capture. Capture needs the bundled GPL-2.0 helper
-# (imx-image-core ships no media-ctl/v4l2-ctl/v4l2src). Armed only when frames are
-# staged (empty frames dir is fatal); stage + reboot.
+# Shared imx93.isi model. Uses the mt9m114 sensor: it's BUILT-IN in the 93 kernel
+# (CONFIG_VIDEO_MT9M114X=y), so it binds at boot -> /dev/media0 appears with no
+# module/insmod (turnkey, same as the 91). Geometry 1280x720x3 (same sensor model
+# as the 91). Capture needs the bundled GPL-2.0 helper (imx-image-core ships no
+# media-ctl/v4l2-ctl/v4l2src). Armed only when frames are staged; stage + reboot.
+# (An ov5640 path exists too — imx93-11x11-frdm-ov5640.dtb @ 640x480x6 — but ov5640
+# is a module not in the core rootfs, so mt9m114-builtin is the turnkey choice.)
 camera:
   enabled: true
   isi_type: "imx93.isi"
-  dtb: imx93-11x11-frdm-ov5640.dtb         # ov5640 sensor wired to CSI->ISI (deploy artifact)
-  width: 640
-  height: 480
-  bytes_per_pixel: 6                       # validated byte-exact
-  pixel_format: "YUYV"                     # informational; trust guest G_FMT/stride
+  dtb: imx93-11x11-evk-mt9m114.dtb         # mt9m114 sensor (built-in driver) wired to CSI->ISI
+  width: 1280
+  height: 720
+  bytes_per_pixel: 3                       # 1280x720x3 = 2764800 (same sensor as 91)
+  pixel_format: "RGB24"                    # informational; trust guest G_FMT/stride
   runtime_settable: false                  # LAUNCH-ONLY: stage frames, then (re)boot
   capture_binary: imx93-isi-capture        # GPL-2.0 static helper, staged into /mnt
-  capture_hint: "Stage 640x480 frames (1843200 B), reboot, then in the console: modprobe ov5640 && /mnt/imx93-isi-capture cap /dev/video0  (the helper sets up the media links + DQBUFs to ./frame*.raw)"
+  capture_hint: "Stage 1280x720 frames (2764800 B), reboot, then in the console: /mnt/imx93-isi-capture cap /dev/video0  (mt9m114 is built-in; the helper sets up the media links + DQBUFs to ./frame*.raw)"
 
 power: { warm_reset: true, cold_cycle: true, pause: true, reinstall: true }
 

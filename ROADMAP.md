@@ -166,12 +166,31 @@ Tasks (all read-only, all stock interfaces)
 - An external gdb attaches to the advertised stub port.
 - A user can snapshot a boot state and jump back to it.
 
-### Virtual camera (feed host images through the ISI) — *feed DONE; in-guest capture tool = a Kyle decision*
+### Virtual camera (feed host images through the ISI) — ✅ DONE (all three, byte-exact)
 
-**Status 2026-06-12:** plumbing complete + tested; **95 enabled** (`1474277`) and
-the frame FEED is validated **byte-exact** by 95emulator (5/5 staged frames
-DQBUF'd through the ISI). The remaining gap is the **in-guest capture client**,
-and it turned out to be a real BSP/driver matter, not a Holobench one:
+**Shipped 2026-06-12.** All three boards capture staged host frames **byte-exact,
+end-to-end**, turnkey through the Camera panel:
+
+| Board | Sensor | Geometry | In-guest path | Verified |
+|---|---|---|---|---|
+| imx95-evk-sd | ov5640 (module) | 640×480×6 | `insmod /mnt/ov5640.ko && /mnt/imx95-isi-capture cap /dev/video0` | PASS 5/5 |
+| imx91-evk-sd | mt9m114 (built-in) | 1280×720×3 | `/mnt/imx91-isi-capture cap /dev/video0` | PASS 5/5 |
+| imx93-evk-sd | mt9m114 (built-in) | 1280×720×3 | `/mnt/imx93-isi-capture cap /dev/video0` | PASS 5/5 |
+
+Holobench stages the GPL-2.0 static capture helper (and, for the 95, the matching
+`ov5640.ko`) into the session 9p share → the guest runs it from `/mnt`. The 95
+needs the module because its only modeled sensor (ov5640) is `=m` and absent from
+the golden rootfs; 91/93 use the built-in mt9m114. Camera "arms" only when frames
+are staged (empty frames dir is fatal in the ISI model), so a fresh board boots
+normally; stage frames + reboot to arm. The whole capture path is bundled — no
+media-ctl/v4l2-ctl needed (the core rootfs ships neither, and media-ctl can't even
+drive the 95 crossbar).
+
+#### How it got here (the investigation)
+
+**95 enabled** (`1474277`); the frame FEED was validated **byte-exact** by
+95emulator (5/5 staged frames DQBUF'd through the ISI). The in-guest capture
+client turned out to be a real BSP/driver matter, not a Holobench one:
 
 - **95 (8-ch crossbar ISI): `media-ctl` cannot drive it.** 95 ran the full
   `-l/-V` sequence on the golden full image — the formats apply but `STREAMON`
