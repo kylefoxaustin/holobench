@@ -1,3 +1,4 @@
+# SPDX-License-Identifier: Apache-2.0
 """AuthService: the single object the API talks to for auth.
 
 Holds the user store + signing secret. When the store is unconfigured (no users)

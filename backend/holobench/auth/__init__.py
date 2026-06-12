@@ -1,3 +1,4 @@
+# SPDX-License-Identifier: Apache-2.0
 from .crypto import hash_password, issue_token, verify_password, verify_token
 from .service import OPEN_MODE_USER, AuthService
 from .store import User, UserStore, default_users_path

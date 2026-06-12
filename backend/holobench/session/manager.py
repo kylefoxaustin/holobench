@@ -1,3 +1,4 @@
+# SPDX-License-Identifier: Apache-2.0
 """Session lifecycle: launch a QEMU process from a profile and drive it via QMP.
 
 A *session* is one reserved virtual board: one QEMU subprocess plus the

@@ -1,3 +1,4 @@
+# SPDX-License-Identifier: Apache-2.0
 """Holobench CLI.
 
 Phase 0 surface: list/show profiles, preview the resolved QEMU command line,

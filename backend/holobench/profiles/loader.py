@@ -1,3 +1,4 @@
+# SPDX-License-Identifier: Apache-2.0
 """Load and validate board profiles from YAML.
 
 Profiles live in the repo's top-level ``profiles/`` directory. The loader

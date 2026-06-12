@@ -1,3 +1,4 @@
+# SPDX-License-Identifier: Apache-2.0
 from .loader import (
     DEFAULT_PROFILE_DIR,
     ProfileError,

@@ -1,4 +1,5 @@
 #!/bin/sh
+# SPDX-License-Identifier: Apache-2.0
 # Minimal Holobench initramfs /init: bring up the basics and drop to a shell on
 # the console. Used to prove a board boots to a usable Linux prompt. Not a soak
 # battery — just an interactive shell.

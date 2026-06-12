@@ -1,4 +1,5 @@
 #!/bin/busybox sh
+# SPDX-License-Identifier: Apache-2.0
 # Holobench initramfs /init for a BARE busybox initramfs (only /bin/busybox, no
 # /bin/sh yet — so the shebang must invoke busybox directly). Installs the applet
 # symlinks, brings up the basics, and drops to an interactive shell on console.

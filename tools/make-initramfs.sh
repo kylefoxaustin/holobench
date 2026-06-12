@@ -1,4 +1,5 @@
 #!/bin/bash
+# SPDX-License-Identifier: Apache-2.0
 # Holobench asset-prep: build an initramfs cpio.gz from a BSP rootfs tarball,
 # injecting a Holobench /init. Host-side asset prep only — reads the rootfs
 # read-only, writes nothing into the source tree. Mirrors the proven recipe the

@@ -1,4 +1,5 @@
 #!/bin/bash
+# SPDX-License-Identifier: Apache-2.0
 # Build a fat, self-contained Holobench "virtual EVK" image.
 #
 # Usage:

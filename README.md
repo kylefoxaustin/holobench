@@ -253,4 +253,10 @@ standard `-serial` chardev for the A-core console.
 
 ## License
 
-TBD (MIT or Apache-2.0 recommended — keeps it reusable and contribution-friendly).
+[Apache-2.0](LICENSE). Copyright © 2026 Kyle Austin. Permissive with an explicit
+patent grant — reusable, contribution-friendly, and a good fit next to upstream
+QEMU/NXP. Source files carry an `SPDX-License-Identifier: Apache-2.0` header.
+
+> The companion emulator repos (`qemu-imx91/93/95`) are separate works under
+> their own (QEMU) license; Holobench only *drives* them through standard
+> interfaces and ships none of their code.

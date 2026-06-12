@@ -1,3 +1,4 @@
+# SPDX-License-Identifier: Apache-2.0
 """Daemon-less control of an already-running session via its QMP socket.
 
 Phase 0 has no long-lived backend daemon, but `holobench launch --keep` leaves a

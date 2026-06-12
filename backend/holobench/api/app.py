@@ -1,3 +1,4 @@
+# SPDX-License-Identifier: Apache-2.0
 """Holobench backend daemon — FastAPI app.
 
 This is the long-lived process that owns the fleet (a SessionManager), exposes a

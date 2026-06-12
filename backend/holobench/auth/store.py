@@ -1,3 +1,4 @@
+# SPDX-License-Identifier: Apache-2.0
 """User store backed by a YAML file.
 
 Format (holobench-users.yaml):
