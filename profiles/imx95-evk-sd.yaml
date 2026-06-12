@@ -1,0 +1,66 @@
+# Holobench board profile — i.MX 95 EVK, BOOT FROM SD (full imx-image-full distro).
+#
+# The full-Linux counterpart to imx95-evk (which boots a minimal busybox initramfs).
+# Boots the NXP imx-image-full root filesystem off the BSP .wic — full systemd
+# userspace, all services, and the eIQ Neutron / Wave VPU / media tooling. The
+# wic is the image-swap GOLDEN, so each session runs on a copy-on-write overlay
+# and Reinstall = factory reset.
+#
+# Artifacts (assets/imx95-evk-sd/): Image + imx95-19x19-evk.dtb (symlinks into
+# the linux-imx95 KBUILD; kernel 6.12.49-gdf24f9428e38, matches the wic modules)
+# and disk.wic (the decompressed imx-image-full .wic, ~12 GiB; p2 = ext4 root).
+# The wic comes from the 95 emulator's full-image soak build (build-imx95-drone-sizer).
+
+id:           imx95-evk-sd
+display_name: "i.MX 95 EVK (SD boot, full distro)"
+soc:          "i.MX 95"
+description:  "6x Cortex-A55 + M33 SM, full imx-image-full distro from SD. Reinstall = factory reset."
+
+qemu:
+  binary:  /home/kyle/Documents/GitHub/95emulator/build/qemu-system-aarch64
+  machine: imx95-19x19-evk
+  memory:  "4G"
+  audio:   none
+  # LOAD-BEARING M33 System Manager firmware (serves SCMI; A55 won't boot without
+  # it) + null-padded 2nd LPUART.
+  extra_args:
+    - "-device"
+    - "loader,file=/home/kyle/Documents/nxp/sources/imx-sm/build/mx95evk/m33_image.elf,cpu-num=6"
+    - "-serial"
+    - "null"
+
+boot:
+  mode: direct-kernel
+  artifacts:
+    flash_bin: null
+    kernel:    Image
+    dtb:       imx95-19x19-evk.dtb
+    initrd:    null                 # no initramfs — root comes from the SD wic
+    rootfs:    null
+    disk:      disk.wic             # golden imx-image-full SD image (overlay-backed)
+  append: "console=ttyLP0,115200 cpuidle.off=1 root=/dev/mmcblk0p2 rootwait rw"
+  command_template: null
+
+serial:
+  - { name: "A-core console", chardev: console0, role: a-core, default: true }
+
+display: { enabled: true, device: "dpu", vnc: false }
+
+net: { user_nics: 1 }
+
+file_injection:
+  nine_p: { enabled: true, mount_tag: holobench, device: virtio-9p-device }
+  tftp:   { enabled: true }
+  nfs:    { enabled: false }
+  image_swap: { enabled: true, target_drive: emmc } # 95 roots from eMMC (mmcblk0), not SD
+
+power: { warm_reset: true, cold_cycle: true, pause: true, reinstall: true }
+
+introspection:
+  qmp_events: true
+  memory_map: true
+  device_tree: true
+  gdbstub: { enabled: true }
+  snapshots: true
+
+reservation: { default_minutes: 60, max_minutes: 240 }

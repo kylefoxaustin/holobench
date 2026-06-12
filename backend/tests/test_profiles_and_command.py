@@ -121,6 +121,30 @@ def test_imx95_carries_loadbearing_m33_loader(tmp_path):
     assert loader and "cpu-num=6" in loader[0] and "m33_image.elf" in loader[0]
 
 
+def test_image_swap_drive_attachment(tmp_path):
+    # target_drive picks the attachment: 95 = eMMC, 91-sd = SD card.
+    overlay = tmp_path / "disk-overlay.qcow2"
+
+    def argv_for(pid):
+        p = load_profile(pid)
+        rt = SessionRuntime(
+            work_dir=tmp_path,
+            qmp_socket=tmp_path / "qmp.sock",
+            serial_sockets={s.chardev: tmp_path / f"{s.chardev}.sock" for s in p.serial},
+            asset_dir=Path("/assets"),
+            disk_overlay=overlay,
+        )
+        return build_command(p, rt)
+
+    emmc = argv_for("imx95-evk-sd")
+    assert "emmc,drive=hbdisk" in emmc
+    assert any(a.startswith("if=none,id=hbdisk") for a in emmc)
+
+    sd = argv_for("imx91-evk-sd")
+    assert any(a.startswith("if=sd,") and "disk-overlay" in a for a in sd)
+    assert "emmc,drive=hbdisk" not in sd
+
+
 def test_flash_mode_uses_bios(tmp_path):
     f = tmp_path / "fl.yaml"
     f.write_text(

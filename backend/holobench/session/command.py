@@ -174,11 +174,21 @@ def build_command(profile: Profile, rt: SessionRuntime) -> list[str]:
             opts += f",tftp={rt.share_dir}"
         argv += ["-nic", opts]
 
-    # Image-swap: per-session qcow2 overlay over the golden disk, as an SD card
-    # (uSDHC -> /dev/mmcblk0). Guest writes hit the overlay; the golden is never
-    # touched, and "reinstall" relaunches with a fresh overlay (restore).
-    if profile.file_injection.image_swap.enabled and rt.disk_overlay is not None:
-        argv += ["-drive", f"if=sd,file={rt.disk_overlay},format=qcow2"]
+    # Image-swap: per-session qcow2 overlay over the golden disk. Guest writes hit
+    # the overlay; the golden is never touched; "reinstall" = fresh overlay.
+    # Attachment depends on the board's rootfs medium (image_swap.target_drive):
+    #   "sd"   -> -drive if=sd            (uSDHC SD card; 91/93)
+    #   "emmc" -> -drive if=none + -device emmc  (non-removable eMMC; 95)
+    # Either way the guest sees /dev/mmcblk0 (eMMC) or the SD's mmcblkN.
+    img = profile.file_injection.image_swap
+    if img.enabled and rt.disk_overlay is not None:
+        if (img.target_drive or "sd") == "emmc":
+            argv += [
+                "-drive", f"if=none,id=hbdisk,file={rt.disk_overlay},format=qcow2",
+                "-device", "emmc,drive=hbdisk",
+            ]
+        else:
+            argv += ["-drive", f"if=sd,file={rt.disk_overlay},format=qcow2"]
 
     # File injection: virtio-9p live share (host dir -> guest mount_tag).
     nine_p = profile.file_injection.nine_p
