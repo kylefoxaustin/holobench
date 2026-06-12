@@ -144,10 +144,18 @@ and re-clones the golden. One click = a pristine, just-flashed board. A physical
 farm needs a re-image pipeline and minutes of downtime to do that; here it's
 instant and per-user.
 
-Golden images are built with `tools/make-golden-disk.sh` and live at
-`assets/<profile-id>/disk.wic`. Want this fully self-contained? `docker/build.sh
-imx95-evk-sd` bakes the forked QEMU + M33 firmware + the distro image into one
-runnable container (see below).
+**File injection works on both flavors.** Uploads land in a host dir shared over
+virtio-9p. The busybox profiles mount it at `/mnt` from the initramfs
+(`tools/init-shell`); the full-distro profiles can't run that init, so the `-sd`
+profiles declare the mount on the kernel cmdline (`systemd.mount-extra=…`) and
+systemd brings up `/mnt` at boot — no image surgery, all standard interfaces.
+(Requires the guest kernel's 9p bits: `CONFIG_NET_9P`, `CONFIG_NET_9P_VIRTIO`,
+`CONFIG_9P_FS`.)
+
+Golden distro images live at `assets/<profile-id>/disk.wic` (the BSP `.wic`);
+`tools/make-golden-disk.sh` builds a small data disk for the same overlay/reset
+mechanism. Want it fully self-contained? `docker/build.sh imx95-evk-sd` bakes the
+forked QEMU + M33 firmware + the distro image into one runnable container (below).
 
 ## Multi-user / auth
 

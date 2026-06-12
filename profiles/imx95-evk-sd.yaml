@@ -38,7 +38,10 @@ boot:
     initrd:    null                 # no initramfs — root comes from the SD wic
     rootfs:    null
     disk:      disk.wic             # golden imx-image-full SD image (overlay-backed)
-  append: "console=ttyLP0,115200 cpuidle.off=1 root=/dev/mmcblk0p2 rootwait rw"
+  # systemd.mount-extra auto-mounts the Holobench virtio-9p share at /mnt under
+  # the full systemd distro (the busybox initramfs does this in tools/init-shell;
+  # systemd ignores that, so we declare the mount on the cmdline we own).
+  append: "console=ttyLP0,115200 cpuidle.off=1 root=/dev/mmcblk0p2 rootwait rw systemd.mount-extra=holobench:/mnt:9p:trans=virtio,version=9p2000.L,msize=262144"
   command_template: null
 
 serial:

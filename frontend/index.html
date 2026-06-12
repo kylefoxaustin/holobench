@@ -167,9 +167,7 @@
       const hint = has9p ? "live at /mnt · virtio-9p" : "fetch via tftp · 10.0.2.2";
       const emptyHint = !has9p
         ? "no files yet — drop one, then `tftp -g -r <name> 10.0.2.2` in the guest"
-        : fullDistro
-          ? "no files yet — drop one, then in the console: " + mountCmd
-          : "no files yet — drop one, then `ls /mnt` in the console";
+        : "no files yet — drop one, then `ls /mnt` in the console";
       return html`
         <div class="h-full flex flex-col">
           <div class="text-xs text-slate-500 mb-1">Files → guest
@@ -183,9 +181,9 @@
             <input ref=${inputRef} type="file" multiple class="hidden" onChange=${onPick} />
           </div>
           ${err && html`<div class="mt-2 text-xs text-rose-400 break-words">${err}</div>`}
-          ${fullDistro && html`<div class="mt-2 text-xs text-amber-400/80 break-words">
-            full distro: uploads land on the host share but the guest won't auto-mount.
-            Run once in the console: <code class="text-amber-300">${mountCmd}</code></div>`}
+          ${fullDistro && html`<div class="mt-2 text-xs text-slate-600 break-words">
+            full distro: /mnt auto-mounts at boot. If empty, run:
+            <code class="text-slate-500">${mountCmd}</code></div>`}
           <ul class="mt-2 text-sm overflow-auto flex-1 min-h-0">
             ${files.length === 0 && html`<li class="text-slate-600 px-1">${emptyHint}</li>`}
             ${files.map(f => html`
