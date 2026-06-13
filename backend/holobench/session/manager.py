@@ -123,16 +123,21 @@ class Session:
         asset_dir: Optional[Path] = None,
         session_id: Optional[str] = None,
         owner: Optional[str] = None,
+        minutes: Optional[int] = None,
     ) -> None:
         self.profile = profile
         self.id = session_id or f"{profile.id}-{uuid.uuid4().hex[:8]}"
         self.owner = owner  # username that reserved this board (None in open mode)
         self.state = SessionState.CREATED
 
-        # Reservation: a slot of default_minutes, extendable up to max_minutes
-        # of total lifetime. The reaper tears the session down at expiry.
+        # Reservation: a slot of `minutes` (or the profile default), extendable up
+        # to max_minutes. A value <= 0 means INFINITE — expires_at is None, the
+        # reaper never touches it. The reaper tears finite sessions down at expiry.
         self.created_at = time.time()
-        self.expires_at = self.created_at + profile.reservation.default_minutes * 60
+        mins = minutes if minutes is not None else profile.reservation.default_minutes
+        self.expires_at: Optional[float] = (
+            None if mins <= 0 else self.created_at + mins * 60
+        )
 
         # Keep the work dir short: unix socket paths have a ~108 char limit,
         # so /tmp/holobench-<id> beats a deep nested path.
@@ -542,17 +547,38 @@ class Session:
     # -- reservation --------------------------------------------------------
 
     @property
-    def remaining_seconds(self) -> int:
+    def infinite(self) -> bool:
+        return self.expires_at is None
+
+    @property
+    def remaining_seconds(self) -> Optional[int]:
+        """Seconds left, or None for an infinite (no-expiry) reservation."""
+        if self.expires_at is None:
+            return None
         return max(0, int(self.expires_at - time.time()))
 
     @property
     def expired(self) -> bool:
-        return time.time() >= self.expires_at
+        return self.expires_at is not None and time.time() >= self.expires_at
 
-    def extend(self, minutes: int) -> int:
-        """Extend the reservation, capped at max_minutes total lifetime."""
-        ceiling = self.created_at + self.profile.reservation.max_minutes * 60
-        self.expires_at = min(self.expires_at + minutes * 60, ceiling)
+    def extend(self, minutes: int) -> Optional[int]:
+        """Extend the reservation. Returns the new remaining seconds (None if
+        infinite). Rules: an already-infinite reservation stays infinite (extend
+        never downgrades it). minutes <= 0 requests infinite — granted only on an
+        unbounded profile (max_minutes <= 0), else clamped to the max_minutes
+        ceiling. A finite extend is capped at max_minutes total lifetime."""
+        if self.expires_at is None:
+            return None  # already infinite — stays infinite
+        maxm = self.profile.reservation.max_minutes
+        if minutes <= 0:
+            if maxm <= 0:
+                self.expires_at = None
+                return None
+            self.expires_at = self.created_at + maxm * 60  # clamp to the cap
+            return self.remaining_seconds
+        ceiling = None if maxm <= 0 else self.created_at + maxm * 60
+        new = self.expires_at + minutes * 60
+        self.expires_at = new if ceiling is None else min(new, ceiling)
         return self.remaining_seconds
 
 
@@ -569,9 +595,11 @@ class SessionManager:
         *,
         asset_dir: Optional[Path] = None,
         owner: Optional[str] = None,
+        minutes: Optional[int] = None,
     ) -> Session:
         session = Session(
-            profile, base_dir=self.base_dir, asset_dir=asset_dir, owner=owner
+            profile, base_dir=self.base_dir, asset_dir=asset_dir, owner=owner,
+            minutes=minutes,
         )
         await session.launch()
         self._sessions[session.id] = session
@@ -592,8 +620,10 @@ class SessionManager:
         """Cold cycle: tear the session down and relaunch the same board fresh."""
         old = self.get(session_id)
         profile, asset_dir, owner = old.profile, old.asset_dir, old.owner
+        # Preserve the reservation kind across a reinstall (infinite stays infinite).
+        minutes = 0 if old.infinite else max(1, (old.remaining_seconds or 0) // 60)
         await self.destroy(session_id)
-        return await self.launch(profile, asset_dir=asset_dir, owner=owner)
+        return await self.launch(profile, asset_dir=asset_dir, owner=owner, minutes=minutes)
 
     async def destroy(self, session_id: str, *, cleanup: bool = True) -> None:
         session = self.get(session_id)

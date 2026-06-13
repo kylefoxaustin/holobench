@@ -181,6 +181,7 @@ models land in stock QEMU. Holobench itself uses only standard QEMU interfaces.
 | `HOLOBENCH_CPU_CORES` | cgroup `cpu.max` per board (cores) | unset |
 | `HOLOBENCH_PIDS_MAX` | cgroup `pids.max` per board | 512 |
 | `HOLOBENCH_MAX_PER_USER` / `HOLOBENCH_MAX_SESSIONS` | Session quotas | 0 (∞) |
+| `HOLOBENCH_AUDIT_LOG` | Append JSON audit events (login/launch/actions) to this file | logger only |
 | `HOLOBENCH_ALLOW_CLIENT_ASSETS` | Trust client asset paths (keep off) | off |
 | `HOLOBENCH_QEMU` / `HOLOBENCH_ASSET_ROOT` / `HOLOBENCH_CAPTURE_DIR` | Path overrides (set in the image) | — |
 

@@ -308,8 +308,14 @@ Remaining
 - `[ ]` Optional **netns/mount-ns** per board (slirp already covers network; this
   is defense-in-depth, not load-bearing). The cgroup backend covers the
   CPU/mem/pids DoS surface that mattered most.
-- `[ ]` Audit log (who booted/reset/reinstalled what); admin user-mgmt over the API.
+- `[x]` Audit log — login (ok/fail/throttled) + session launch/reset/pause/resume/
+  stop/reinstall events via the `holobench.audit` logger; JSONL to `$HOLOBENCH_AUDIT_LOG`.
+- `[ ]` Admin user-mgmt over the API (CLI exists).
 - `[ ]` Disk quota for per-session overlays/uploads.
+
+Also (Phase 4 follow-up): `[x]` **infinite / no-limit reservations** — a reservation
+of `minutes <= 0` never expires (the reaper skips it); the launch UI has an
+"∞ no limit" toggle; admins (or an unbounded profile) may grant it.
 
 **Acceptance criteria — done when:**
 - With auth enabled, unauthenticated REST/WS requests are rejected. ✅

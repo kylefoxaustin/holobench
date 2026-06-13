@@ -447,6 +447,7 @@
     function App() {
       const [profiles, setProfiles] = useState([]);
       const [selected, setSelected] = useState("");
+      const [infinite, setInfinite] = useState(false);
       const [session, setSession] = useState(null);
       const [tab, setTab] = useState(null);
       const [busy, setBusy] = useState(false);
@@ -478,7 +479,7 @@
         try {
           const s = await api("/api/sessions", {
             method: "POST", headers: { "Content-Type": "application/json" },
-            body: JSON.stringify({ profile_id: selected }),
+            body: JSON.stringify({ profile_id: selected, ...(infinite ? { minutes: 0 } : {}) }),
           });
           setSession(s);
           focusDefaultTab(s);
@@ -533,18 +534,25 @@
                 ${profiles.map(p => html`<option key=${p.id} value=${p.id}>${p.display_name} — ${p.machine}</option>`)}
               </select>
               ${sel && html`<${Badge} ok=${sel.assets_ready}>${sel.assets_ready ? "assets ready" : "no assets"}<//>`}
+              <label class="flex items-center gap-1 text-xs text-slate-400 cursor-pointer select-none" title="reserve with no time limit (never auto-reaped)">
+                <input type="checkbox" checked=${infinite} onChange=${e => setInfinite(e.target.checked)} /> ∞ no limit
+              </label>
               <button disabled=${busy || !selected} onClick=${launch}
                 class="px-3 py-1 rounded bg-emerald-600 hover:bg-emerald-500 disabled:opacity-50 text-sm font-medium">
                 ${busy ? "Reserving…" : "Reserve & Boot"}
               </button>
             `}
             ${session && (() => {
-              const rem = session.reservation ? session.reservation.expires_at - now : null;
+              const resv = session.reservation || {};
+              const inf = resv.infinite;
+              const rem = (!inf && resv.expires_at) ? resv.expires_at - now : null;
               const low = rem !== null && rem < 120;
               return html`
               <span class="text-sm text-slate-400">${session.display_name}</span>
               <${Badge} ok=${session.state === "running"}>${session.state}<//>
               <span class="text-xs text-slate-500">pid ${session.pid}</span>
+              ${inf && html`
+                <span class="px-2 py-0.5 rounded text-xs font-mono bg-slate-700 text-slate-300" title="no reservation limit — never auto-reaped">⏱ ∞</span>`}
               ${rem !== null && html`
                 <span class="px-2 py-0.5 rounded text-xs font-mono ${low ? "bg-rose-900 text-rose-200" : "bg-slate-700 text-slate-200"}"
                       title="reservation remaining">⏱ ${fmtDur(rem)}</span>

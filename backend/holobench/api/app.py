@@ -14,6 +14,8 @@ to an arbitrary monitor command.
 from __future__ import annotations
 
 import asyncio
+import json
+import logging
 import os
 import re
 import time
@@ -66,6 +68,25 @@ def _login_throttled(key: str) -> bool:
 
 def _login_record_fail(key: str) -> None:
     _login_fails.setdefault(key, []).append(time.time())
+
+
+# --- audit log -------------------------------------------------------------
+_audit_log = logging.getLogger("holobench.audit")
+_AUDIT_FILE = os.environ.get("HOLOBENCH_AUDIT_LOG")
+
+
+def _audit(event: str, user: str = "-", **fields) -> None:
+    """Record a security/lifecycle event (who did what). Always logs; also
+    appends a JSON line to $HOLOBENCH_AUDIT_LOG when set."""
+    rec = {"ts": int(time.time()), "event": event, "user": user, **fields}
+    line = json.dumps(rec, separators=(",", ":"), sort_keys=True)
+    _audit_log.info("%s", line)
+    if _AUDIT_FILE:
+        try:
+            with open(_AUDIT_FILE, "a") as f:
+                f.write(line + "\n")
+        except OSError:
+            pass
 
 
 def _origin_ok(headers) -> bool:
@@ -141,6 +162,7 @@ async def auth_middleware(request: Request, call_next):
 class LaunchRequest(BaseModel):
     profile_id: str
     assets: Optional[str] = None
+    minutes: Optional[int] = None  # reservation length; <=0 = infinite (no expiry)
 
 
 class SnapshotRequest(BaseModel):
@@ -195,8 +217,9 @@ def _session_view(s: Session) -> dict:
         },
         "gdb": {"enabled": s.gdb_port is not None, "port": s.gdb_port},
         "reservation": {
-            "remaining_seconds": s.remaining_seconds,
-            "expires_at": s.expires_at,
+            "remaining_seconds": s.remaining_seconds,   # None == infinite
+            "expires_at": s.expires_at,                  # None == infinite
+            "infinite": s.infinite,
             "default_minutes": s.profile.reservation.default_minutes,
             "max_minutes": s.profile.reservation.max_minutes,
         },
@@ -222,6 +245,7 @@ def login(req: LoginRequest, request: Request) -> dict:
     ip = request.client.host if request.client else "?"
     key = f"{ip}:{req.username}"
     if _login_throttled(key):
+        _audit("login_throttled", req.username, ip=ip)
         raise HTTPException(
             status_code=429,
             detail=f"too many failed logins; wait {_LOGIN_WINDOW_S}s",
@@ -229,8 +253,10 @@ def login(req: LoginRequest, request: Request) -> dict:
     token = auth.login(req.username, req.password)
     if not token:
         _login_record_fail(key)
+        _audit("login_fail", req.username, ip=ip)
         raise HTTPException(status_code=401, detail="invalid credentials")
     _login_fails.pop(key, None)  # reset on success
+    _audit("login", req.username, ip=ip)
     user = auth.store.get(req.username)
     return {"token": token, "user": {"username": user.username, "role": user.role}}
 
@@ -308,10 +334,21 @@ async def launch_session(req: LaunchRequest, request: Request) -> dict:
     else:
         asset_dir = default_asset_dir(profile.id)
     owner = user.username if request.app.state.auth.enabled else None
+    # Resolve reservation length. minutes<=0 = infinite; only an unbounded profile
+    # (max_minutes<=0) or an admin may grant infinite — others clamp to max_minutes.
+    maxm = profile.reservation.max_minutes
+    if req.minutes is None:
+        minutes = None  # use the profile default
+    elif req.minutes <= 0:
+        minutes = 0 if (maxm <= 0 or user.is_admin) else maxm
+    else:
+        minutes = req.minutes if maxm <= 0 else min(req.minutes, maxm)
     try:
-        session = await mgr.launch(profile, asset_dir=asset_dir, owner=owner)
+        session = await mgr.launch(profile, asset_dir=asset_dir, owner=owner, minutes=minutes)
     except SessionError as exc:
         raise HTTPException(status_code=500, detail=str(exc))
+    _audit("session_launch", user.username, session=session.id,
+           profile=req.profile_id, infinite=session.infinite)
     return _session_view(session)
 
 
@@ -331,13 +368,15 @@ _VERBS = {
 
 
 @app.post("/api/sessions/{session_id}/actions/{action}")
-async def session_action(session_id: str, action: str) -> dict:
+async def session_action(session_id: str, action: str, request: Request) -> dict:
     mgr = app_ref.state.manager
     try:
         session = mgr.get(session_id)
     except SessionError as exc:
         raise HTTPException(status_code=404, detail=str(exc))
 
+    _who = getattr(request.state, "user", None)
+    _audit(f"session_{action}", _who.username if _who else "-", session=session_id)
     try:
         if action == "reset":
             await session.system_reset()
