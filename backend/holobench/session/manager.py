@@ -195,6 +195,11 @@ class Session:
         self._cgroup: Optional[SessionCgroup] = None
         self._log_path = self.work_dir / "qemu.log"
         self._taps: dict[str, SerialTap] = {}
+        # Lazy serial: when on, taps attach on first console connect (ref-counted)
+        # and detach on the last disconnect — no always-on serial pump per board
+        # (resource hygiene at density). Off = full boot history captured always.
+        self._lazy_serial = os.environ.get("HOLOBENCH_LAZY_SERIAL") == "1"
+        self._tap_refs: dict[str, int] = {}
         self._events: deque[dict] = deque(maxlen=256)
         self._evlistener: Optional[EventListener] = None
         self._evtask: Optional[asyncio.Task] = None
@@ -266,7 +271,7 @@ class Session:
             await self._kill_proc()
             raise
 
-        if tap_serial:
+        if tap_serial and not self._lazy_serial:
             await self._start_serial_taps()
         self._start_event_capture()
         self.state = SessionState.RUNNING
@@ -342,6 +347,45 @@ class Session:
         if chardev is None:
             return None
         return self._taps.get(chardev)
+
+    def _resolve_chardev(self, chardev: Optional[str]) -> Optional[str]:
+        if chardev is None:
+            dp = self.profile.default_serial
+            chardev = dp.chardev if dp else None
+        return chardev
+
+    async def ensure_tap(self, chardev: Optional[str] = None) -> Optional[SerialTap]:
+        """Get the tap for a chardev, lazily starting it (ref-counted) if needed.
+        With lazy serial off, the always-on tap already exists."""
+        cd = self._resolve_chardev(chardev)
+        if cd is None:
+            return None
+        tap = self._taps.get(cd)
+        if tap is None:
+            sock = self.runtime.serial_sockets.get(cd)
+            if sock is None:
+                return None
+            tap = SerialTap(sock, self.work_dir / f"{cd}.log")
+            try:
+                await tap.start()
+            except Exception:
+                return None
+            self._taps[cd] = tap
+        self._tap_refs[cd] = self._tap_refs.get(cd, 0) + 1
+        return tap
+
+    async def release_tap(self, chardev: Optional[str] = None) -> None:
+        """Drop a console consumer; stop the tap when the last one leaves (lazy mode)."""
+        cd = self._resolve_chardev(chardev)
+        if cd is None or cd not in self._tap_refs:
+            return
+        self._tap_refs[cd] -= 1
+        if self._tap_refs[cd] <= 0:
+            self._tap_refs.pop(cd, None)
+            if self._lazy_serial:  # only tear down lazily-started taps
+                tap = self._taps.pop(cd, None)
+                if tap is not None:
+                    await tap.stop()
 
     def console_log(self, chardev: Optional[str] = None) -> Optional[Path]:
         """Path to a serial port's captured log (default = the default UART)."""
@@ -588,6 +632,20 @@ class SessionManager:
     def __init__(self, base_dir: Optional[Path] = None) -> None:
         self.base_dir = base_dir
         self._sessions: dict[str, Session] = {}
+        # Admission control: cap concurrent in-flight launches (0 = unlimited) so a
+        # burst of "Reserve & Boot" doesn't stampede the host (qemu-img + QEMU exec
+        # + boot CPU storm). After each launch the slot frees only after
+        # HOLOBENCH_LAUNCH_STAGGER_S, pacing boot starts in waves. See docs/SCALING.md.
+        n = int(os.environ.get("HOLOBENCH_MAX_CONCURRENT_LAUNCHES", "0") or 0)
+        self._launch_sem = asyncio.Semaphore(n) if n > 0 else None
+        self._launch_stagger = float(os.environ.get("HOLOBENCH_LAUNCH_STAGGER_S", "0") or 0)
+
+    async def _release_after(self, delay: float) -> None:
+        try:
+            await asyncio.sleep(delay)
+        finally:
+            if self._launch_sem is not None:
+                self._launch_sem.release()
 
     async def launch(
         self,
@@ -597,12 +655,26 @@ class SessionManager:
         owner: Optional[str] = None,
         minutes: Optional[int] = None,
     ) -> Session:
-        session = Session(
-            profile, base_dir=self.base_dir, asset_dir=asset_dir, owner=owner,
-            minutes=minutes,
-        )
-        await session.launch()
-        self._sessions[session.id] = session
+        if self._launch_sem is not None:
+            await self._launch_sem.acquire()
+        try:
+            session = Session(
+                profile, base_dir=self.base_dir, asset_dir=asset_dir, owner=owner,
+                minutes=minutes,
+            )
+            await session.launch()
+            self._sessions[session.id] = session
+        except BaseException:
+            if self._launch_sem is not None:
+                self._launch_sem.release()
+            raise
+        # Success: free the admission slot — after a stagger delay if configured, so
+        # the next queued launch's boot starts later (response returns immediately).
+        if self._launch_sem is not None:
+            if self._launch_stagger > 0:
+                asyncio.create_task(self._release_after(self._launch_stagger))
+            else:
+                self._launch_sem.release()
         return session
 
     def get(self, session_id: str) -> Session:

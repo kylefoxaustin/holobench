@@ -795,7 +795,9 @@ async def console_ws(
         return
     await websocket.accept()
 
-    tap = session.get_tap(chardev)
+    # Lazily attach the serial tap on connect (ref-counted); detached on the last
+    # disconnect when HOLOBENCH_LAZY_SERIAL is on. Otherwise returns the always-on tap.
+    tap = await session.ensure_tap(chardev)
     if tap is None:
         await websocket.close(code=4404, reason="no console for this session")
         return
@@ -840,6 +842,7 @@ async def console_ws(
         tap.unsubscribe(on_bytes)
         out_task.cancel()
         in_task.cancel()
+        await session.release_tap(chardev)
 
 
 # --- static frontend (mounted last so /api/* wins) -------------------------

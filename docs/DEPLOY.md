@@ -5,6 +5,10 @@ Holobench runs frictionless and open for local/dev use. This guide is the
 **Phase-6 hardening** path for exposing it to multiple users on a network. Read
 it top to bottom before binding to anything but `127.0.0.1`.
 
+> Sizing a busy host / running many boards? See **[`docs/SCALING.md`](SCALING.md)**
+> for measured per-board cost, the CPU/`cpuidle` density wall, and the
+> admission-control / lazy-serial / cgroup knobs.
+
 ## Threat model in one paragraph
 
 The browser is untrusted. It must reach only **mediated** surfaces — terminal
@@ -186,6 +190,9 @@ models land in stock QEMU. Holobench itself uses only standard QEMU interfaces.
 | `HOLOBENCH_CPU_CORES` | cgroup `cpu.max` per board (cores) | unset |
 | `HOLOBENCH_PIDS_MAX` | cgroup `pids.max` per board | 512 |
 | `HOLOBENCH_MAX_PER_USER` / `HOLOBENCH_MAX_SESSIONS` | Session quotas | 0 (∞) |
+| `HOLOBENCH_MAX_CONCURRENT_LAUNCHES` | Cap concurrent in-flight launches (anti-stampede) | 0 (∞) |
+| `HOLOBENCH_LAUNCH_STAGGER_S` | Free each admission slot only after this delay (paces boots in waves) | 0 |
+| `HOLOBENCH_LAZY_SERIAL` | Tap serial only while a console is open (no always-on pump/board) | off |
 | `HOLOBENCH_AUDIT_LOG` | Append JSON audit events (login/launch/actions/user-mgmt) to this file | logger only |
 | `HOLOBENCH_UPLOAD_QUOTA_MB` | Per-session upload cap (9p share + camera frames) | 0 (∞) |
 | `HOLOBENCH_ALLOW_CLIENT_ASSETS` | Trust client asset paths (keep off) | off |
