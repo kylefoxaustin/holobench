@@ -191,6 +191,17 @@ models land in stock QEMU. Holobench itself uses only standard QEMU interfaces.
 | `HOLOBENCH_ALLOW_CLIENT_ASSETS` | Trust client asset paths (keep off) | off |
 | `HOLOBENCH_QEMU` / `HOLOBENCH_ASSET_ROOT` / `HOLOBENCH_CAPTURE_DIR` | Path overrides (set in the image) | — |
 
+## Verify it
+
+`tools/smoke-hardened.py` brings up a throwaway enforced-auth instance with
+cgroup caps + upload quota + audit log and asserts the whole stack end-to-end
+(401 without a token, login throttle, admin-only user API, per-session cgroup
+created, session ownership 403s, upload-quota 413, audit events recorded):
+
+    .venv/bin/python tools/smoke-hardened.py     # exits non-zero on any failure
+
+(Needs a built dev checkout + cgroup v2 delegated to the user.)
+
 ## Hardening checklist
 
 - [ ] At least one admin user created (auth enforced)
