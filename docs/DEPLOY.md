@@ -26,6 +26,11 @@ holobench user add alice --admin     # prompts for a password; switches auth ON
 holobench user add bob               # a regular user
 ```
 
+Admins can also manage users over the API (same store): `GET /api/users`,
+`POST /api/users` (`{username, password, role}`), `DELETE /api/users/{username}`
+— all admin-only (`403` otherwise; you can't delete your own account). User-mgmt
+actions are audit-logged.
+
 - **`HOLOBENCH_SECRET`** — the token-signing key. Set it explicitly for any
   multi-worker / multi-host deployment (all workers must share one key). If you
   don't, a single instance auto-generates and persists one to `data/secret`
@@ -181,7 +186,8 @@ models land in stock QEMU. Holobench itself uses only standard QEMU interfaces.
 | `HOLOBENCH_CPU_CORES` | cgroup `cpu.max` per board (cores) | unset |
 | `HOLOBENCH_PIDS_MAX` | cgroup `pids.max` per board | 512 |
 | `HOLOBENCH_MAX_PER_USER` / `HOLOBENCH_MAX_SESSIONS` | Session quotas | 0 (∞) |
-| `HOLOBENCH_AUDIT_LOG` | Append JSON audit events (login/launch/actions) to this file | logger only |
+| `HOLOBENCH_AUDIT_LOG` | Append JSON audit events (login/launch/actions/user-mgmt) to this file | logger only |
+| `HOLOBENCH_UPLOAD_QUOTA_MB` | Per-session upload cap (9p share + camera frames) | 0 (∞) |
 | `HOLOBENCH_ALLOW_CLIENT_ASSETS` | Trust client asset paths (keep off) | off |
 | `HOLOBENCH_QEMU` / `HOLOBENCH_ASSET_ROOT` / `HOLOBENCH_CAPTURE_DIR` | Path overrides (set in the image) | — |
 

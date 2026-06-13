@@ -310,8 +310,10 @@ Remaining
   CPU/mem/pids DoS surface that mattered most.
 - `[x]` Audit log — login (ok/fail/throttled) + session launch/reset/pause/resume/
   stop/reinstall events via the `holobench.audit` logger; JSONL to `$HOLOBENCH_AUDIT_LOG`.
-- `[ ]` Admin user-mgmt over the API (CLI exists).
-- `[ ]` Disk quota for per-session overlays/uploads.
+- `[x]` Admin user-mgmt over the API — GET/POST/DELETE `/api/users` (admin-only,
+  audit-logged; can't delete self). CLI still works too.
+- `[x]` Per-session upload quota (`HOLOBENCH_UPLOAD_QUOTA_MB`, 9p share + camera
+  frames). (Hard overlay/disk-write quota still needs a quota'd filesystem — DEPLOY.md.)
 
 Also (Phase 4 follow-up): `[x]` **infinite / no-limit reservations** — a reservation
 of `minutes <= 0` never expires (the reaper skips it); the launch UI has an

@@ -174,6 +174,12 @@ class LoginRequest(BaseModel):
     password: str
 
 
+class UserCreateRequest(BaseModel):
+    username: str
+    password: str
+    role: str = "user"
+
+
 def _session_view(s: Session) -> dict:
     return {
         "id": s.id,
@@ -270,6 +276,50 @@ def me(request: Request) -> dict:
         "role": user.role,
         "auth_enabled": auth.enabled,
     }
+
+
+# --- user management (admin only) ------------------------------------------
+
+
+def _require_admin(request: Request):
+    user = request.state.user
+    if not user.is_admin:
+        raise HTTPException(status_code=403, detail="admin only")
+    return user
+
+
+@app.get("/api/users")
+def list_users(request: Request) -> list[dict]:
+    _require_admin(request)
+    store = request.app.state.auth.store
+    return [{"username": u.username, "role": u.role} for u in store.list()]
+
+
+@app.post("/api/users")
+def add_user(req: UserCreateRequest, request: Request) -> dict:
+    admin = _require_admin(request)
+    if req.role not in ("user", "admin"):
+        raise HTTPException(status_code=400, detail="role must be 'user' or 'admin'")
+    if not req.username or not req.password:
+        raise HTTPException(status_code=400, detail="username and password required")
+    store = request.app.state.auth.store
+    existed = store.get(req.username) is not None
+    u = store.add(req.username, req.password, role=req.role)
+    _audit("user_add" if not existed else "user_update", admin.username,
+           target=u.username, role=u.role)
+    return {"username": u.username, "role": u.role}
+
+
+@app.delete("/api/users/{username}")
+def remove_user(username: str, request: Request) -> dict:
+    admin = _require_admin(request)
+    if username == admin.username:
+        raise HTTPException(status_code=400, detail="refusing to remove your own account")
+    store = request.app.state.auth.store
+    if not store.remove(username):
+        raise HTTPException(status_code=404, detail="no such user")
+    _audit("user_remove", admin.username, target=username)
+    return {"username": username, "deleted": True}
 
 
 # --- profiles --------------------------------------------------------------
@@ -406,7 +456,24 @@ def extend_session(session_id: str, minutes: int = 30) -> dict:
 
 # --- file injection (virtio-9p share) --------------------------------------
 
-MAX_UPLOAD_BYTES = 512 * 1024 * 1024  # 512 MiB ceiling (Image-sized)
+MAX_UPLOAD_BYTES = 512 * 1024 * 1024  # 512 MiB per-file ceiling (Image-sized)
+# Per-session total upload quota across the 9p share + camera frames dir
+# (0 = unlimited). Bounds host-disk fill via uploads on a shared deployment.
+_UPLOAD_QUOTA_MB = int(os.environ.get("HOLOBENCH_UPLOAD_QUOTA_MB", "0"))
+
+
+def _dir_bytes(d: Optional[Path]) -> int:
+    if not d or not d.exists():
+        return 0
+    return sum(p.stat().st_size for p in d.iterdir() if p.is_file())
+
+
+def _upload_budget(session: Session) -> Optional[int]:
+    """Remaining upload bytes for this session (None = unlimited)."""
+    if not _UPLOAD_QUOTA_MB:
+        return None
+    used = _dir_bytes(session.share_dir) + _dir_bytes(session.camera_frames_dir)
+    return max(0, _UPLOAD_QUOTA_MB * 1024 * 1024 - used)
 
 
 def _require_share(session: Session) -> Path:
@@ -454,15 +521,23 @@ async def upload_file(session_id: str, file: UploadFile) -> dict:
     if share.resolve() not in dest.parents:
         raise HTTPException(status_code=400, detail="path escapes the share dir")
 
+    budget = _upload_budget(session)
+    if budget == 0:
+        raise HTTPException(status_code=413, detail="session upload quota exhausted")
+    cap = MAX_UPLOAD_BYTES if budget is None else min(MAX_UPLOAD_BYTES, budget)
     written = 0
     try:
         with dest.open("wb") as out:
             while chunk := await file.read(1024 * 1024):
                 written += len(chunk)
-                if written > MAX_UPLOAD_BYTES:
+                if written > cap:
                     out.close()
                     dest.unlink(missing_ok=True)
-                    raise HTTPException(status_code=413, detail="file exceeds size limit")
+                    detail = (
+                        "file exceeds size limit" if cap == MAX_UPLOAD_BYTES
+                        else "session upload quota exceeded"
+                    )
+                    raise HTTPException(status_code=413, detail=detail)
                 out.write(chunk)
     finally:
         await file.close()
@@ -532,15 +607,23 @@ async def upload_camera_frame(session_id: str, file: UploadFile) -> dict:
     if frames_dir.resolve() not in dest.parents:
         raise HTTPException(status_code=400, detail="path escapes the frames dir")
 
+    budget = _upload_budget(session)
+    if budget == 0:
+        raise HTTPException(status_code=413, detail="session upload quota exhausted")
+    cap = MAX_UPLOAD_BYTES if budget is None else min(MAX_UPLOAD_BYTES, budget)
     written = 0
     try:
         with dest.open("wb") as out:
             while chunk := await file.read(1024 * 1024):
                 written += len(chunk)
-                if written > MAX_UPLOAD_BYTES:
+                if written > cap:
                     out.close()
                     dest.unlink(missing_ok=True)
-                    raise HTTPException(status_code=413, detail="frame exceeds size limit")
+                    detail = (
+                        "frame exceeds size limit" if cap == MAX_UPLOAD_BYTES
+                        else "session upload quota exceeded"
+                    )
+                    raise HTTPException(status_code=413, detail=detail)
                 out.write(chunk)
     finally:
         await file.close()
