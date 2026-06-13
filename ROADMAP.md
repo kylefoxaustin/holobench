@@ -284,16 +284,30 @@ pending on the bus).
 
 **Goal:** deployable as a shared "virtual EVK" service.
 
-Tasks
-- `[H]` auth provider (swappable; gate every API route and WS upgrade).
-- `[H]` finish upload hardening; audit the mediation boundary.
-- `[H]` deployment packaging (container/compose) + a deploy doc.
+Done (2026-06-12 hardening pass)
+- `[x]` Auth: enforced login + per-user session ownership (REST + WS), 8 h token
+  expiry, login brute-force throttle, persistent signing key, WS `Origin`/CSWSH
+  gate. (Pluggable IdP/OIDC still a future swap.)
+- `[x]` Boundary audit + fixes: closed client-controlled asset-path argv
+  injection (`HOLOBENCH_ALLOW_CLIENT_ASSETS` off by default); confirmed QMP =
+  unix socket, gdb = localhost, browser gets only bytes/PNG/scoped verbs.
+- `[x]` Per-session resource caps on the QEMU child: `RLIMIT_CORE=0` always,
+  opt-in `HOLOBENCH_NICE` / `HOLOBENCH_MEM_CAP_MB`.
+- `[x]` Deploy guide: `docs/DEPLOY.md` (TLS reverse-proxy, secret, origins,
+  resource caps/cgroups, quotas, env reference, hardening checklist).
+
+Remaining
+- `[ ]` **Container/cgroup per-session isolation** (the namespace backend the
+  session abstraction was built for) — hard CPU/mem caps + netns/mount-ns per
+  board. The biggest remaining lift.
+- `[ ]` Audit log (who booted/reset/reinstalled what); admin user-mgmt over the API.
+- `[ ]` Disk quota for per-session overlays/uploads.
 
 **Acceptance criteria — done when:**
-- With auth enabled, unauthenticated REST/WS requests are rejected.
-- A documented `deploy` path stands the service up with isolation intact.
-- The mediation boundary is audited: no client path reaches raw QMP/serial
-  control.
+- With auth enabled, unauthenticated REST/WS requests are rejected. ✅
+- A documented `deploy` path stands the service up with isolation intact. ✅ (docs;
+  cgroup per-session isolation is the remaining hardening step)
+- The mediation boundary is audited: no client path reaches raw QMP/serial. ✅
 
 ---
 
