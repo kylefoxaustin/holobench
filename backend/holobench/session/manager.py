@@ -30,41 +30,46 @@ from qemu.qmp import EventListener, QMPClient
 from ..bridges.console import SerialTap
 from ..profiles.models import Profile
 from .command import SessionRuntime, build_command, command_str
+from .isolation import SessionCgroup, memory_max_bytes
 
 
 DEFAULT_BASE_DIR = Path(tempfile.gettempdir()) / "holobench"
 
 
-def _qemu_preexec() -> None:  # pragma: no cover - runs in the forked child
-    """Resource limits applied to each QEMU child (after fork, before exec).
+def _make_qemu_preexec(cgroup_procs: Optional[str] = None):  # pragma: no cover
+    """Build the preexec_fn for a QEMU child (runs after fork, before exec).
 
-    Safe-by-default: RLIMIT_CORE=0 always (a crashed multi-GB-RAM QEMU would
-    otherwise dump a multi-GB core — disk-fill DoS + guest-memory info-leak).
-    Deployment knobs (opt-in, so dev boots are never broken): HOLOBENCH_NICE
-    deprioritizes the board so one session can't peg an interactive host;
-    HOLOBENCH_MEM_CAP_MB sets a hard RLIMIT_AS ceiling. For real CPU/memory
-    isolation on a shared host, prefer cgroups (see docs/DEPLOY.md).
+    Joins the per-session cgroup (if one was created) by writing its own pid to
+    cgroup.procs, then applies rlimits. Safe-by-default: RLIMIT_CORE=0 always (a
+    crashed multi-GB-RAM QEMU would otherwise dump a multi-GB core — disk-fill +
+    guest-memory info-leak). HOLOBENCH_NICE deprioritizes the board. Memory is
+    NOT capped via RLIMIT_AS — QEMU/TCG reserves tens of GB of (unbacked) virtual
+    address space, so an RLIMIT_AS sized to guest RAM kills it; hard memory caps
+    come from the cgroup's RSS-based memory.max (session/isolation.py, DEPLOY.md).
     """
-    import os
-    import resource
 
-    try:
-        resource.setrlimit(resource.RLIMIT_CORE, (0, 0))
-    except Exception:
-        pass
-    try:
-        nice = int(os.environ.get("HOLOBENCH_NICE", "0") or 0)
-        if nice:
-            os.nice(nice)
-    except Exception:
-        pass
-    try:
-        cap_mb = os.environ.get("HOLOBENCH_MEM_CAP_MB")
-        if cap_mb:
-            b = int(cap_mb) * 1024 * 1024
-            resource.setrlimit(resource.RLIMIT_AS, (b, b))
-    except Exception:
-        pass
+    def _pre() -> None:
+        import os
+        import resource
+
+        if cgroup_procs:
+            try:
+                with open(cgroup_procs, "w") as f:
+                    f.write(str(os.getpid()))
+            except OSError:
+                pass
+        try:
+            resource.setrlimit(resource.RLIMIT_CORE, (0, 0))
+        except Exception:
+            pass
+        try:
+            nice = int(os.environ.get("HOLOBENCH_NICE", "0") or 0)
+            if nice:
+                os.nice(nice)
+        except Exception:
+            pass
+
+    return _pre
 
 
 def _capture_helper_path(name: str) -> Optional[Path]:
@@ -182,6 +187,7 @@ class Session:
         self.argv: list[str] = []
         self._proc: Optional[asyncio.subprocess.Process] = None
         self._qmp: Optional[QMPClient] = None
+        self._cgroup: Optional[SessionCgroup] = None
         self._log_path = self.work_dir / "qemu.log"
         self._taps: dict[str, SerialTap] = {}
         self._events: deque[dict] = deque(maxlen=256)
@@ -225,11 +231,22 @@ class Session:
                 self.runtime.disk_overlay = None
         self.argv = build_command(self.profile, self.runtime)
 
+        # Per-session cgroup v2 caps (opt-in; no-op when disabled/unavailable).
+        self._cgroup = SessionCgroup.create(
+            self.id,
+            memory_max=memory_max_bytes(self.profile.qemu.memory),
+            pids_max=int(os.environ.get("HOLOBENCH_PIDS_MAX", "512") or 512),
+            cpu_cores=float(os.environ["HOLOBENCH_CPU_CORES"])
+            if os.environ.get("HOLOBENCH_CPU_CORES")
+            else None,
+        )
+        procs = self._cgroup.procs_file if self._cgroup else None
+
         log = self._log_path.open("wb")
         try:
             self._proc = await asyncio.create_subprocess_exec(
                 *self.argv, stdout=log, stderr=asyncio.subprocess.STDOUT,
-                preexec_fn=_qemu_preexec,
+                preexec_fn=_make_qemu_preexec(procs),
             )
         except FileNotFoundError as exc:
             self.state = SessionState.FAILED
@@ -512,7 +529,10 @@ class Session:
                 await self._proc.wait()
 
     def cleanup(self) -> None:
-        """Remove the session work dir. Call after quit()."""
+        """Remove the session work dir + cgroup. Call after quit()."""
+        if self._cgroup is not None:
+            self._cgroup.cleanup()
+            self._cgroup = None
         shutil.rmtree(self.work_dir, ignore_errors=True)
 
     @property

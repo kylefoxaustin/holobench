@@ -81,22 +81,48 @@ server {
 
 A board is a real QEMU; one user shouldn't starve the host.
 
-Built-in (safe by default, no setup):
-- **`RLIMIT_CORE=0`** always — a crashed multi-GB-RAM QEMU won't dump a multi-GB
-  core (disk-fill + guest-memory info-leak).
-- **`HOLOBENCH_NICE`** — `nice` value for every board (e.g. `10`) so emulation
-  can't peg an interactive host.
-- **`HOLOBENCH_MEM_CAP_MB`** — hard `RLIMIT_AS` ceiling per QEMU. Size it well
-  above the board's guest RAM + TCG overhead (e.g. a 4 GB board → ~6000–8000);
-  too low and QEMU won't start.
+Always-on (no setup): **`RLIMIT_CORE=0`** — a crashed multi-GB-RAM QEMU won't
+dump a multi-GB core (disk-fill + guest-memory info-leak). Plus **`HOLOBENCH_NICE`**
+(e.g. `10`) so emulation can't peg an interactive host.
 
-Recommended for hard isolation — **cgroups v2** (CPU + memory you can't exceed):
-- Run the whole service under a systemd slice with `MemoryMax=`/`CPUQuota=`, or
-- Run the container with `--memory`/`--cpus`, or
-- For *per-session* cgroups (one board can't affect another), run Holobench
-  where it can create child cgroups (systemd user delegation / a privileged
-  container) and place each QEMU PID in its own `cpu.max`/`memory.max`. This is
-  the cleanest path; the rlimits above are the portable fallback.
+> Note: there is intentionally **no `RLIMIT_AS` memory cap** — QEMU/TCG reserves
+> tens of GB of (unbacked) virtual address space, so an `RLIMIT_AS` sized to
+> guest RAM kills it. Use the cgroup `memory.max` below (RSS-based) instead.
+
+**Built-in per-session cgroup v2 caps (recommended).** Set **`HOLOBENCH_CGROUP=1`**
+and each board's QEMU runs in its own cgroup with hard, RSS-based caps it cannot
+exceed — one session can't OOM or fork-bomb the host, and the cgroup is removed
+when the session ends. Knobs:
+
+| Var | cgroup file | Default |
+|---|---|---|
+| `HOLOBENCH_MEM_CAP_MB` | `memory.max` | guest RAM × 1.5 + 512 MB |
+| `HOLOBENCH_PIDS_MAX` | `pids.max` | 512 |
+| `HOLOBENCH_CPU_CORES` | `cpu.max` (cores) | unset (no CPU cap) |
+
+Holobench needs a **writable, delegated cgroup v2 parent** to create children
+under. Two ways:
+- **Auto** (`HOLOBENCH_CGROUP=1`): it uses your systemd user delegation
+  (`user@<uid>.service`) — works out of the box on a systemd login session. Only
+  the controllers your session delegates are applied (commonly `memory`+`pids`;
+  `cpu` often needs system config — see below).
+- **Explicit** (`HOLOBENCH_CGROUP_PARENT=/sys/fs/cgroup/…`): point at a cgroup
+  you've delegated to the service account with the controllers you want enabled
+  in its `cgroup.subtree_control` (`+memory +cpu +pids`).
+
+To get the **`cpu`** controller delegated to a systemd user session (so
+`HOLOBENCH_CPU_CORES` takes effect):
+
+    # /etc/systemd/system/user@.service.d/delegate.conf
+    [Service]
+    Delegate=cpu cpuset io memory pids
+
+(then `systemctl daemon-reload` + re-login). Inside a container, run with
+`--cgroupns=private` and a delegated cgroup, or just rely on the container's own
+`--memory`/`--cpus` for the whole service.
+
+If no writable parent is found, cgroup capping is skipped (logged) and the board
+still boots — so enabling it can never brick a launch.
 
 Quotas (count limits, `0` = unlimited):
 - **`HOLOBENCH_MAX_PER_USER`**, **`HOLOBENCH_MAX_SESSIONS`** → `429` at capacity.
@@ -149,7 +175,11 @@ models land in stock QEMU. Holobench itself uses only standard QEMU interfaces.
 | `HOLOBENCH_LOGIN_MAX_FAILS` / `_WINDOW_S` | Login brute-force throttle | 5 / 60 |
 | `HOLOBENCH_ALLOWED_ORIGINS` | Console-WS origin allowlist | same-origin |
 | `HOLOBENCH_NICE` | `nice` for each QEMU | 0 |
-| `HOLOBENCH_MEM_CAP_MB` | Hard `RLIMIT_AS` per QEMU | unset |
+| `HOLOBENCH_CGROUP` | Enable per-session cgroup v2 caps (auto-detect parent) | off |
+| `HOLOBENCH_CGROUP_PARENT` | Explicit delegated cgroup parent dir | auto |
+| `HOLOBENCH_MEM_CAP_MB` | cgroup `memory.max` per board | guest RAM ×1.5 + 512 MB |
+| `HOLOBENCH_CPU_CORES` | cgroup `cpu.max` per board (cores) | unset |
+| `HOLOBENCH_PIDS_MAX` | cgroup `pids.max` per board | 512 |
 | `HOLOBENCH_MAX_PER_USER` / `HOLOBENCH_MAX_SESSIONS` | Session quotas | 0 (∞) |
 | `HOLOBENCH_ALLOW_CLIENT_ASSETS` | Trust client asset paths (keep off) | off |
 | `HOLOBENCH_QEMU` / `HOLOBENCH_ASSET_ROOT` / `HOLOBENCH_CAPTURE_DIR` | Path overrides (set in the image) | — |
@@ -160,7 +190,8 @@ models land in stock QEMU. Holobench itself uses only standard QEMU interfaces.
 - [ ] `HOLOBENCH_SECRET` set (or single-instance persistent secret confirmed)
 - [ ] TLS reverse proxy in front; Holobench bound to `127.0.0.1`
 - [ ] `HOLOBENCH_ALLOWED_ORIGINS` set to the public origin
-- [ ] Per-session resource caps (cgroups preferred; `NICE`/`MEM_CAP_MB` fallback)
+- [ ] Per-session cgroup caps on (`HOLOBENCH_CGROUP=1` + a delegated parent;
+      verify `memory.max`/`pids.max`/`cpu.max` applied); `NICE` set
 - [ ] Session quotas set; work dir on a quota'd filesystem
 - [ ] `HOLOBENCH_ALLOW_CLIENT_ASSETS` unset; only operators write `profiles/`
 - [ ] `data/` not world-readable; backups exclude it or encrypt it

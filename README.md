@@ -97,7 +97,7 @@ QEMU i.MX SoC models, through stock interfaces only.
 | 4 | Reservations + "remaining time" countdown + extend + factory-reset reinstall | ✅ |
 | 5 | Introspection — memory map, device tree, live QMP events, gdbstub, snapshots | ✅ |
 | 5+ | **Virtual camera** — feed host images through the ISI into the guest's V4L2 capture (`/dev/video0`) | ✅ |
-| 6 | Hardening — auth (token expiry, login throttle, WS-origin, persistent key), per-session resource caps, asset-path lockdown, [deploy guide](docs/DEPLOY.md) | ◐ container/cgroup isolation next |
+| 6 | Hardening — auth (token expiry, login throttle, WS-origin, persistent key), **per-session cgroup v2 caps** (memory/pids/cpu), asset-path lockdown, [deploy guide](docs/DEPLOY.md) | ◐ optional netns/mount-ns next |
 
 Boards: **i.MX 91 / 93 / 95**, each in two flavors — a quick **busybox** profile
 and a **full BSP distro** (`-sd`) profile that boots the real NXP `.wic`. All

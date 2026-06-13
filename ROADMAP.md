@@ -296,10 +296,18 @@ Done (2026-06-12 hardening pass)
 - `[x]` Deploy guide: `docs/DEPLOY.md` (TLS reverse-proxy, secret, origins,
   resource caps/cgroups, quotas, env reference, hardening checklist).
 
+- `[x]` **Per-session cgroup v2 isolation** (`session/isolation.py`): each board's
+  QEMU runs in its own cgroup with hard `memory.max`/`pids.max`/`cpu.max` it can't
+  exceed; opt-in (`HOLOBENCH_CGROUP=1`, auto-detects the delegated parent),
+  graceful no-op when unavailable, torn down on session end. Validated live
+  (memory+pids on a delegated user session). Network is already isolated by
+  design (user-mode slirp NICs — no host iface); per-session work dir gives FS
+  containment.
+
 Remaining
-- `[ ]` **Container/cgroup per-session isolation** (the namespace backend the
-  session abstraction was built for) — hard CPU/mem caps + netns/mount-ns per
-  board. The biggest remaining lift.
+- `[ ]` Optional **netns/mount-ns** per board (slirp already covers network; this
+  is defense-in-depth, not load-bearing). The cgroup backend covers the
+  CPU/mem/pids DoS surface that mattered most.
 - `[ ]` Audit log (who booted/reset/reinstalled what); admin user-mgmt over the API.
 - `[ ]` Disk quota for per-session overlays/uploads.
 
