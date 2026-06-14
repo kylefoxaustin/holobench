@@ -101,7 +101,12 @@ def _origin_ok(headers) -> bool:
     return urlparse(origin).netloc == headers.get("host")
 
 # Paths under /api that don't require authentication.
-_OPEN_PATHS = {"/api/login"}
+_OPEN_PATHS = {"/api/login", "/api/public-config"}
+
+# Optional demo credentials surfaced on the login screen so a first-time user can
+# try the instance without hunting for a password. Format: "username:password".
+# Unset (the default) = nothing shown — keep it unset for any real deployment.
+_DEMO_LOGIN = os.environ.get("HOLOBENCH_DEMO_LOGIN") or None
 _SESSION_PATH_RE = re.compile(r"^/api/sessions/([^/]+)(?:/|$)")
 
 
@@ -240,6 +245,23 @@ def _get_session(session_id: str) -> Session:
 
 
 # --- auth ------------------------------------------------------------------
+
+
+@app.get("/api/public-config")
+def public_config(request: Request) -> dict:
+    """Unauthenticated config the login screen needs before a token exists.
+
+    `demo_login` (when HOLOBENCH_DEMO_LOGIN is set) lets the UI show — and
+    one-click fill — try-it credentials. It only ever exposes what the operator
+    explicitly opted into advertising; it is NOT the user store.
+    """
+    auth: AuthService = request.app.state.auth
+    demo = None
+    if _DEMO_LOGIN and ":" in _DEMO_LOGIN:
+        u, _, p = _DEMO_LOGIN.partition(":")
+        if u and p:
+            demo = {"username": u, "password": p}
+    return {"auth_enabled": auth.enabled, "demo_login": demo}
 
 
 @app.post("/api/login")
