@@ -45,6 +45,9 @@ class SessionRuntime:
     disk_overlay: Optional[Path] = None
     # Per-session dir of raw frames fed to the board's ISI (virtual camera).
     camera_frames_dir: Optional[Path] = None
+    # Boot with the display.attach_dtb (panel attached) instead of the stock dtb,
+    # so the DPU has a connector/mode and scans out ("Attach LCD").
+    lcd_attached: bool = False
 
 
 class CommandError(Exception):
@@ -90,8 +93,18 @@ def _boot_args(profile: Profile, rt: SessionRuntime) -> list[str]:
     # but ONLY when the camera is "armed" (frames are staged: rt.camera_frames_dir
     # set). With no staged frames we boot the plain board (the ISI model fatally
     # errors on an empty frames dir, and an unused camera shouldn't alter boot).
+    # dtb precedence: an attached LCD panel wins (it's an explicit user action and
+    # the panel dtb is built from the stock base), then an armed camera's sensor
+    # dtb, else the board default. (LCD + camera together would need a merged dtb;
+    # that's a future combine — for now attaching the LCD boots without the sensor.)
     cam = profile.camera
-    dtb_name = cam.dtb if (cam.enabled and cam.dtb and rt.camera_frames_dir is not None) else art.dtb
+    disp = profile.display
+    if disp.attach_dtb and rt.lcd_attached:
+        dtb_name = disp.attach_dtb
+    elif cam.enabled and cam.dtb and rt.camera_frames_dir is not None:
+        dtb_name = cam.dtb
+    else:
+        dtb_name = art.dtb
     dtb = _resolve_artifact(dtb_name, rt.asset_dir)
     initrd = _resolve_artifact(art.initrd, rt.asset_dir)
     rootfs = _resolve_artifact(art.rootfs, rt.asset_dir)

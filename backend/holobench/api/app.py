@@ -198,7 +198,14 @@ def _session_view(s: Session) -> dict:
             {"name": p.name, "chardev": p.chardev, "role": p.role, "default": p.default}
             for p in s.profile.serial
         ],
-        "display": {"enabled": s.profile.display.enabled, "vnc": s.profile.display.vnc},
+        "display": {
+            "enabled": s.profile.display.enabled,
+            "vnc": s.profile.display.vnc,
+            # An attachable panel exists for this board -> the UI offers "Attach LCD".
+            "attachable": bool(s.profile.display.attach_dtb),
+            "attach_label": s.profile.display.attach_label,
+            "lcd_attached": s.lcd_attached,
+        },
         "file_injection": {
             "nine_p": s.profile.file_injection.nine_p.enabled,
             "tftp": s.profile.file_injection.tftp.enabled,
@@ -461,6 +468,9 @@ async def session_action(session_id: str, action: str, request: Request) -> dict
             return {"id": session_id, "state": "stopped"}
         elif action == "reinstall":
             new = await mgr.reinstall(session_id)
+            return _session_view(new)
+        elif action in ("attach_lcd", "detach_lcd"):
+            new = await mgr.set_lcd(session_id, on=(action == "attach_lcd"))
             return _session_view(new)
         else:
             raise HTTPException(status_code=400, detail=f"unknown action '{action}'")

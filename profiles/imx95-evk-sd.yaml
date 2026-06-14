@@ -54,7 +54,30 @@ boot:
 serial:
   - { name: "A-core console", chardev: console0, role: a-core, default: true }
 
-display: { enabled: true, device: "dpu", vnc: false }
+# The stock imx95-19x19-evk is FAITHFUL: the DPU is enabled but no panel is
+# attached (just like a bare EVK), so DRM reports "Cannot find any crtc or sizes"
+# and the LCD stays dark — correct, not a bug. attach_dtb points at a dtb that
+# splices the EVK reference 1280x800 LVDS chain (DPU→pixel-interleaver→LDB ch0→
+# LVDS0-phy + panel-lvds) so DRM gets a connector/mode and weston scans out. It's
+# generated from the base dtb by 95emulator's tests/lcd-panel/attach-lcd.sh — a
+# standard `-dtb` swap, no machine change. The UI's "Attach LCD" button reboots
+# the board with it. (Validated: /dev/fb0 + weston desktop render on the DPU.)
+#
+# TWO generated/provisioned artifacts back this (both reproducible, neither in git):
+#   1. attach_dtb (imx95-19x19-evk-lcd.dtb): regenerate with tools/make-lcd-dtb.sh
+#      (wraps 95emulator's tests/lcd-panel/attach-lcd.sh). docker/build.sh bakes it.
+#   2. The golden disk.wic's weston.ini is set to the PIXMAN software renderer
+#      ([core] use-g2d=false / renderer=pixman). REQUIRED for a desktop: there's no
+#      Mali GPU in the model and i.MX "G2D" is the Vivante GPU's 2D (not the DPU),
+#      so the default GL/g2d path can't render — weston would exit and the panel
+#      stays black. Done once in-guest then committed into the golden (95's
+#      tests/weston uses the same weston.ini). Already baked into this repo's golden.
+display:
+  enabled: true
+  device: "dpu"
+  vnc: false
+  attach_dtb: imx95-19x19-evk-lcd.dtb
+  attach_label: "1280×800 LVDS"
 
 net: { user_nics: 1 }
 

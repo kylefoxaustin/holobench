@@ -124,6 +124,28 @@ def test_imx95_carries_loadbearing_m33_loader(tmp_path):
     assert loader and "cpu-num=6" in loader[0] and "m33_image" in loader[0]
 
 
+def test_imx95_attach_lcd_swaps_dtb(tmp_path):
+    p = load_profile("imx95-evk-sd")
+    assert p.display.attach_dtb  # profile declares an attachable panel
+
+    def dtb_for(lcd):
+        rt = SessionRuntime(
+            work_dir=tmp_path,
+            qmp_socket=tmp_path / "qmp.sock",
+            serial_sockets={"console0": tmp_path / "console0.sock"},
+            asset_dir=Path("/assets"),
+            lcd_attached=lcd,
+        )
+        argv = build_command(p, rt)
+        return argv[argv.index("-dtb") + 1]
+
+    # Default boot uses the stock (faithful, panel-less) dtb; attaching the LCD
+    # swaps to display.attach_dtb so the DPU gets a connector/mode and scans out.
+    assert dtb_for(False).endswith(p.boot.artifacts.dtb)
+    assert dtb_for(True).endswith(p.display.attach_dtb)
+    assert dtb_for(True) != dtb_for(False)
+
+
 def test_image_swap_drive_attachment(tmp_path):
     # target_drive picks the attachment: 95 = eMMC, 91-sd = SD card.
     overlay = tmp_path / "disk-overlay.qcow2"

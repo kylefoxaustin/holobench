@@ -83,6 +83,13 @@ class DisplaySpec(_Strict):
     enabled: bool = False
     device: Optional[str] = None
     vnc: bool = False
+    # Optional: a dtb that attaches a panel so the DPU has a connector/mode and
+    # actually scans out. The stock board is faithfully panel-less (DRM "Cannot
+    # find any crtc or sizes"); when set, the UI offers an "Attach LCD" control
+    # that reboots the board with this dtb. Generated from the board's base dtb by
+    # the emulator's own panel-attach script — still a standard `-dtb` swap.
+    attach_dtb: Optional[str] = None
+    attach_label: Optional[str] = None  # human label, e.g. "1280×800 LVDS"
 
 
 # --- Networking ------------------------------------------------------------

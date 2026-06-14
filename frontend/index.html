@@ -87,20 +87,37 @@
       return html`<div ref=${elRef} class="h-full w-full"></div>`;
     }
 
-    function Display({ session }) {
+    function Display({ session, onAction, busy }) {
       const [ts, setTs] = useState(Date.now());
       useEffect(() => {
         const id = setInterval(() => setTs(Date.now()), 1500);
         return () => clearInterval(id);
       }, [session.id]);
       const src = withToken(`/api/sessions/${session.id}/screen.png?ts=${ts}`);
+      const disp = session.display || {};
+      const lbl = disp.attach_label ? ` (${disp.attach_label})` : "";
       return html`
         <div class="h-full flex flex-col">
-          <div class="text-xs text-slate-500 mb-1">LCD / framebuffer
-            <span class="text-slate-600">— screendump · ~1.5s</span></div>
-          <div class="flex-1 min-h-0 flex items-center justify-center bg-black rounded border border-slate-800 overflow-hidden">
+          <div class="flex items-center justify-between mb-1">
+            <div class="text-xs text-slate-500">LCD / framebuffer
+              <span class="text-slate-600">— screendump · ~1.5s</span></div>
+            ${disp.attachable && onAction && html`
+              ${disp.lcd_attached
+                ? html`<button disabled=${busy} onClick=${() => onAction("detach_lcd")}
+                    class="px-2 py-0.5 rounded bg-slate-700 hover:bg-slate-600 text-xs disabled:opacity-50"
+                    title="reboot the board with no panel (faithful bare EVK)">Detach LCD</button>`
+                : html`<button disabled=${busy} onClick=${() => onAction("attach_lcd")}
+                    class="px-2 py-0.5 rounded bg-emerald-700 hover:bg-emerald-600 text-xs disabled:opacity-50"
+                    title="attach a panel so the DPU scans out — reboots the board">Attach LCD${lbl}</button>`}`}
+          </div>
+          <div class="relative flex-1 min-h-0 flex items-center justify-center bg-black rounded border border-slate-800 overflow-hidden">
             <img src=${src} alt="framebuffer" class="max-h-full max-w-full object-contain"
                  style=${{ imageRendering: "pixelated" }} />
+            ${disp.attachable && !disp.lcd_attached && html`
+              <div class="absolute inset-x-0 bottom-0 p-2 text-center text-[11px] text-slate-400 bg-slate-900/70">
+                Bare EVK — no panel attached, so the DPU has nothing to scan out (faithful to real hardware).
+                Click <span class="text-emerald-300">Attach LCD</span> to plug in a ${disp.attach_label || "panel"} and reboot.
+              </div>`}
           </div>
         </div>`;
     }
@@ -371,7 +388,7 @@
         </div>`;
     }
 
-    function RightPanel({ session }) {
+    function RightPanel({ session, onAction, busy }) {
       const fi = session.file_injection || {}, ins = session.introspection || {};
       const tabs = [];
       if (session.display && session.display.enabled) tabs.push(["lcd", "LCD"]);
@@ -395,7 +412,7 @@
               </button>`)}
           </div>
           <div class="flex-1 min-h-0">
-            ${cur === "lcd" && html`<${Display} session=${session} />`}
+            ${cur === "lcd" && html`<${Display} session=${session} onAction=${onAction} busy=${busy} />`}
             ${cur === "mem" && html`<${TextPanel} session=${session} kind="mtree" label="Memory map — info mtree" />`}
             ${cur === "dev" && html`<${TextPanel} session=${session} kind="qtree" label="Device tree — info qtree" />`}
             ${cur === "evt" && html`<${EventsPanel} session=${session} />`}
@@ -590,7 +607,8 @@
         try {
           const r = await api(`/api/sessions/${session.id}/actions/${verb}`, { method: "POST" });
           if (verb === "stop") { setSession(null); setTab(null); }
-          else if (verb === "reinstall") { setSession(r); focusDefaultTab(r); }
+          // These relaunch the board (new session id) and return a full view.
+          else if (verb === "reinstall" || verb === "attach_lcd" || verb === "detach_lcd") { setSession(r); focusDefaultTab(r); }
           else setSession(s => ({ ...s, state: r.state }));
         } catch (e) { setErr(e.detail || String(e)); }
         finally { setBusy(false); }
@@ -687,7 +705,7 @@
                     <${Console} key=${session.id + ":" + (tab||"")} session=${session} chardev=${tab} />
                   </div>
                 </div>
-                <${RightPanel} session=${session} />
+                <${RightPanel} session=${session} onAction=${action} busy=${busy} />
               </div>
             `}
           </main>

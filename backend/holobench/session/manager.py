@@ -124,8 +124,12 @@ class Session:
         session_id: Optional[str] = None,
         owner: Optional[str] = None,
         minutes: Optional[int] = None,
+        lcd_attached: bool = False,
     ) -> None:
         self.profile = profile
+        # Boot with the attachable display panel (display.attach_dtb) so the DPU
+        # scans out. Carried across reinstall/relaunch so the LCD stays attached.
+        self.lcd_attached = bool(lcd_attached and profile.display.attach_dtb)
         self.id = session_id or f"{profile.id}-{uuid.uuid4().hex[:8]}"
         self.owner = owner  # username that reserved this board (None in open mode)
         self.state = SessionState.CREATED
@@ -188,6 +192,7 @@ class Session:
             snapshot_disk=snapshot_disk,
             disk_overlay=disk_overlay,
             camera_frames_dir=self.camera_frames_dir,
+            lcd_attached=self.lcd_attached,
         )
         self.argv: list[str] = []
         self._proc: Optional[asyncio.subprocess.Process] = None
@@ -654,13 +659,14 @@ class SessionManager:
         asset_dir: Optional[Path] = None,
         owner: Optional[str] = None,
         minutes: Optional[int] = None,
+        lcd_attached: bool = False,
     ) -> Session:
         if self._launch_sem is not None:
             await self._launch_sem.acquire()
         try:
             session = Session(
                 profile, base_dir=self.base_dir, asset_dir=asset_dir, owner=owner,
-                minutes=minutes,
+                minutes=minutes, lcd_attached=lcd_attached,
             )
             await session.launch()
             self._sessions[session.id] = session
@@ -695,7 +701,26 @@ class SessionManager:
         # Preserve the reservation kind across a reinstall (infinite stays infinite).
         minutes = 0 if old.infinite else max(1, (old.remaining_seconds or 0) // 60)
         await self.destroy(session_id)
-        return await self.launch(profile, asset_dir=asset_dir, owner=owner, minutes=minutes)
+        return await self.launch(profile, asset_dir=asset_dir, owner=owner, minutes=minutes,
+                                 lcd_attached=old.lcd_attached)
+
+    async def set_lcd(self, session_id: str, on: bool) -> Session:
+        """Reboot the board with/without the attachable display panel.
+
+        The panel is a boot-time dtb, so toggling it relaunches QEMU (like
+        reinstall) with display.attach_dtb selected. Reservation kind + owner are
+        preserved. No-op fast path if already in the requested state.
+        """
+        old = self.get(session_id)
+        if not old.profile.display.attach_dtb:
+            raise SessionError("this board has no attachable display panel")
+        if bool(old.lcd_attached) == bool(on):
+            return old
+        profile, asset_dir, owner = old.profile, old.asset_dir, old.owner
+        minutes = 0 if old.infinite else max(1, (old.remaining_seconds or 0) // 60)
+        await self.destroy(session_id)
+        return await self.launch(profile, asset_dir=asset_dir, owner=owner, minutes=minutes,
+                                 lcd_attached=on)
 
     async def destroy(self, session_id: str, *, cleanup: bool = True) -> None:
         session = self.get(session_id)
