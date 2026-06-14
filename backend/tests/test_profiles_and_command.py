@@ -118,8 +118,10 @@ def test_imx95_carries_loadbearing_m33_loader(tmp_path):
     argv = build_command(p, rt)
     assert argv[argv.index("-machine") + 1] == "imx95-19x19-evk"
     # The M33 System Manager loader must be present or Linux won't boot.
+    # (M=2 firmware m33_image_M2.elf is the density-correct default; the stock
+    # M=1 m33_image.elf is also valid — both are SM "m33_image*" loaders.)
     loader = [a for a in argv if a.startswith("loader,file=")]
-    assert loader and "cpu-num=6" in loader[0] and "m33_image.elf" in loader[0]
+    assert loader and "cpu-num=6" in loader[0] and "m33_image" in loader[0]
 
 
 def test_image_swap_drive_attachment(tmp_path):

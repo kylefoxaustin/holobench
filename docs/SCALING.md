@@ -2,29 +2,71 @@
 # Scaling Holobench — density & capacity planning
 
 How many emulated boards fit on a host, what gates it, and the knobs to tune.
-Numbers below are **measured**, not guessed (see the load test in §Measure).
+Numbers below are **measured**, not guessed (see §Measure).
 
 ## TL;DR
 
-- **CPU is the binding constraint, not RAM** — because these are **TCG** guests
-  (aarch64-on-x86, no KVM) and the i.MX profiles pass **`cpuidle.off=1`**, an
-  *idle* board **busy-spins** at **~1.24 host cores** instead of going to WFI.
-- **Measured (imx95-evk-sd, full distro):** ~**1.15 GB RSS/board**, and **25
-  idle boards saturated a 32-core box (97%)** purely spinning. RAM was a
-  non-issue (28 GB / 94 GB).
-- So today: ~**25 boards per 32-core box** (CPU-bound by idle spin). If the
-  emulator gains a working **WFI idle** (drop `cpuidle.off=1`), idle boards fall
-  to ~0 CPU → density flips to **RAM-bound (~50–80/box, more with KSM)** and you
-  can heavily **oversubscribe** idle boards — the real virtual-EVK-farm economics.
+- The density wall was an **idle-board host-CPU spin**, and it was **not** the
+  A55s or `cpuidle.off=1` (both red herrings) — it was the **M33 System Manager**
+  (a Cortex-M) busy-spinning ~1 host core per idle board. Two independent causes,
+  both now fixed in the emulator:
+  1. an **upstream QEMU Cortex-M WFI/WFE bug** (commit `d238858bff6`), fixed
+     upstream by `6fd2fcdc61b` *"teach arm_cpu_has_work about halting reasons"*;
+  2. the **stock (M=1) SM firmware's debug-monitor busy-poll** — a sibling cause,
+     removed by building the SM firmware **M=2**.
+- **Measured A/B (imx95-evk-sd, full distro, 32-core/94 GB host, N=25):** idle
+  host-CPU/board **108.8% → 14.9%** (≈7.3×), i.e. **25 idle boards: 27.2 → 3.7
+  host cores**. The limiter **flips CPU → RAM**. RSS is unchanged (~1.2 GB/board).
+- So density goes from **~25–29 boards/box (CPU-bound by the spin)** to
+  **RAM-bound** — ~50/box on this 94 GB host and **linear in box RAM** thereafter
+  (more with KSM). That's the real virtual-EVK-farm economics.
+
+> **Status / caveat.** The fix lives in the i.MX95 emulator fork (95's
+> `qemu-system-aarch64` cherry-pick + M-core `power_state`/`halt_reason` hygiene)
+> plus an **M=2** SM firmware build — it is **not upstream/shipping yet**.
+> Holobench's profile deliberately stays on **stock interfaces**; whether to point
+> `imx95-evk-sd` at the M=2 firmware is a coupling-posture decision (Kyle's call,
+> see ROADMAP) and is **not** baked in. The A/B below used a throwaway in-memory
+> firmware override, not a profile edit.
 
 ## What it costs per board (measured: imx95-evk-sd)
 
 | Resource | Per board | Notes |
 |---|---|---|
-| RAM (RSS) | ~1.15 GB | guest is `-m 4G` but lazily allocated; KSM dedups across identical distros |
+| RAM (RSS) | ~1.2 GB | guest is `-m 4G` but lazily allocated; KSM dedups across identical distros |
 | Disk | thin qcow2 overlay | golden `.wic` is shared read-only (page-cached once) |
 | Host ports | 0 | QMP + serial are unix sockets; net is slirp (no host port/board) |
-| **Idle CPU** | **~1.24 cores** | **only because of `cpuidle.off=1`** — the scaling wall |
+| **Idle CPU (M=1 SM fw)** | **~1.1 cores** | the old wall — M33 SM spin (WFI bug + debug-monitor poll) |
+| **Idle CPU (fixed qemu + M=2 fw)** | **~0.15 core** | spin gone; residual is timer ticks / settle, not a spin |
+
+## The idle-spin root cause (emulator-side, now fixed)
+
+The spin was **guest-invisible**: it never showed in guest counters or RSS, only
+in host-side per-thread CPU (`top -H -p <pid>` or `/proc/<pid>/task/*/stat`
+deltas — a "CPU N/TCG" thread pegged while the guest is idle). On the i.MX95 it
+was always **CPU 6/TCG = the M33 System Manager**; the A55s already WFI-halt to
+~0, and the M7 never takes an interrupt so it stayed clean.
+
+Two mechanisms, same 1-core symptom:
+1. **Upstream WFI bug** — `arm_cpu_has_work()` let the WFE *event register* gate
+   WFI for M-profile; M-profile exception entry/return set that register and only
+   WFE clears it, so an M-core that takes an IRQ then idles with `__WFI()` (never
+   WFE) busy-spins forever. Generic (reproduces on stock `mps2-an505`); fixed
+   upstream `6fd2fcdc61b`.
+2. **M=1 SM debug-monitor busy-poll** — independent of the WFI bug; the stock SM
+   firmware polls a monitor flag. Removed by an **M=2** firmware build (monitor
+   only on console keystroke, idles via WFI).
+
+Both are required to reach ~0: the qemu fix + M=2 firmware together. **Note**
+`cpuidle.off=1` stays in the profiles (the A55 *deep* PSCI idle still hangs) but
+it costs **no host CPU** — it was never the density lever.
+
+> **Fleet note (other boards):** the same upstream WFI fix is correct hygiene
+> everywhere but only matters if a board *runs an idling, interrupt-taking
+> Cortex-M*. **i.MX93** is affected (NPU/ethos-u M33) but its spin is a *firmware
+> busy-poll in a non-rebuildable ARM blob*, so it floors at ~1 core even after the
+> fix — density lever there is lazy/on-demand NPU-firmware load. **i.MX91** is
+> N/A (no Cortex-M instantiated; idle ≈ 11% of one core = ticks only).
 
 ## Knobs
 
@@ -38,18 +80,9 @@ Numbers below are **measured**, not guessed (see the load test in §Measure).
 
 Recommended starting point for a busy single host: `HOLOBENCH_CGROUP=1`,
 `HOLOBENCH_MAX_CONCURRENT_LAUNCHES=4`, `HOLOBENCH_LAUNCH_STAGGER_S=8`,
-`HOLOBENCH_LAZY_SERIAL=1`, plus a `HOLOBENCH_MAX_SESSIONS` sized to your core
-count (until the cpuidle spin is fixed, ~0.8 × cores is a sane ceiling).
-
-## The cpuidle lever (emulator-side)
-
-`cpuidle.off=1` is in the profiles because the i.MX models otherwise wedge at
-boot (the idle path — PSCI/SCMI `CPU_SUSPEND` via the M33 System Manager —
-doesn't yet resume cleanly). Fixing it (even a single shallow "standby"
-idle-state that halts the core to the next IRQ) is the single biggest density
-multiplier: it turns "idle boards cost ~1.24 cores each" into "idle boards cost
-~0," i.e. from CPU-bound ~25/box to RAM-bound with heavy oversubscription. This
-is tracked with the emulator repos, not Holobench.
+`HOLOBENCH_LAZY_SERIAL=1`. Until the M33 fix is in the binary you run against,
+size `HOLOBENCH_MAX_SESSIONS` to ~0.8 × cores (CPU-bound). Once it is, size to
+RAM (~`usable_GB / 1.2`).
 
 ## Beyond one host
 
@@ -61,9 +94,23 @@ drop in as the stepping stone. That's a future "scale-out" phase.
 
 ## Measure it yourself
 
-`/tmp`-style load harness used for the numbers above: boot N boards staggered
-under cgroups, then report avg RSS/board, host RAM delta, KSM dedup, and idle
-host-CPU/board. To reproduce, boot N `imx95-evk-sd` sessions via `SessionManager`
-with `HOLOBENCH_CGROUP=1`, wait for `login:`, then sample `/proc/stat` over ~10 s
-with all boards idle and sum `VmRSS` across the QEMU pids. (32-core/94 GB host,
-N=25 → 25/25 booted, 1158 MB/board, 97 % CPU idle-spin, ~1.24 cores/board.)
+Harness `/tmp/density_ab.py` (used for the A/B below): deep-copies the
+`imx95-evk-sd` profile, optionally swaps the M33 loader to the M=2 firmware,
+boots N idle boards staggered, waits for `login:`, settles, then samples
+**per-PID** host CPU (`/proc/<pid>/stat` utime+stime deltas) + RSS and computes
+the CPU- vs RAM-bound ceiling. Per-PID sampling isolates the measurement from any
+other QEMU on the box.
+
+**A/B result — 2026-06-14, 32-core / 94 GB host, imx95-evk-sd full distro,**
+**fixed qemu, `cpuidle.off=1`, 45 s settle, both legs N=25 (25/25 booted):**
+
+| Leg | SM firmware | idle CPU/board | RSS/board | 25 boards | limiter | ceiling/box |
+|---|---|---|---|---|---|---|
+| **Before** | M=1 (stock) | **108.8%** (105.9–119.5) | 1200 MB | **27.2 cores** | CPU | ~29 |
+| **After**  | M=2 | **14.9%** (13.8–17.1) | 1202 MB | **3.7 cores** | RAM | ~51 |
+
+Single-board cross-check: M=1 109.2% / M=2 10.6% — per-board cost holds under 25×
+load (no superlinear blow-up). Residual ~15% in the After leg is scheduling /
+timer-tick overhead at 25× concurrency measured while systemd was still settling
+post-login; it keeps dropping with a longer settle (single board → ~10%), and it
+is **not** a spin.

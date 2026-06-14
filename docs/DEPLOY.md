@@ -169,6 +169,27 @@ docker run -d --restart=unless-stopped \
 Create users with `docker exec <ctr> holobench user add ...` (persisted in the
 `holobench-data` volume). The image uses TCG (no `/dev/kvm`).
 
+### Rebuilding after the i.MX95 M33 density fix
+
+`docker/build.sh` resolves both the **forked qemu** (`qemu.binary`) and the
+**M33 SM firmware** (`loader,file=` in `extra_args`) straight from the profile,
+so an image built from the current profiles automatically bakes the fixed qemu
+(upstream WFI fix `6fd2fcdc61b` + 95's `power_state` hygiene) and the **M=2** SM
+firmware (`m33_image_M2.elf`). That's the configuration that drops an *idle*
+board from ~1.1 host cores to ~0.15 (CPU-bound → RAM-bound; see
+`docs/SCALING.md`). Nothing extra to pass — just rebuild:
+
+```bash
+docker/build.sh imx95-evk-sd imx95-evk-sd     # fat full-distro i.MX95 image (~15 GB)
+# bakes: fixed qemu-system-aarch64, m33_image_M2.elf, disk.wic, Image, dtb, *.ko
+```
+
+It bakes the **one** loader for the `QEMU_BOARD` profile (rewritten to an
+in-container path); a second i.MX95 profile baked only as an *asset* board keeps
+its host-absolute loader path, so build the full-distro board as the `QEMU_BOARD`.
+Verify after boot with `top -H -p <qemu_pid>` — no `CPU N/TCG` thread should peg
+while the guest is idle.
+
 ## 6. Publishing caveat (Prime Directive)
 
 The fat images embed the **forked** i.MX QEMU (the models aren't upstreamed

@@ -23,9 +23,16 @@ qemu:
   audio:   none
   # LOAD-BEARING M33 System Manager firmware (serves SCMI; A55 won't boot without
   # it) + null-padded 2nd LPUART.
+  # M=2 build: the SM monitor only wakes on a console keystroke and otherwise idles
+  # via WFI, instead of the stock M=1 firmware's debug-monitor busy-poll. Combined
+  # with the emulator's Cortex-M WFI fix (upstream 6fd2fcdc61b + 95's power_state
+  # hygiene), an IDLE board drops from ~1.1 host cores to ~0.15 — flipping farm
+  # density from CPU-bound (~29/box) to RAM-bound (~51 on a 94GB box, linear in
+  # RAM). Measured A/B: docs/SCALING.md. The M=1 elf still boots; M=2 is the
+  # density-correct default now that the fix is in the binary this profile targets.
   extra_args:
     - "-device"
-    - "loader,file=/home/kyle/Documents/nxp/sources/imx-sm/build/mx95evk/m33_image.elf,cpu-num=6"
+    - "loader,file=/home/kyle/Documents/GitHub/95emulator/build/m33_image_M2.elf,cpu-num=6"
     - "-serial"
     - "null"
 

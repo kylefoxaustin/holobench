@@ -444,6 +444,77 @@
         </div>`;
     }
 
+    function AdminUsers({ me, onClose }) {
+      const [users, setUsers] = useState([]);
+      const [u, setU] = useState(""); const [p, setP] = useState(""); const [role, setRole] = useState("user");
+      const [err, setErr] = useState(""); const [busy, setBusy] = useState(false);
+      const refresh = useCallback(() => {
+        api("/api/users").then(setUsers).catch(e => setErr(e.detail || `couldn't list users (${e.status || e})`));
+      }, []);
+      useEffect(() => { refresh(); }, [refresh]);
+      const add = async (e) => {
+        if (e) e.preventDefault();
+        if (!u || !p) { setErr("username and password required"); return; }
+        setBusy(true); setErr("");
+        try {
+          await api("/api/users", {
+            method: "POST", headers: { "Content-Type": "application/json" },
+            body: JSON.stringify({ username: u, password: p, role }),
+          });
+          setU(""); setP(""); setRole("user"); refresh();
+        } catch (ex) { setErr(ex.detail || `add failed (${ex.status || ex})`); }
+        finally { setBusy(false); }
+      };
+      const del = async (name) => {
+        setErr("");
+        try {
+          const r = await authFetch(`/api/users/${encodeURIComponent(name)}`, { method: "DELETE" });
+          if (!r.ok) { const e = await r.json().catch(() => ({})); setErr(e.detail || `delete failed (${r.status})`); }
+        } catch (ex) { setErr(`delete failed: ${ex}`); }
+        refresh();
+      };
+      return html`
+        <div class="fixed inset-0 z-50 flex items-center justify-center bg-black/60 p-4" onClick=${onClose}>
+          <div class="bg-slate-900 border border-slate-800 rounded-lg w-[32rem] max-w-[92vw] max-h-[85vh] flex flex-col shadow-xl"
+               onClick=${e => e.stopPropagation()}>
+            <div class="flex items-center justify-between px-4 py-3 border-b border-slate-800">
+              <div class="font-semibold">User management <span class="text-xs text-slate-500 font-normal">— admin</span></div>
+              <button onClick=${onClose} class="text-slate-400 hover:text-slate-200 text-lg leading-none">✕</button>
+            </div>
+            <form onSubmit=${add} class="px-4 py-3 border-b border-slate-800 flex gap-2 items-center flex-wrap">
+              <input value=${u} onChange=${e => setU(e.target.value)} placeholder="username" autoComplete="off"
+                class="flex-1 min-w-[8rem] bg-slate-800 border border-slate-700 rounded px-2 py-1 text-sm" />
+              <input type="password" value=${p} onChange=${e => setP(e.target.value)} placeholder="password" autoComplete="new-password"
+                class="flex-1 min-w-[8rem] bg-slate-800 border border-slate-700 rounded px-2 py-1 text-sm" />
+              <select value=${role} onChange=${e => setRole(e.target.value)}
+                class="bg-slate-800 border border-slate-700 rounded px-2 py-1 text-sm">
+                <option value="user">user</option>
+                <option value="admin">admin</option>
+              </select>
+              <button type="submit" disabled=${busy || !u || !p}
+                class="px-3 py-1 rounded bg-emerald-600 hover:bg-emerald-500 text-sm font-medium disabled:opacity-50">${busy ? "…" : "Add"}</button>
+            </form>
+            ${err && html`<div class="px-4 py-2 text-xs text-rose-400 break-words">${err}</div>`}
+            <ul class="flex-1 min-h-0 overflow-auto px-2 py-2 text-sm">
+              ${users.length === 0 && html`<li class="text-slate-600 px-2 py-1">no users</li>`}
+              ${users.map(usr => html`
+                <li key=${usr.username} class="flex justify-between items-center py-1 px-2 hover:bg-slate-800/50 rounded">
+                  <span class="truncate">${usr.username}
+                    <span class="ml-1 px-1.5 py-0.5 rounded text-[10px] ${usr.role === "admin" ? "bg-emerald-900 text-emerald-300" : "bg-slate-700 text-slate-300"}">${usr.role}</span>
+                    ${usr.username === me.username && html`<span class="ml-1 text-[10px] text-slate-500">(you)</span>`}
+                  </span>
+                  ${usr.username !== me.username
+                    ? html`<button onClick=${() => del(usr.username)} class="text-rose-400 text-xs hover:text-rose-300 px-1">remove</button>`
+                    : html`<span class="text-slate-600 text-xs px-1">—</span>`}
+                </li>`)}
+            </ul>
+            <div class="px-4 py-2 border-t border-slate-800 text-[11px] text-slate-600">
+              Adding an existing username updates their password/role. You can't remove your own account.
+            </div>
+          </div>
+        </div>`;
+    }
+
     function App() {
       const [profiles, setProfiles] = useState([]);
       const [selected, setSelected] = useState("");
@@ -457,6 +528,7 @@
         const id = setInterval(() => setNow(Date.now() / 1000), 1000);
         return () => clearInterval(id);
       }, []);
+      const [adminOpen, setAdminOpen] = useState(false);
       // undefined = checking, null = needs login, object = authenticated
       const [me, setMe] = useState(undefined);
       const loadMe = useCallback(() => {
@@ -526,6 +598,8 @@
             <div class="flex-1"></div>
             ${me && me.auth_enabled && html`
               <span class="text-xs text-slate-400">${me.username}${me.role === "admin" ? " · admin" : ""}</span>
+              ${me.role === "admin" && html`
+                <button onClick=${() => setAdminOpen(true)} class="px-2 py-1 rounded bg-slate-800 hover:bg-slate-700 text-xs" title="manage users">Users</button>`}
               <button onClick=${logout} class="px-2 py-1 rounded bg-slate-800 hover:bg-slate-700 text-xs">Logout</button>
               <span class="text-slate-700">|</span>`}
             ${!session && html`
@@ -597,6 +671,8 @@
               </div>
             `}
           </main>
+
+          ${adminOpen && html`<${AdminUsers} me=${me} onClose=${() => setAdminOpen(false)} />`}
         </div>`;
     }
 

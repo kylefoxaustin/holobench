@@ -27,11 +27,15 @@ qemu:
   # smp omitted: machine default (6x A55 + M33 = max_cpus 7). The M33 is CPU#6.
   audio:   none
   # LOAD-BEARING M33 System Manager firmware (see header) + null-padded 2nd
-  # LPUART. Override the loader path to match your imx-sm build. (NICs are in
-  # the net: section below; ENETC auto-attaches to the user NIC.)
+  # LPUART. (NICs are in the net: section below; ENETC auto-attaches to the user
+  # NIC.)
+  # M=2 build (idle via WFI, no debug-monitor busy-poll) — the density-correct SM
+  # firmware now that the Cortex-M WFI fix is in the targeted binary. See
+  # docs/SCALING.md for the measured idle-CPU-per-board A/B. The stock M=1 elf
+  # still boots if you point the loader back at your imx-sm build.
   extra_args:
     - "-device"
-    - "loader,file=/home/kyle/Documents/nxp/sources/imx-sm/build/mx95evk/m33_image.elf,cpu-num=6"
+    - "loader,file=/home/kyle/Documents/GitHub/95emulator/build/m33_image_M2.elf,cpu-num=6"
     - "-serial"
     - "null"
 
