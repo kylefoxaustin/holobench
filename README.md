@@ -7,6 +7,13 @@
 
 ---
 
+![Holobench — an i.MX95 EVK booted in the browser: live serial console on the left, the board's LCD framebuffer (a Weston desktop) on the right, with power/reset/reservation controls in the header](docs/img/board-view.png)
+
+> *Reserve a board → a live serial console (left) and the board's LCD framebuffer
+> (right), plus power / reset / reinstall / reservation controls. The board is a
+> QEMU machine model — no silicon. (Here: i.MX 95 EVK booted to a root shell with
+> an LVDS panel attached.)*
+
 ## The one-liner
 
 You reserve a board, you get a browser tab with a live serial console, the
@@ -42,6 +49,13 @@ have spent months building. Holobench is the front end that gap was waiting for.
 - Not a fork of QEMU. Not a patch to any machine model.
 - Not coupled to i.MX. The i.MX 95/93/91 are the first profiles, not the design.
 - Not a general datacenter VM manager. The unit of work is a *board*, not a VM.
+
+## A look at the UI
+
+| | |
+|:--:|:--:|
+| <img src="docs/img/login.png" width="440" alt="Sign-in screen with demo account"><br>**Sign in** — optional auth; an opt-in demo account is shown right on the login screen so first-timers can try it without hunting for a password. | <img src="docs/img/landing.png" width="440" alt="Board picker"><br>**Reserve a board** — pick a profile (i.MX 91 / 93 / 95), then *Reserve & Boot*. Reservations are time-boxed or unlimited. |
+| <img src="docs/img/admin-users.png" width="440" alt="User management panel"><br>**Manage users** (admin) — add / remove / set roles over a mediated API; the browser never touches QMP. | <img src="docs/img/board-view.png" width="440" alt="Booted board with console and LCD"><br>**Drive the board** — serial console, LCD panel (*Attach LCD*), file injection, live introspection (memory map, device tree, QMP events), gdbstub, snapshots. |
 
 ## The Prime Directive (read this before touching anything)
 
