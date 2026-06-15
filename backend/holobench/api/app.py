@@ -110,10 +110,29 @@ _DEMO_LOGIN = os.environ.get("HOLOBENCH_DEMO_LOGIN") or None
 _SESSION_PATH_RE = re.compile(r"^/api/sessions/([^/]+)(?:/|$)")
 
 
+def _bootstrap_admin(auth: AuthService) -> None:
+    """Seed an admin from env at startup so a container can turn auth ON without an
+    exec + restart (the store is read once, here). HOLOBENCH_ADMIN_USER +
+    HOLOBENCH_ADMIN_PASSWORD upsert that admin -> auth enabled -> login + Admin
+    panel appear. No-op if either is unset (stays open-mode)."""
+    u = os.environ.get("HOLOBENCH_ADMIN_USER")
+    p = os.environ.get("HOLOBENCH_ADMIN_PASSWORD")
+    if u and p:
+        auth.store.add(u, p, role="admin")
+        logging.getLogger("holobench").info(
+            "bootstrapped admin user '%s' from env (auth enforced)", u)
+
+
 @asynccontextmanager
 async def lifespan(app: FastAPI):
     app.state.manager = SessionManager()
-    app.state.auth = AuthService()
+    auth = AuthService()
+    _bootstrap_admin(auth)
+    # Re-init so the signing key matches the now-configured store (persistent
+    # secret) rather than the ephemeral open-mode key created before the seed.
+    if auth.enabled and not os.environ.get("HOLOBENCH_SECRET"):
+        auth = AuthService(store=auth.store)
+    app.state.auth = auth
     reaper = asyncio.create_task(app.state.manager.run_reaper())
     try:
         yield

@@ -34,5 +34,7 @@ ENV HOLOBENCH_QEMU=/opt/holobench/qemu/qemu-system-aarch64 \
 
 WORKDIR /opt/holobench
 EXPOSE 8080
-# Set HOLOBENCH_TOKEN at run time to require auth on /api/*.
+# Runs OPEN (no login) by default. To require auth + show the Admin panel, set
+# HOLOBENCH_ADMIN_USER + HOLOBENCH_ADMIN_PASSWORD at run time (seeds an admin on
+# startup). Optionally HOLOBENCH_DEMO_LOGIN=user:pass shows a one-click demo box.
 CMD ["holobench", "serve", "--host", "0.0.0.0", "--port", "8080"]

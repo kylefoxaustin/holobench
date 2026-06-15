@@ -11,7 +11,9 @@ services:
     image: holobench:imx91-evk
     ports:
       - "8080:8080"
-    # Uncomment to require auth on /api/* (the UI page stays open to load):
+    # Uncomment to require auth + unlock the Admin panel (seeds an admin on start):
     # environment:
-    #   HOLOBENCH_TOKEN: "change-me"
+    #   HOLOBENCH_ADMIN_USER: "admin"
+    #   HOLOBENCH_ADMIN_PASSWORD: "change-me"
+    #   HOLOBENCH_DEMO_LOGIN: "admin:change-me"   # optional one-click demo box
     restart: unless-stopped

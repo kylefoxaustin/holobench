@@ -217,7 +217,7 @@ IMAGE=holobench:imx95-sd docker/build.sh imx95-evk-sd   # (IMAGE= overrides the 
 Holobench app, the chosen board's forked `qemu-system-aarch64`, the real boot
 artifacts (`Image`/`dtb`/`initrd.cpio.gz`/`disk.wic`), and any loader firmware
 the profile references (e.g. the i.MX95 M33 System Manager elf). The image uses
-TCG (no `/dev/kvm` needed). Add `-e HOLOBENCH_TOKEN=…` to require auth.
+TCG (no `/dev/kvm` needed). Add `-e HOLOBENCH_ADMIN_USER=admin -e HOLOBENCH_ADMIN_PASSWORD=…` to require auth + unlock the Admin panel.
 `docker/compose.yaml` runs a pre-built image. Path overrides: `HOLOBENCH_QEMU`
 (binary) and `HOLOBENCH_ASSET_ROOT` (assets) — set automatically inside the image.
 Full-distro images are large (the `.wic` dominates); a busybox image is ~1.7 GB.
@@ -246,7 +246,9 @@ Then (right-hand tabs): **Console** (log in as `root`, no password), **LCD**,
 **Host requirements:** **x86-64 Linux** + Docker, ~**30 GB** free disk, ~**8 GB**
 free RAM. (The image runs an aarch64 board under x86-64 QEMU/TCG — Apple-Silicon/
 ARM hosts would nest-emulate and crawl.) First boot takes ~1–2 min (full SoC
-emulation). Add `-e HOLOBENCH_TOKEN=secret` to require a login on the web UI.
+emulation). Runs **open** by default (no login); add `-e HOLOBENCH_ADMIN_USER=admin
+-e HOLOBENCH_ADMIN_PASSWORD=secret` to require a login and unlock the **Admin**
+panel (optionally `-e HOLOBENCH_DEMO_LOGIN=admin:secret` for a one-click demo box).
 
 > Pinned tag: `ghcr.io/kylefoxaustin/holobench:imx95-sd-v0.2.2` (bakes the i.MX95
 > M33 density fix — idle board ~0.15 host core, RAM-bound, see `docs/SCALING.md` —

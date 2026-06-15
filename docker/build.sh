@@ -80,4 +80,4 @@ docker build -t "$IMAGE" "$STAGE"
 echo
 echo "Built $IMAGE. Run it:"
 echo "  docker run --rm -p 8080:8080 $IMAGE"
-echo "  # open http://localhost:8080  (auth: add -e HOLOBENCH_TOKEN=secret)"
+echo "  # open http://localhost:8080  (open mode; auth+admin: -e HOLOBENCH_ADMIN_USER=admin -e HOLOBENCH_ADMIN_PASSWORD=secret)"
