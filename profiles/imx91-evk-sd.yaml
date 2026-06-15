@@ -42,7 +42,20 @@ boot:
 serial:
   - { name: "A-core console", chardev: console0, role: a-core, default: true }
 
-display: { enabled: true, device: "lcdif", vnc: false }
+# Faithful bare EVK: the stock imx91-11x11-evk.dtb has the LCDIFv3 display
+# subsystem present but NO panel ("display-subsystem: no available port", no
+# /dev/fb0) — same as a real board with nothing plugged in. attach_dtb points at
+# the BSP's panel-variant dtb (NXP ships it — no splice needed, unlike the 95):
+# the LCDIFv3 binds a CRTC, /dev/fb0 (800x480) comes up, and the model DMAs the
+# framebuffer to scanout. The UI's "Attach LCD" button swaps to it. 91 core image
+# is console-only (no weston, no GPU) so the panel shows the kernel/penguin/console
+# directly — no pixman config needed. (Scanout modeled + soak-validated by 91emu.)
+display:
+  enabled: true
+  device: "lcdif"
+  vnc: false
+  attach_dtb: imx91-11x11-evk-tianma-wvga-panel.dtb   # BSP panel-variant dtb (Tianma WVGA)
+  attach_label: "800×480 WVGA"
 
 net: { user_nics: 2 }
 

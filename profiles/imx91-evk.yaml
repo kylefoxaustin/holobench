@@ -37,8 +37,15 @@ boot:
 serial:
   - { name: "A-core console", chardev: console0, role: a-core, default: true }
 
-# LCDIF present; framebuffer is read via QMP screendump (no VNC confirmed yet).
-display: { enabled: true, device: "lcdif", vnc: false }
+# Faithful bare EVK: stock dtb has the LCDIFv3 subsystem but NO panel (no fb0).
+# attach_dtb = the BSP's panel-variant dtb (no splice needed); "Attach LCD" swaps
+# to it -> LCDIFv3 binds a CRTC, /dev/fb0 (800x480) scans out the penguin/console.
+display:
+  enabled: true
+  device: "lcdif"
+  vnc: false
+  attach_dtb: imx91-11x11-evk-tianma-wvga-panel.dtb   # BSP panel-variant dtb (Tianma WVGA)
+  attach_label: "800×480 WVGA"
 
 # 91 has TWO NICs: FEC (eth0) + ENET_QoS (eth1) -> two user-mode NICs.
 net: { user_nics: 2 }
