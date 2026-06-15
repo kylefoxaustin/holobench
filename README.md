@@ -2,9 +2,6 @@
 
 **A board-farm-style web front end for QEMU machine models. A "virtual EVK."**
 
-> Project name token used throughout this repo: `Holobench`.
-> To rename: find-replace `Holobench` → your chosen name across all files.
-
 ---
 
 ![Holobench — an i.MX95 EVK booted in the browser: live serial console on the left, the board's LCD framebuffer (a Weston desktop) on the right, with power/reset/reservation controls in the header](docs/img/board-view.png)
@@ -112,6 +109,7 @@ QEMU i.MX SoC models, through stock interfaces only.
 | 5 | Introspection — memory map, device tree, live QMP events, gdbstub, snapshots | ✅ |
 | 5+ | **Virtual camera** — feed host images through the ISI into the guest's V4L2 capture (`/dev/video0`) | ✅ |
 | 6 | Hardening — auth (token expiry, login throttle, WS-origin, persistent key), **per-session cgroup v2 caps** (memory/pids/cpu), asset-path lockdown, audit log, [deploy guide](docs/DEPLOY.md) | ◐ optional netns/mount-ns next |
+| 6+ | **Accounts & admin** — self-service register / first-run onboarding, user management (add / remove / set-role), and an **admin fleet view**: every running board across all users with per-board CPU (per-core + % of host) / RAM / disk / idle + one-click **kill** | ✅ |
 
 Boards: **i.MX 91 / 93 / 95**, each in two flavors — a quick **busybox** profile
 and a **full BSP distro** (`-sd`) profile that boots the real NXP `.wic`. All
@@ -204,6 +202,10 @@ and an **Active sessions** fleet view — every running board across all users w
 per-board **CPU (per-core + % of host) / RAM / disk / idle / uptime** and one-click
 **Kill** for hogs, orphaned, or long-idle boards.
 
+| | |
+|:--:|:--:|
+| <img src="docs/img/onboarding.png" width="440" alt="First-run: create your admin account"><br>**First-run onboarding** — a fresh instance prompts you to create the admin account (first user becomes admin); no CLI needed. | <img src="docs/img/admin-users.png" width="440" alt="User management — add/remove/role"><br>**User management** — add / remove users and set roles from **Admin → Users**. |
+
 Quotas (0 = unlimited): `HOLOBENCH_MAX_PER_USER`, `HOLOBENCH_MAX_SESSIONS`.
 Users live in `data/users.yaml` (gitignored) or `$HOLOBENCH_USERS`.
 
@@ -262,11 +264,12 @@ emulation). Runs **open** by default (no login); add `-e HOLOBENCH_ADMIN_USER=ad
 -e HOLOBENCH_ADMIN_PASSWORD=secret` to require a login and unlock the **Admin**
 panel (optionally `-e HOLOBENCH_DEMO_LOGIN=admin:secret` for a one-click demo box).
 
-> Pinned tag: `ghcr.io/kylefoxaustin/holobench:imx95-sd-v0.2.2` (bakes the i.MX95
+> Pinned tag: `ghcr.io/kylefoxaustin/holobench:imx95-sd-v0.2.3` (bakes the i.MX95
 > M33 density fix — idle board ~0.15 host core, RAM-bound, see `docs/SCALING.md` —
-> the **admin fleet view** (per-board CPU/RAM/disk/idle + kill), demo-login, and
-> the **Attach LCD** button: reboots the board with an LVDS panel dtb so the DPU
-> scans out a Weston desktop). The rolling `:imx95-sd` tag now points here too.
+> self-service **register / first-run onboarding**, the **admin fleet view**
+> (per-board CPU per-core + % of host / RAM / disk / idle + kill), and the
+> **Attach LCD** button: reboots the board with an LVDS panel dtb so the DPU scans
+> out a Weston desktop). The rolling `:imx95-sd` tag now points here too.
 >
 > The **i.MX 91** and **i.MX 93** boards ship too — same Attach-LCD desktop, lighter
 > images: `ghcr.io/kylefoxaustin/holobench:imx91-sd` and `:imx93-sd` (~3.8 GB each).
@@ -323,6 +326,11 @@ make these SoCs boot under emulation:
 
 All three use direct-kernel boot (`-kernel`/`-dtb`), TCG (no KVM), and a
 standard `-serial` chardev for the A-core console.
+
+## Renaming / rebranding
+
+`Holobench` is just a name token — to rebrand a fork, find-replace `Holobench`
+(and the lowercase `holobench` CLI/package) across the tree.
 
 ## License & credits
 

@@ -202,6 +202,9 @@ models land in stock QEMU. Holobench itself uses only standard QEMU interfaces.
 |---|---|---|
 | `HOLOBENCH_SECRET` | Token signing key (set in prod / multi-worker) | auto-persist to `data/secret` |
 | `HOLOBENCH_USERS` | User store path | `data/users.yaml` |
+| `HOLOBENCH_ADMIN_USER` / `HOLOBENCH_ADMIN_PASSWORD` | Seed an admin at startup (enables auth without a CLI step — ideal for containers) | unset |
+| `HOLOBENCH_ALLOW_REGISTRATION` | Allow self-service signup (role *user*) from the login screen. First account on a fresh instance always registers as admin (onboarding) regardless | off |
+| `HOLOBENCH_DEMO_LOGIN` | `user:pass` shown as a one-click demo box on the login screen (try-it; leave unset in prod) | unset |
 | `HOLOBENCH_LOGIN_MAX_FAILS` / `_WINDOW_S` | Login brute-force throttle | 5 / 60 |
 | `HOLOBENCH_ALLOWED_ORIGINS` | Console-WS origin allowlist | same-origin |
 | `HOLOBENCH_NICE` | `nice` for each QEMU | 0 |
