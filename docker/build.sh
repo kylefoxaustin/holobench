@@ -64,7 +64,9 @@ done
 # Bake any loader firmware referenced in the QEMU_BOARD profile's extra_args
 # (e.g. the i.MX95 M33 System Manager elf, a host-absolute path) and rewrite the
 # staged profile to point at the in-container copy.
-loader_file="$(grep -oE 'loader,file=[^",]+' "profiles/$QEMU_BOARD.yaml" | head -1 | sed 's/loader,file=//')"
+# (|| true: boards without an M33 loader — e.g. the i.MX91, single A55 — have no
+# match, and a no-match grep under `set -o pipefail` would otherwise abort here.)
+loader_file="$(grep -oE 'loader,file=[^",]+' "profiles/$QEMU_BOARD.yaml" | head -1 | sed 's/loader,file=//' || true)"
 if [ -n "$loader_file" ] && [ -f "$loader_file" ]; then
   mkdir -p "$STAGE/extra"
   cp -L "$loader_file" "$STAGE/extra/$(basename "$loader_file")"
