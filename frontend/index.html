@@ -672,8 +672,13 @@
       const [adminOpen, setAdminOpen] = useState(false);
       // undefined = checking, null = needs login, object = authenticated
       const [me, setMe] = useState(undefined);
+      // null = unknown; object once /api/public-config resolves. needs_onboarding
+      // forces the Login screen even in open mode (where /api/me hands back a
+      // synthetic admin) so a fresh instance can create its first admin.
+      const [pub, setPub] = useState(null);
       const loadMe = useCallback(() => {
         api("/api/me").then(setMe).catch(() => setMe(null));
+        api("/api/public-config").then(setPub).catch(() => setPub({}));
       }, []);
       useEffect(() => { loadMe(); }, [loadMe]);
       const logout = () => { setToken(null); setSession(null); setMe(null); };
@@ -731,9 +736,12 @@
 
       const sel = profiles.find(p => p.id === selected);
 
-      if (me === undefined)
+      if (me === undefined || pub === null)
         return html`<div class="h-full flex items-center justify-center text-slate-500">Loading…</div>`;
-      if (me === null) return html`<${Login} onLogin=${loadMe} />`;
+      // Need a login when auth is enforced (me null) OR a fresh instance still
+      // needs its first admin created (onboarding), even though open mode would
+      // otherwise let us straight in as a synthetic admin.
+      if (me === null || pub.needs_onboarding) return html`<${Login} onLogin=${loadMe} />`;
 
       return html`
         <div class="h-full flex flex-col">
