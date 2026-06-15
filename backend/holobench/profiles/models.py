@@ -1,4 +1,4 @@
-# SPDX-License-Identifier: Apache-2.0
+# SPDX-License-Identifier: GPL-2.0-or-later
 """Pydantic models for Holobench board profiles.
 
 A profile is the contract between Holobench and one emulated board (see

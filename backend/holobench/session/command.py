@@ -1,4 +1,4 @@
-# SPDX-License-Identifier: Apache-2.0
+# SPDX-License-Identifier: GPL-2.0-or-later
 """Resolve a validated profile into a concrete QEMU command line.
 
 This is the only place a profile becomes process arguments. It stays strictly

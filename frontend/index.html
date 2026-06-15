@@ -1,5 +1,5 @@
 <!DOCTYPE html>
-<!-- SPDX-License-Identifier: Apache-2.0 -->
+<!-- SPDX-License-Identifier: GPL-2.0-or-later -->
 <!-- Copyright 2026 Kyle Austin -->
 <html lang="en" class="h-full">
 <head>
@@ -479,7 +479,7 @@
         </div>`;
     }
 
-    function AdminUsers({ me, onClose }) {
+    function UsersTab({ me }) {
       const [users, setUsers] = useState([]);
       const [u, setU] = useState(""); const [p, setP] = useState(""); const [role, setRole] = useState("user");
       const [err, setErr] = useState(""); const [busy, setBusy] = useState(false);
@@ -509,43 +509,116 @@
         refresh();
       };
       return html`
+        <div class="flex flex-col min-h-0">
+          <form onSubmit=${add} class="px-4 py-3 border-b border-slate-800 flex gap-2 items-center flex-wrap">
+            <input value=${u} onChange=${e => setU(e.target.value)} placeholder="username" autoComplete="off"
+              class="flex-1 min-w-[8rem] bg-slate-800 border border-slate-700 rounded px-2 py-1 text-sm" />
+            <input type="password" value=${p} onChange=${e => setP(e.target.value)} placeholder="password" autoComplete="new-password"
+              class="flex-1 min-w-[8rem] bg-slate-800 border border-slate-700 rounded px-2 py-1 text-sm" />
+            <select value=${role} onChange=${e => setRole(e.target.value)}
+              class="bg-slate-800 border border-slate-700 rounded px-2 py-1 text-sm">
+              <option value="user">user</option>
+              <option value="admin">admin</option>
+            </select>
+            <button type="submit" disabled=${busy || !u || !p}
+              class="px-3 py-1 rounded bg-emerald-600 hover:bg-emerald-500 text-sm font-medium disabled:opacity-50">${busy ? "…" : "Add"}</button>
+          </form>
+          ${err && html`<div class="px-4 py-2 text-xs text-rose-400 break-words">${err}</div>`}
+          <ul class="flex-1 min-h-0 overflow-auto px-2 py-2 text-sm">
+            ${users.length === 0 && html`<li class="text-slate-600 px-2 py-1">no users</li>`}
+            ${users.map(usr => html`
+              <li key=${usr.username} class="flex justify-between items-center py-1 px-2 hover:bg-slate-800/50 rounded">
+                <span class="truncate">${usr.username}
+                  <span class="ml-1 px-1.5 py-0.5 rounded text-[10px] ${usr.role === "admin" ? "bg-emerald-900 text-emerald-300" : "bg-slate-700 text-slate-300"}">${usr.role}</span>
+                  ${usr.username === me.username && html`<span class="ml-1 text-[10px] text-slate-500">(you)</span>`}
+                </span>
+                ${usr.username !== me.username
+                  ? html`<button onClick=${() => del(usr.username)} class="text-rose-400 text-xs hover:text-rose-300 px-1">remove</button>`
+                  : html`<span class="text-slate-600 text-xs px-1">—</span>`}
+              </li>`)}
+          </ul>
+          <div class="px-4 py-2 border-t border-slate-800 text-[11px] text-slate-600">
+            Adding an existing username updates their password/role. You can't remove your own account.
+          </div>
+        </div>`;
+    }
+
+    function SessionsTab() {
+      const [rows, setRows] = useState(null);
+      const [err, setErr] = useState("");
+      const [busy, setBusy] = useState("");
+      const refresh = useCallback(() => {
+        api("/api/admin/sessions").then(setRows).catch(e => setErr(e.detail || `couldn't list sessions (${e.status || e})`));
+      }, []);
+      useEffect(() => { refresh(); const id = setInterval(refresh, 3000); return () => clearInterval(id); }, [refresh]);
+      const kill = async (s) => {
+        const who = s.owner || "—";
+        if (!window.confirm(`Kill ${who}'s board "${s.display_name}" (${s.id})?\nThis powers it off immediately.`)) return;
+        setBusy(s.id); setErr("");
+        try { await api(`/api/sessions/${s.id}/actions/stop`, { method: "POST" }); }
+        catch (e) { setErr(e.detail || `kill failed (${e.status || e})`); }
+        finally { setBusy(""); refresh(); }
+      };
+      const mb = (n) => n == null ? "—" : (n >= 1024 ? (n / 1024).toFixed(1) + " GB" : Math.round(n) + " MB");
+      const pct = (n) => n == null ? "—" : n + "%";
+      const dur = (n) => n == null ? "—" : fmtDur(n);
+      const cpuCls = (n) => n == null ? "" : (n > 150 ? "text-rose-400" : n > 90 ? "text-amber-400" : "text-slate-300");
+      const idleCls = (n) => n == null ? "text-slate-500" : (n > 1800 ? "text-rose-400" : n > 600 ? "text-amber-400" : "text-slate-400");
+      const th = "text-left font-medium text-slate-500 px-2 py-1";
+      const td = "px-2 py-1 whitespace-nowrap";
+      return html`
+        <div class="flex flex-col min-h-0">
+          <div class="px-4 py-2 text-[11px] text-slate-500 border-b border-slate-800">
+            Every running board across all users. CPU% is the average since the last refresh (~3s). Idle = time since the
+            board last produced console output (a stalled log usually means nobody's using it). <span class="text-amber-400">amber</span>/<span class="text-rose-400">red</span> flag heavy CPU or long idle.
+          </div>
+          ${err && html`<div class="px-4 py-2 text-xs text-rose-400 break-words">${err}</div>`}
+          <div class="flex-1 min-h-0 overflow-auto">
+            <table class="w-full text-[12px]">
+              <thead class="sticky top-0 bg-slate-900"><tr>
+                <th class=${th}>User</th><th class=${th}>Board</th><th class=${th}>State</th>
+                <th class=${th}>CPU</th><th class=${th}>RAM</th><th class=${th}>Disk</th>
+                <th class=${th}>Up</th><th class=${th}>Idle</th><th class=${th}>Reserve</th><th class=${th}></th>
+              </tr></thead>
+              <tbody>
+                ${rows && rows.length === 0 && html`<tr><td class="px-4 py-3 text-slate-600" colspan="10">no active boards</td></tr>`}
+                ${rows == null && html`<tr><td class="px-4 py-3 text-slate-600" colspan="10">loading…</td></tr>`}
+                ${(rows || []).map(s => html`
+                  <tr key=${s.id} class="border-t border-slate-800/60 hover:bg-slate-800/40">
+                    <td class=${td}>${s.owner || html`<span class="text-slate-500">—</span>`}</td>
+                    <td class=${td} title=${s.id}>${s.display_name}</td>
+                    <td class=${td}><span class="px-1.5 py-0.5 rounded text-[10px] ${s.state === "running" ? "bg-emerald-900 text-emerald-300" : "bg-slate-700 text-slate-300"}">${s.state}</span></td>
+                    <td class="${td} font-mono ${cpuCls(s.cpu_pct)}">${pct(s.cpu_pct)}</td>
+                    <td class="${td} font-mono text-slate-300">${mb(s.rss_mb)}</td>
+                    <td class="${td} font-mono text-slate-300">${mb(s.disk_mb)}</td>
+                    <td class="${td} font-mono text-slate-400">${dur(s.uptime_s)}</td>
+                    <td class="${td} font-mono ${idleCls(s.idle_s)}">${dur(s.idle_s)}</td>
+                    <td class="${td} font-mono text-slate-400">${s.reservation.infinite ? "∞" : dur(s.reservation.remaining_s)}</td>
+                    <td class=${td}><button disabled=${busy === s.id} onClick=${() => kill(s)}
+                      class="px-2 py-0.5 rounded bg-rose-800 hover:bg-rose-700 text-xs disabled:opacity-50">${busy === s.id ? "…" : "Kill"}</button></td>
+                  </tr>`)}
+              </tbody>
+            </table>
+          </div>
+        </div>`;
+    }
+
+    function AdminPanel({ me, onClose }) {
+      const [tab, setTab] = useState("sessions");
+      const tabBtn = (k, label) => html`<button onClick=${() => setTab(k)}
+        class="px-3 py-1 rounded text-sm ${tab === k ? "bg-slate-800 text-slate-100" : "text-slate-400 hover:text-slate-200"}">${label}</button>`;
+      return html`
         <div class="fixed inset-0 z-50 flex items-center justify-center bg-black/60 p-4" onClick=${onClose}>
-          <div class="bg-slate-900 border border-slate-800 rounded-lg w-[32rem] max-w-[92vw] max-h-[85vh] flex flex-col shadow-xl"
+          <div class="bg-slate-900 border border-slate-800 rounded-lg w-[58rem] max-w-[96vw] max-h-[88vh] flex flex-col shadow-xl"
                onClick=${e => e.stopPropagation()}>
             <div class="flex items-center justify-between px-4 py-3 border-b border-slate-800">
-              <div class="font-semibold">User management <span class="text-xs text-slate-500 font-normal">— admin</span></div>
+              <div class="flex items-center gap-2">
+                <span class="font-semibold">Admin</span>
+                ${tabBtn("sessions", "Active sessions")} ${tabBtn("users", "Users")}
+              </div>
               <button onClick=${onClose} class="text-slate-400 hover:text-slate-200 text-lg leading-none">✕</button>
             </div>
-            <form onSubmit=${add} class="px-4 py-3 border-b border-slate-800 flex gap-2 items-center flex-wrap">
-              <input value=${u} onChange=${e => setU(e.target.value)} placeholder="username" autoComplete="off"
-                class="flex-1 min-w-[8rem] bg-slate-800 border border-slate-700 rounded px-2 py-1 text-sm" />
-              <input type="password" value=${p} onChange=${e => setP(e.target.value)} placeholder="password" autoComplete="new-password"
-                class="flex-1 min-w-[8rem] bg-slate-800 border border-slate-700 rounded px-2 py-1 text-sm" />
-              <select value=${role} onChange=${e => setRole(e.target.value)}
-                class="bg-slate-800 border border-slate-700 rounded px-2 py-1 text-sm">
-                <option value="user">user</option>
-                <option value="admin">admin</option>
-              </select>
-              <button type="submit" disabled=${busy || !u || !p}
-                class="px-3 py-1 rounded bg-emerald-600 hover:bg-emerald-500 text-sm font-medium disabled:opacity-50">${busy ? "…" : "Add"}</button>
-            </form>
-            ${err && html`<div class="px-4 py-2 text-xs text-rose-400 break-words">${err}</div>`}
-            <ul class="flex-1 min-h-0 overflow-auto px-2 py-2 text-sm">
-              ${users.length === 0 && html`<li class="text-slate-600 px-2 py-1">no users</li>`}
-              ${users.map(usr => html`
-                <li key=${usr.username} class="flex justify-between items-center py-1 px-2 hover:bg-slate-800/50 rounded">
-                  <span class="truncate">${usr.username}
-                    <span class="ml-1 px-1.5 py-0.5 rounded text-[10px] ${usr.role === "admin" ? "bg-emerald-900 text-emerald-300" : "bg-slate-700 text-slate-300"}">${usr.role}</span>
-                    ${usr.username === me.username && html`<span class="ml-1 text-[10px] text-slate-500">(you)</span>`}
-                  </span>
-                  ${usr.username !== me.username
-                    ? html`<button onClick=${() => del(usr.username)} class="text-rose-400 text-xs hover:text-rose-300 px-1">remove</button>`
-                    : html`<span class="text-slate-600 text-xs px-1">—</span>`}
-                </li>`)}
-            </ul>
-            <div class="px-4 py-2 border-t border-slate-800 text-[11px] text-slate-600">
-              Adding an existing username updates their password/role. You can't remove your own account.
-            </div>
+            ${tab === "users" ? html`<${UsersTab} me=${me} />` : html`<${SessionsTab} />`}
           </div>
         </div>`;
     }
@@ -637,7 +710,7 @@
             ${me && me.auth_enabled && html`
               <span class="text-xs text-slate-400">${me.username}${me.role === "admin" ? " · admin" : ""}</span>
               ${me.role === "admin" && html`
-                <button onClick=${() => setAdminOpen(true)} class="px-2 py-1 rounded bg-slate-800 hover:bg-slate-700 text-xs" title="manage users">Users</button>`}
+                <button onClick=${() => setAdminOpen(true)} class="px-2 py-1 rounded bg-slate-800 hover:bg-slate-700 text-xs" title="admin: active sessions + users">Admin</button>`}
               <button onClick=${logout} class="px-2 py-1 rounded bg-slate-800 hover:bg-slate-700 text-xs">Logout</button>
               <span class="text-slate-700">|</span>`}
             ${!session && html`
@@ -710,7 +783,7 @@
             `}
           </main>
 
-          ${adminOpen && html`<${AdminUsers} me=${me} onClose=${() => setAdminOpen(false)} />`}
+          ${adminOpen && html`<${AdminPanel} me=${me} onClose=${() => setAdminOpen(false)} />`}
         </div>`;
     }
 

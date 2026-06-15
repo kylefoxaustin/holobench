@@ -55,7 +55,7 @@ have spent months building. Holobench is the front end that gap was waiting for.
 | | |
 |:--:|:--:|
 | <img src="docs/img/login.png" width="440" alt="Sign-in screen with demo account"><br>**Sign in** — optional auth; an opt-in demo account is shown right on the login screen so first-timers can try it without hunting for a password. | <img src="docs/img/landing.png" width="440" alt="Board picker"><br>**Reserve a board** — pick a profile (i.MX 91 / 93 / 95), then *Reserve & Boot*. Reservations are time-boxed or unlimited. |
-| <img src="docs/img/admin-users.png" width="440" alt="User management panel"><br>**Manage users** (admin) — add / remove / set roles over a mediated API; the browser never touches QMP. | <img src="docs/img/board-view.png" width="440" alt="Booted board with console and LCD"><br>**Drive the board** — serial console, LCD panel (*Attach LCD*), file injection, live introspection (memory map, device tree, QMP events), gdbstub, snapshots. |
+| <img src="docs/img/admin-sessions.png" width="440" alt="Admin fleet view: per-board CPU, RAM, disk, idle, with kill"><br>**Admin fleet view** — every running board across all users with live CPU / RAM / disk / idle, and one-click *Kill* for hogs or orphaned/idle boards (plus a Users tab). All over a mediated API; the browser never touches QMP. | <img src="docs/img/board-view.png" width="440" alt="Booted board with console and LCD"><br>**Drive the board** — serial console, LCD panel (*Attach LCD*), file injection, live introspection (memory map, device tree, QMP events), gdbstub, snapshots. |
 
 ## The Prime Directive (read this before touching anything)
 
@@ -271,7 +271,7 @@ holobench/
   tools/       make-initramfs.sh  make-golden-disk.sh  build-capture-helpers.sh
                init-shell  init-busybox
   assets/      <profile-id>/ boot artifacts (gitignored)
-  LICENSE      Apache-2.0
+  LICENSE      GPL-2.0-or-later
 ```
 
 ## Related repos (the boards Holobench drives)
@@ -307,12 +307,16 @@ make these SoCs boot under emulation:
 All three use direct-kernel boot (`-kernel`/`-dtb`), TCG (no KVM), and a
 standard `-serial` chardev for the A-core console.
 
-## License
+## License & credits
 
-[Apache-2.0](LICENSE). Copyright © 2026 Kyle Austin. Permissive with an explicit
-patent grant — reusable, contribution-friendly, and a good fit next to upstream
-QEMU/NXP. Source files carry an `SPDX-License-Identifier: Apache-2.0` header.
+[GPL-2.0-or-later](LICENSE), same as QEMU. Source files carry an
+`SPDX-License-Identifier: GPL-2.0-or-later` header.
 
 > The companion emulator repos (`qemu-imx91/93/95`) are separate works under
-> their own (QEMU) license; Holobench only *drives* them through standard
-> interfaces and ships none of their code.
+> QEMU's own license; Holobench only *drives* them through standard interfaces
+> and ships none of their code — see those repos and `LICENSE` for QEMU's
+> authorship and licensing.
+
+---
+
+Created and maintained by **Kyle Fox** — [@kylefoxaustin](https://github.com/kylefoxaustin).

@@ -1,4 +1,4 @@
-# SPDX-License-Identifier: Apache-2.0
+# SPDX-License-Identifier: GPL-2.0-or-later
 """Per-session cgroup v2 resource isolation (opt-in, graceful).
 
 When enabled, each board's QEMU runs in its own cgroup v2 with hard caps

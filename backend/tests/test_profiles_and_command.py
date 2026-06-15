@@ -1,4 +1,4 @@
-# SPDX-License-Identifier: Apache-2.0
+# SPDX-License-Identifier: GPL-2.0-or-later
 """Fast unit tests for the pure logic: profile validation + command resolution.
 
 No QEMU needed — these guard the board-agnostic core. Run with: pytest -q

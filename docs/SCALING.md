@@ -1,4 +1,4 @@
-<!-- SPDX-License-Identifier: Apache-2.0 -->
+<!-- SPDX-License-Identifier: GPL-2.0-or-later -->
 # Scaling Holobench — density & capacity planning
 
 How many emulated boards fit on a host, what gates it, and the knobs to tune.

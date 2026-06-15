@@ -1,4 +1,4 @@
-# SPDX-License-Identifier: Apache-2.0
+# SPDX-License-Identifier: GPL-2.0-or-later
 """Holobench backend daemon — FastAPI app.
 
 This is the long-lived process that owns the fleet (a SessionManager), exposes a
@@ -349,6 +349,90 @@ def remove_user(username: str, request: Request) -> dict:
         raise HTTPException(status_code=404, detail="no such user")
     _audit("user_remove", admin.username, target=username)
     return {"username": username, "deleted": True}
+
+
+# --- admin fleet view (per-session resource usage) -------------------------
+
+_CLK_TCK = os.sysconf("SC_CLK_TCK") if hasattr(os, "sysconf") else 100
+_PAGE = os.sysconf("SC_PAGE_SIZE") if hasattr(os, "sysconf") else 4096
+# pid -> (total_jiffies, monotonic_ts) from the previous poll, so CPU% is the
+# average over the admin panel's refresh interval (no blocking sample in-request).
+_cpu_prev: dict[int, tuple[int, float]] = {}
+
+
+def _pid_cpu_rss(pid: Optional[int]) -> tuple[Optional[float], Optional[float]]:
+    """(cpu_pct since last poll, rss_mb) for a pid, or (None, None) if gone."""
+    if not pid:
+        return None, None
+    try:
+        fields = Path(f"/proc/{pid}/stat").read_text().rsplit(")", 1)[1].split()
+        jiffies = int(fields[11]) + int(fields[12])  # utime + stime (after the ')')
+        rss_mb = int(fields[21]) * _PAGE / 1024 / 1024
+    except (OSError, IndexError, ValueError):
+        _cpu_prev.pop(pid, None)
+        return None, None
+    now = time.monotonic()
+    prev = _cpu_prev.get(pid)
+    _cpu_prev[pid] = (jiffies, now)
+    cpu = None
+    if prev and now > prev[1]:
+        cpu = round(100.0 * (jiffies - prev[0]) / _CLK_TCK / (now - prev[1]), 1)
+    return cpu, round(rss_mb, 1)
+
+
+def _session_disk_mb(session: Session) -> float:
+    """Host disk used by a session's work dir (mostly the qcow2 overlay + logs)."""
+    total = 0
+    wd = session.work_dir
+    if wd and wd.exists():
+        for p in wd.rglob("*"):
+            try:
+                if p.is_file():
+                    total += p.stat().st_size
+            except OSError:
+                pass
+    return round(total / 1024 / 1024, 1)
+
+
+def _session_idle_s(session: Session) -> Optional[float]:
+    """Seconds since the board last produced console output (a stalled log ~=
+    nobody is using it). None if no log yet."""
+    log = session.console_log()
+    try:
+        if log and log.exists():
+            return round(time.time() - log.stat().st_mtime, 1)
+    except OSError:
+        pass
+    return None
+
+
+@app.get("/api/admin/sessions")
+def admin_sessions(request: Request) -> list[dict]:
+    """Every running board across all users, with per-session resource usage —
+    so an admin can spot hogs / orphaned / idle boards and kill them."""
+    _require_admin(request)
+    rows = []
+    for s in app_ref.state.manager.list():
+        cpu, rss = _pid_cpu_rss(s.pid)
+        rows.append({
+            "id": s.id,
+            "owner": s.owner,
+            "profile_id": s.profile.id,
+            "display_name": s.profile.display_name,
+            "state": s.state.value,
+            "pid": s.pid,
+            "uptime_s": round(time.time() - s.created_at, 1),
+            "cpu_pct": cpu,
+            "rss_mb": rss,
+            "disk_mb": _session_disk_mb(s),
+            "idle_s": _session_idle_s(s),
+            "reservation": {
+                "infinite": s.infinite,
+                "remaining_s": None if s.infinite else s.remaining_seconds,
+            },
+        })
+    rows.sort(key=lambda r: (r["owner"] or "", -(r["cpu_pct"] or 0)))
+    return rows
 
 
 # --- profiles --------------------------------------------------------------

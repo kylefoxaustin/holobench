@@ -1,5 +1,5 @@
 #!/bin/bash
-# SPDX-License-Identifier: Apache-2.0
+# SPDX-License-Identifier: GPL-2.0-or-later
 # Make a small "golden" data disk for the image-swap / reinstall demo: a raw
 # ext4 image with a marker file. Holobench attaches a per-session qcow2 OVERLAY
 # over this (writes isolated); "reinstall" drops the overlay -> golden restored.

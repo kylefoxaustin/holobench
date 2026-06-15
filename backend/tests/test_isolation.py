@@ -1,4 +1,4 @@
-# SPDX-License-Identifier: Apache-2.0
+# SPDX-License-Identifier: GPL-2.0-or-later
 """Unit tests for the per-session cgroup isolation logic (no real cgroup needed)."""
 
 import os

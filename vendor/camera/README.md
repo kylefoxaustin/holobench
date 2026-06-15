@@ -27,7 +27,7 @@ the public emulator repos (the canonical upstream source):
 | `imx93_v4l2_cap.c` | `github.com/kylefoxaustin/qemu-imx93` → `tests/camera-imx93/v4l2_cap.c` |
 
 These are **standalone command-line tools** shipped *alongside* Holobench, not
-linked into it — so Holobench's own Apache-2.0 license is unaffected (standard
+linked into it — so Holobench's own GPL-2.0-or-later license is unaffected (standard
 "GPL tool in the image" aggregation). The C sources here satisfy GPL source
 availability for the prebuilt `bin/` binaries.
 

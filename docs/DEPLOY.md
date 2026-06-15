@@ -1,4 +1,4 @@
-<!-- SPDX-License-Identifier: Apache-2.0 -->
+<!-- SPDX-License-Identifier: GPL-2.0-or-later -->
 # Deploying Holobench as a shared "virtual EVK" service
 
 Holobench runs frictionless and open for local/dev use. This guide is the

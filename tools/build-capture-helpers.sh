@@ -1,5 +1,5 @@
 #!/bin/bash
-# SPDX-License-Identifier: Apache-2.0
+# SPDX-License-Identifier: GPL-2.0-or-later
 # Build the vendored ISI virtual-camera capture helpers as static aarch64 ELFs.
 #
 # These are standalone GPL-2.0-or-later command-line tools (sources in

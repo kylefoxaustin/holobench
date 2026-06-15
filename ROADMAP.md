@@ -217,13 +217,13 @@ variant (does per-stream `SUBDEV_S_FMT`). Build: `aarch64-linux-gnu-gcc -O2 -sta
 -o imxNN-isi-capture <file>`; run: `./imxNN-isi-capture cap /dev/video0`.
 
 **DECISION FOR KYLE — how to provide the in-guest capture client (coupling posture):**
-1. **Holobench-authored helper** (Apache-2.0, one static aarch64 binary covering
+1. **Holobench-authored helper** (GPL-2.0-or-later, one static aarch64 binary covering
    single-pipe + crossbar) — cleanest boundary, but reproduces the union of the
    three clients; the 95 crossbar setup is non-trivial (95 spent ~10 boots),
    effectively needs their source as reference.
 2. **Bundle the emulators' `v4l2_cap.c`** (public, validated, static, zero-dep) —
    fastest, proven; mild coupling + a licensing check (what license those files
-   carry vs Holobench's Apache-2.0 distribution).
+   carry vs Holobench's GPL-2.0-or-later distribution).
 3. **Document-only** — the panel feeds frames; the user brings their own client.
 4. **BSP fix** — 91/93 grow `imx-image-full`; a working media-ctl path for the 95
    crossbar (escalation; not near-term).

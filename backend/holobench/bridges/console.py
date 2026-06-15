@@ -1,4 +1,4 @@
-# SPDX-License-Identifier: Apache-2.0
+# SPDX-License-Identifier: GPL-2.0-or-later
 """Serial console tap: connect to a QEMU serial chardev unix socket and stream
 its bytes to a log file (and optional subscribers).
 

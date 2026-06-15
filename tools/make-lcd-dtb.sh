@@ -1,5 +1,5 @@
 #!/usr/bin/env bash
-# SPDX-License-Identifier: Apache-2.0
+# SPDX-License-Identifier: GPL-2.0-or-later
 #
 # Generate the i.MX95 "LCD attached" device tree used by Holobench's Attach LCD
 # button. The stock imx95-19x19-evk is faithfully panel-less (DPU on, no panel ->

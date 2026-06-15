@@ -1,4 +1,4 @@
-# SPDX-License-Identifier: Apache-2.0
+# SPDX-License-Identifier: GPL-2.0-or-later
 """Dependency-free password hashing + signed tokens (stdlib only).
 
 Password hashing: PBKDF2-HMAC-SHA256. Tokens: a compact HMAC-SHA256-signed

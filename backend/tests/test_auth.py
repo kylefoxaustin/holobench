@@ -1,4 +1,4 @@
-# SPDX-License-Identifier: Apache-2.0
+# SPDX-License-Identifier: GPL-2.0-or-later
 """Auth core tests: passwords, tokens, user store, open-mode service."""
 
 import time

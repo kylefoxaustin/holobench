@@ -1,5 +1,5 @@
 #!/usr/bin/env python3
-# SPDX-License-Identifier: Apache-2.0
+# SPDX-License-Identifier: GPL-2.0-or-later
 """Hardened-mode integration smoke: enforced auth + login throttle + admin user
 API + per-session cgroup caps + session ownership + upload quota + audit log,
 all on at once, driven through the real HTTP API.

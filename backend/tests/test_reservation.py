@@ -1,4 +1,4 @@
-# SPDX-License-Identifier: Apache-2.0
+# SPDX-License-Identifier: GPL-2.0-or-later
 """Reservation logic incl. infinite (no-expiry) reservations."""
 
 from pathlib import Path

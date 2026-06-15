@@ -1,4 +1,4 @@
-# SPDX-License-Identifier: Apache-2.0
+# SPDX-License-Identifier: GPL-2.0-or-later
 from .crypto import hash_password, issue_token, verify_password, verify_token
 from .service import OPEN_MODE_USER, AuthService
 from .store import User, UserStore, default_users_path

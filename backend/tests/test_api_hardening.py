@@ -1,4 +1,4 @@
-# SPDX-License-Identifier: Apache-2.0
+# SPDX-License-Identifier: GPL-2.0-or-later
 """Upload-quota + admin-gate logic (module-level helpers; no live server)."""
 
 import importlib
