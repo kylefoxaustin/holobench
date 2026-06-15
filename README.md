@@ -248,11 +248,14 @@ free RAM. (The image runs an aarch64 board under x86-64 QEMU/TCG — Apple-Silic
 ARM hosts would nest-emulate and crawl.) First boot takes ~1–2 min (full SoC
 emulation). Add `-e HOLOBENCH_TOKEN=secret` to require a login on the web UI.
 
-> Pinned tag: `ghcr.io/kylefoxaustin/holobench:imx95-sd-v0.2.1` (bakes the i.MX95
+> Pinned tag: `ghcr.io/kylefoxaustin/holobench:imx95-sd-v0.2.2` (bakes the i.MX95
 > M33 density fix — idle board ~0.15 host core, RAM-bound, see `docs/SCALING.md` —
-> the admin user panel, the demo-login hint, and the **Attach LCD** button: reboots
-> the board with an LVDS panel dtb so the DPU scans out a Weston desktop). The
-> rolling `:imx95-sd` tag now points here too.
+> the **admin fleet view** (per-board CPU/RAM/disk/idle + kill), demo-login, and
+> the **Attach LCD** button: reboots the board with an LVDS panel dtb so the DPU
+> scans out a Weston desktop). The rolling `:imx95-sd` tag now points here too.
+>
+> The **i.MX 91** and **i.MX 93** boards ship too — same Attach-LCD desktop, lighter
+> images: `ghcr.io/kylefoxaustin/holobench:imx91-sd` and `:imx93-sd` (~3.8 GB each).
 
 ## Repo layout
 
