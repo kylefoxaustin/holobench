@@ -1,0 +1,75 @@
+# Holobench board profile — NXP MCXN947 (FRDM-MCXN947).
+#
+# A microcontroller tile, not an application processor: dual Cortex-M33 (Armv8-M,
+# TrustZone-M), on-chip flash + SRAM, no MMU/Linux. It boots a bare-metal / RTOS
+# firmware ELF straight from the vector table — Zephyr and NXP MCUXpresso images
+# both work. Modeled + reported by the mcxn947qemu emulator session (source of
+# truth); transcribed here per the Prime Directive (Holobench never edits its repo).
+#
+# MCU-shaped deltas from the i.MX profiles, all standard QEMU interfaces:
+#   - boot mode firmware-elf -> `-kernel fw.elf` only (NO -dtb/-initrd/-append).
+#     A single -kernel boots cpu0 from flash@0x10000000; cpu0 firmware releases
+#     cpu1 in-guest via SYSCON CPBOOT/CPUCTRL (no second loader, no cpu-num).
+#   - memory: null -> NO -m. The SoC owns its RAM (flash@0x10000000, SRAM@0x20000000,
+#     default_ram_size=0); passing -m is ignored, so we omit it.
+#   - display disabled (no LCDIF/DPU/scanout) -> no LCD tab, screendump N/A.
+#   - one LPUART4 console (serial_hd(0)); driven over a standard -serial chardev.
+#     (Holobench launches -display none + -serial chardev — never -nographic, which
+#     would let the monitor grab stdio.)
+#
+# Boot artifacts are absolute paths to images the emulator session staged stable.
+# "Push a new firmware" maps to file-injection/Reinstall later; for now the default
+# firmware is the Zephyr hello_world smoke. Swap artifacts.firmware to run another
+# ELF (e.g. /home/kyle/mcxn-images/mcxn-blinky.elf for the live LED-toggle demo).
+#
+# qemu.binary is the branch-mcxn947 fork build (not in the i.MX container images);
+# override with HOLOBENCH_QEMU. Known-good QMP: query-status, query-cpus-fast
+# (shows 2x cortex-m33), system_reset, stop, cont, quit.
+
+id:           mcxn947-evk
+display_name: "NXP MCXN947 (FRDM, dual M33)"
+soc:          "NXP MCXN947"
+description:  "Dual Cortex-M33 MCU — boots a bare-metal/RTOS firmware ELF (Zephyr/MCUXpresso). Console + gdb; no display."
+
+qemu:
+  binary:  /home/kyle/Documents/GitHub/mcxn947qemu/build/qemu-system-arm
+  machine: frdm-mcxn947
+  memory:  null                 # SoC owns flash+SRAM; default_ram_size=0 -> omit -m
+  audio:   none
+  extra_args: []
+
+boot:
+  mode: firmware-elf
+  artifacts:
+    firmware: /home/kyle/mcxn-images/mcxn-hello.elf   # Zephyr hello_world (smoke). Swap for another ELF.
+    kernel:   null
+    dtb:      null
+    initrd:   null
+    rootfs:   null
+    disk:     null
+  append: null
+  command_template: null
+
+serial:
+  - { name: "LPUART4 console", chardev: console0, role: mcu-console, default: true }
+
+display: { enabled: false, device: null, vnc: false }
+
+net: { user_nics: 0 }
+
+file_injection:
+  nine_p: { enabled: false, mount_tag: holobench }
+  tftp:   { enabled: false }
+  nfs:    { enabled: false }
+  image_swap: { enabled: false, target_drive: null }
+
+power: { warm_reset: true, cold_cycle: true, pause: true, reinstall: false }
+
+introspection:
+  qmp_events: true
+  memory_map: true
+  device_tree: true
+  gdbstub: { enabled: true }
+  snapshots: false
+
+reservation: { default_minutes: 30, max_minutes: 120 }

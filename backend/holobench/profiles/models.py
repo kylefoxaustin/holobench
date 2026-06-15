@@ -37,7 +37,9 @@ class BootMode(str, Enum):
 class QemuSpec(_Strict):
     binary: str = "qemu-system-aarch64"
     machine: str  # the -M value. CONFIRM with the emulator repo.
-    memory: str = "1G"
+    # Guest RAM (`-m`). Set null to OMIT -m entirely — for SoC-owned-RAM machines
+    # (e.g. Cortex-M MCUs) whose default_ram_size is 0 and which ignore/reject -m.
+    memory: Optional[str] = "1G"
     smp: Optional[int | str] = None
     # Emitted as `-audio driver=<audio>`. Default "none" so QEMU never grabs the
     # host audio backend (the i.MX models beep otherwise). Set null to omit.

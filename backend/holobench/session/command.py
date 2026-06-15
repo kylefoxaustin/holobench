@@ -148,7 +148,8 @@ def build_command(profile: Profile, rt: SessionRuntime) -> list[str]:
     argv: list[str] = [binary]
 
     argv += ["-machine", q.machine]
-    argv += ["-m", q.memory]
+    if q.memory:  # null -> omit -m (SoC owns its RAM; e.g. Cortex-M MCUs)
+        argv += ["-m", q.memory]
     if q.smp is not None:
         argv += ["-smp", str(q.smp)]
     # Always pin the audio backend (default driver=none) so QEMU never grabs the

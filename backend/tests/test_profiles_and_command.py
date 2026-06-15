@@ -306,3 +306,20 @@ def test_firmware_elf_falls_back_to_kernel_artifact(tmp_path):
     argv = build_command(p, _rt(tmp_path))
     assert argv[argv.index("-kernel") + 1].endswith("fw.elf")
     assert "-dtb" not in argv
+
+
+def test_mcxn947_mcu_profile_no_m_firmware_elf(tmp_path):
+    # MCU tile: firmware-elf boot, memory:null -> NO -m, no -dtb/-append, display off.
+    p = load_profile("mcxn947-evk")
+    assert p.qemu.memory is None and p.display.enabled is False
+    rt = SessionRuntime(
+        work_dir=tmp_path, qmp_socket=tmp_path / "q.sock",
+        serial_sockets={"console0": tmp_path / "console0.sock"},
+        asset_dir=Path("/assets"), gdb_port=1234,
+    )
+    argv = build_command(p, rt)
+    assert argv[argv.index("-machine") + 1] == "frdm-mcxn947"
+    assert "-m" not in argv            # SoC owns RAM
+    assert "-dtb" not in argv and "-append" not in argv
+    assert argv[argv.index("-kernel") + 1].endswith(".elf")
+    assert "none" in argv[argv.index("-display") + 1]
