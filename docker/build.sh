@@ -30,7 +30,7 @@ STAGE="$(mktemp -d)"; trap 'rm -rf "$STAGE"' EXIT
 echo "staging build context in $STAGE ..."
 
 # App (dereference any symlinks; skip venv/caches/big assets).
-cp -rL backend frontend profiles docs tools vendor README.md CLAUDE.md ROADMAP.md "$STAGE"/ 2>/dev/null || true
+cp -rL backend frontend profiles docs tools vendor README.md CLAUDE.md ROADMAP.md LICENSE "$STAGE"/ 2>/dev/null || true
 # Ensure the GPL-2.0 capture helpers exist (staged into guests at /mnt). Build if
 # the cross-compiler is present and they're missing; warn (don't fail) otherwise.
 if [ ! -x vendor/camera/bin/imx95-isi-capture ] && command -v aarch64-linux-gnu-gcc >/dev/null; then
