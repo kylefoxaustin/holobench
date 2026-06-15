@@ -101,7 +101,13 @@ def _origin_ok(headers) -> bool:
     return urlparse(origin).netloc == headers.get("host")
 
 # Paths under /api that don't require authentication.
-_OPEN_PATHS = {"/api/login", "/api/public-config"}
+_OPEN_PATHS = {"/api/login", "/api/public-config", "/api/register"}
+
+# Self-registration: when on, anyone may create a (role "user") account from the
+# login screen. OFF by default (admins make users). Independent of onboarding: the
+# FIRST account on a fresh instance can always be registered (becomes admin), so a
+# first-timer can stand up auth from the UI with zero config.
+_ALLOW_REGISTRATION = os.environ.get("HOLOBENCH_ALLOW_REGISTRATION") == "1"
 
 # Optional demo credentials surfaced on the login screen so a first-time user can
 # try the instance without hunting for a password. Format: "username:password".
@@ -287,7 +293,44 @@ def public_config(request: Request) -> dict:
         u, _, p = _DEMO_LOGIN.partition(":")
         if u and p:
             demo = {"username": u, "password": p}
-    return {"auth_enabled": auth.enabled, "demo_login": demo}
+    # needs_onboarding: no users yet -> the UI offers "create your admin account"
+    # (first registrant becomes admin). registration_open: ongoing self-signup
+    # (role "user") is enabled. Either makes the UI show a register form.
+    needs_onboarding = not auth.store.configured
+    return {
+        "auth_enabled": auth.enabled,
+        "demo_login": demo,
+        "needs_onboarding": needs_onboarding,
+        "registration_open": _ALLOW_REGISTRATION,
+        "can_register": needs_onboarding or _ALLOW_REGISTRATION,
+    }
+
+
+@app.post("/api/register")
+def register(req: LoginRequest, request: Request) -> dict:
+    """Self-service account creation. The FIRST account on a fresh instance always
+    succeeds and becomes admin (onboarding). After that, requires
+    HOLOBENCH_ALLOW_REGISTRATION=1 and creates a role 'user'. Auto-logs in."""
+    auth: AuthService = request.app.state.auth
+    if not req.username or not req.password:
+        raise HTTPException(status_code=400, detail="username and password required")
+    if len(req.password) < 6:
+        raise HTTPException(status_code=400, detail="password must be at least 6 characters")
+    onboarding = not auth.store.configured
+    if not onboarding and not _ALLOW_REGISTRATION:
+        raise HTTPException(status_code=403, detail="registration is closed — ask an admin to add you")
+    if auth.store.get(req.username) is not None:
+        raise HTTPException(status_code=409, detail="username already taken")
+    role = "admin" if onboarding else "user"
+    auth.store.add(req.username, req.password, role=role)
+    if onboarding and not os.environ.get("HOLOBENCH_SECRET"):
+        # First user just enabled auth; switch off the ephemeral open-mode key to a
+        # persistent one so this token (and future logins) survive a restart.
+        auth.secret = auth._load_or_create_persistent_secret()
+    _audit("register", req.username, role=role, onboarding=onboarding)
+    token = auth.login(req.username, req.password)
+    user = auth.store.get(req.username)
+    return {"token": token, "user": {"username": user.username, "role": user.role}}
 
 
 @app.post("/api/login")
@@ -426,9 +469,13 @@ def _session_idle_s(session: Session) -> Optional[float]:
 
 
 @app.get("/api/admin/sessions")
-def admin_sessions(request: Request) -> list[dict]:
+def admin_sessions(request: Request) -> dict:
     """Every running board across all users, with per-session resource usage —
-    so an admin can spot hogs / orphaned / idle boards and kill them."""
+    so an admin can spot hogs / orphaned / idle boards and kill them.
+
+    cpu_pct is top-style PER-CORE (100% = one full host core; a multi-vCPU board
+    can exceed 100%). host_cores lets the UI also show the share of the whole
+    machine (cpu_pct / host_cores)."""
     _require_admin(request)
     rows = []
     for s in app_ref.state.manager.list():
@@ -451,7 +498,7 @@ def admin_sessions(request: Request) -> list[dict]:
             },
         })
     rows.sort(key=lambda r: (r["owner"] or "", -(r["cpu_pct"] or 0)))
-    return rows
+    return {"host_cores": os.cpu_count() or 1, "sessions": rows}
 
 
 # --- profiles --------------------------------------------------------------

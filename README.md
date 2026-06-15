@@ -192,6 +192,18 @@ holobench user list
 export HOLOBENCH_SECRET=…                 # stable token-signing key across restarts
 holobench serve                          # UI now shows a login screen
 ```
+Or skip the CLI entirely — **register from the UI**: on a fresh instance the login
+screen offers *"Create your admin account"* (the **first** account becomes admin —
+zero-config onboarding). After that, self-signup is closed unless you set
+`HOLOBENCH_ALLOW_REGISTRATION=1` (then anyone can register a regular *user*; admins
+are still made via the Admin panel). For the container, `HOLOBENCH_ADMIN_USER` +
+`HOLOBENCH_ADMIN_PASSWORD` seed an admin at startup.
+
+**Admin panel** (admins only — header → *Admin*): a **Users** tab (add/remove/role)
+and an **Active sessions** fleet view — every running board across all users with
+per-board **CPU (per-core + % of host) / RAM / disk / idle / uptime** and one-click
+**Kill** for hogs, orphaned, or long-idle boards.
+
 Quotas (0 = unlimited): `HOLOBENCH_MAX_PER_USER`, `HOLOBENCH_MAX_SESSIONS`.
 Users live in `data/users.yaml` (gitignored) or `$HOLOBENCH_USERS`.
 
