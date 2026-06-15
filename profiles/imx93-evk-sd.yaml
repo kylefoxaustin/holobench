@@ -40,7 +40,20 @@ boot:
 serial:
   - { name: "A-core console", chardev: console0, role: a-core, default: true }
 
-display: { enabled: true, device: "lcdif", vnc: false }
+# Faithful bare EVK: stock imx93-11x11-evk.dtb has the LCDIFv3 display subsystem
+# but NO panel -> no /dev/fb0 (bare board, nothing plugged in). attach_dtb = the
+# BSP's panel-attached dtb (no splice needed, like the 91): "Attach LCD" swaps to
+# it -> LCDIFv3 -> dw-mipi-dsi -> Raydium RM67199, /dev/fb0 1080x1920 scans out.
+# (Scanout modeled + 24h-soak-validated by 93emu.) This golden runs weston and
+# paints a real 1080x1920 desktop with NO pixman edit needed (it already
+# software-renders — the 93 has no GPU, same as 95/91). Give it ~25s post-login to
+# paint. Validated end-to-end: fb0 + dw-mipi-dsi bound + a rendered Weston desktop.
+display:
+  enabled: true
+  device: "lcdif"
+  vnc: false
+  attach_dtb: imx93-11x11-evk-rm67199.dtb   # BSP panel dtb (Raydium RM67199 MIPI-DSI)
+  attach_label: "1080×1920 DSI"
 
 net: { user_nics: 1 }
 

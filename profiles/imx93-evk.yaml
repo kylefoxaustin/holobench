@@ -36,7 +36,15 @@ serial:
   - { name: "A-core console", chardev: console0, role: a-core, default: true }
 
 # LCDIF present; framebuffer via QMP screendump (no VNC confirmed yet).
-display: { enabled: true, device: "lcdif", vnc: false }
+# Faithful bare EVK: stock dtb has the LCDIFv3 subsystem but NO panel (no fb0).
+# attach_dtb = the BSP's panel dtb (no splice); "Attach LCD" swaps to it ->
+# LCDIFv3 -> dw-mipi-dsi -> RM67199, /dev/fb0 1080x1920 scans out the console.
+display:
+  enabled: true
+  device: "lcdif"
+  vnc: false
+  attach_dtb: imx93-11x11-evk-rm67199.dtb   # BSP panel dtb (Raydium RM67199 MIPI-DSI)
+  attach_label: "1080×1920 DSI"
 
 net: { user_nics: 1 }
 
