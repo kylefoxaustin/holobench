@@ -25,6 +25,10 @@ class BootMode(str, Enum):
     uboot = "uboot"
     direct_kernel = "direct-kernel"
     flash = "flash"
+    # Bare-metal / RTOS firmware on a Cortex-M (Armv8-M) MCU: QEMU loads an ELF and
+    # boots from the vector table (initial SP@0x0, reset@0x4) — no kernel cmdline,
+    # no dtb. For MCU boards (e.g. NXP MCXN947) running Zephyr / MCUXpresso ELFs.
+    firmware_elf = "firmware-elf"
 
 
 # --- QEMU launch -----------------------------------------------------------
@@ -47,6 +51,9 @@ class QemuSpec(_Strict):
 class BootArtifacts(_Strict):
     flash_bin: Optional[str] = None
     kernel: Optional[str] = None
+    # Cortex-M firmware ELF for firmware-elf boot (Zephyr / MCUXpresso). Falls back
+    # to `kernel` if unset, so either field works.
+    firmware: Optional[str] = None
     dtb: Optional[str] = None
     initrd: Optional[str] = None
     rootfs: Optional[str] = None

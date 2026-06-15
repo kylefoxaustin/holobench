@@ -123,6 +123,15 @@ def _boot_args(profile: Profile, rt: SessionRuntime) -> list[str]:
                 args += ["-initrd", initrd]
             if boot.append:
                 args += ["-append", boot.append]
+    elif boot.mode is BootMode.firmware_elf:
+        # Bare-metal/RTOS firmware on a Cortex-M MCU: QEMU loads the ELF and the
+        # core boots from the Armv8-M vector table (SP@0x0, reset@0x4). No dtb, no
+        # -append. The firmware artifact wins; fall back to `kernel` for flexibility.
+        # (A second core or a separate image, if any, rides in qemu.extra_args as a
+        # board-specific -device loader, like the i.MX95 M33 loader.)
+        fw = _resolve_artifact(art.firmware or art.kernel, rt.asset_dir)
+        if fw:
+            args += ["-kernel", fw]
 
     if rootfs:
         # SD/eMMC image for boards that root off a disk rather than initramfs.

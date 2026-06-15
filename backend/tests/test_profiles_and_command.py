@@ -10,7 +10,13 @@ import pytest
 
 from holobench.profiles import list_profiles, load_profile
 from holobench.profiles.loader import ProfileError, load_profile_file
-from holobench.profiles.models import Profile
+from holobench.profiles.models import (
+    BootArtifacts,
+    BootMode,
+    BootSpec,
+    Profile,
+    QemuSpec,
+)
 from holobench.session.command import SessionRuntime, build_command
 
 
@@ -262,3 +268,41 @@ def test_flash_mode_uses_bios(tmp_path):
     rt = SessionRuntime(work_dir=tmp_path, qmp_socket=tmp_path / "q.sock", asset_dir=Path("/a"))
     argv = build_command(p, rt)
     assert argv[argv.index("-bios") + 1] == "/a/flash.bin"
+
+
+def _mcu_profile(**boot_kw):
+    return Profile(
+        id="mcxn947-evk", display_name="MCXN947", soc="NXP MCXN947",
+        qemu=QemuSpec(machine="mcxn947-evk"),
+        boot=BootSpec(mode=BootMode.firmware_elf, **boot_kw),
+    )
+
+
+def _rt(tmp_path):
+    return SessionRuntime(
+        work_dir=tmp_path,
+        qmp_socket=tmp_path / "qmp.sock",
+        serial_sockets={"console0": tmp_path / "console0.sock"},
+        asset_dir=Path("/assets"),
+    )
+
+
+def test_firmware_elf_boot_kernel_only(tmp_path):
+    # MCU firmware-elf boot: -kernel <elf>, and NO -dtb / -append / -initrd.
+    p = _mcu_profile(artifacts=BootArtifacts(firmware="zephyr.elf"),
+                     append="should-be-ignored")
+    argv = build_command(p, _rt(tmp_path))
+    assert argv[argv.index("-kernel") + 1].endswith("zephyr.elf")
+    assert "-dtb" not in argv
+    assert "-append" not in argv
+    assert "-initrd" not in argv
+    # no display for an MCU -> boots with -display none, no framebuffer assumptions
+    assert p.display.enabled is False
+
+
+def test_firmware_elf_falls_back_to_kernel_artifact(tmp_path):
+    # `firmware` unset -> the `kernel` artifact is used as the ELF.
+    p = _mcu_profile(artifacts=BootArtifacts(kernel="fw.elf"))
+    argv = build_command(p, _rt(tmp_path))
+    assert argv[argv.index("-kernel") + 1].endswith("fw.elf")
+    assert "-dtb" not in argv
