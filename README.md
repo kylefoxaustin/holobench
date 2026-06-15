@@ -23,7 +23,7 @@ server, presented through the exact UX of a hardware board farm.
 
 If you've used NXP's aiotcloud board farm (WEVK Remote Console: console window,
 framebuffer panel, Power / File / System management), Holobench is that — but
-the silicon is emulated, free, infinitely cloneable, and available before tapeout.
+the silicon is emulated, free, infinitely cloneable, and available now.
 
 ## Why this doesn't already exist
 
