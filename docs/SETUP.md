@@ -151,10 +151,45 @@ the optional known-good-sha256-per-file validator schema are the next build step
   boots each model. That is owned by the emulator session (Prime Directive §7,
   never guess); they are almost certainly producing exactly this as part of
   **upstreaming**, so the bundle source is likely their upstream-boot artifacts.
-  Start with **i.MX91/93** (plain direct-kernel). **i.MX95 is the open problem:**
-  it needs the M33 SM (NXP) for SCMI — a fully-OSS 95 demo needs an OSS SM stand-in
-  or a SCMI-absent boot path (escalate to the 95 session, §2). Until a bundle is
-  published, that board's wizard path is BYO-BSP only.
+  **i.MX91/93 — supported** (plain direct-kernel; 93 is LIVE, 91 same recipe).
+  **i.MX95 — definitively NOT possible** (95 session's verdict): the 95 boot is
+  SCMI/SM-gated — Linux needs the M33 System Manager (NXP) as its only SCMI
+  provider, so no mainline kernel boots standalone (93 has no SM → direct CCM/ANATOP
+  → mainline boots; that's the difference). The i.MX95 wizard path is therefore
+  **BYO-BSP only** (see the credential-fetch flow below), and its zero-NXP
+  "see-it-run" tile is the bare-metal `tests/hello-imx95`, not a Linux demo.
+
+### Validator manifest schema (95 session) — for the credential/BYO path
+
+Per board, one entry per required file; the wizard renders `source.kind` to the
+right UI (`build` = run-it button, `url` = fetch, `byo` = point-at-file) and keeps
+Run disabled until every required file is present (and sha256-matched where given):
+
+```yaml
+artifacts:
+  - name: m33_image_M2.elf
+    sha256: <optional known-good>      # set -> integrity-checked; omitted -> presence-only
+    required: true
+    source: { kind: build, repo: https://github.com/nxp-imx/imx-sm, build: "make cfg=mx95evk M=2" }  # reproducible, NO creds
+  - name: Image
+    required: true
+    source: { kind: byo, hint: "NXP i.MX Yocto BSP build, or prebuilt demo image (nxp.com login+EULA)" }
+  - name: imx95-19x19-evk.dtb
+    required: true
+    source: { kind: byo, hint: "same Yocto BSP build" }
+  - name: disk.wic
+    required: true
+    source: { kind: byo, hint: "Yocto core-image-* .wic, or prebuilt demo image" }
+```
+
+`tools/fetch-nxp.sh` (runs on the **operator** host, ships with the repo) =
+**validate + build-the-buildable + hand-off-the-gated**: it builds the SM firmware
+from `imx-sm` (no creds), validates each file's sha256, and for EULA-gated files
+prints the hand-off (the operator downloads with their own nxp.com login). The two
+design honesties (95): the BSP kernel/dtb/rootfs/.wic are behind a login + per-user
+EULA (a cookie/session flow, so b1 browser hand-off is the real path, not a blind
+token curl); the SM firmware is open-source-buildable (no creds). The optional
+`url`+`NXP_TOKEN` mode is operator-env only, never logged.
 
 ## Web wizard (wraps the engine)
 

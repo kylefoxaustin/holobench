@@ -24,11 +24,14 @@
 
 imx95-evk-sd:
   qemu: { repo: "https://github.com/kylefoxaustin/qemu-imx95.git", ref: "25223218cd", target_list: "aarch64-softmmu" }
-  # oss_demo blocked: i.MX95 needs the M33 SM (NXP) for SCMI — no fully-OSS boot yet (escalation).
+  # NO OSS demo possible (95 session's verdict): the 95 boot is SCMI/SM-gated — Linux
+  # needs the M33 System Manager (NXP) as its only SCMI provider, so no mainline kernel
+  # boots standalone. i.MX95 is BYO-BSP only (fetch-nxp.sh); zero-NXP see-it-run is the
+  # bare-metal tests/hello-imx95. Leave url empty permanently.
   oss_demo: { url: "", sha256: "" }
 imx95-evk:
   qemu: { repo: "https://github.com/kylefoxaustin/qemu-imx95.git", ref: "25223218cd", target_list: "aarch64-softmmu" }
-  oss_demo: { url: "", sha256: "" }
+  oss_demo: { url: "", sha256: "" }   # SCMI/SM-gated — no OSS demo possible; BYO-BSP only
 
 imx93-evk-sd:
   qemu: { repo: "https://github.com/kylefoxaustin/qemu-imx93.git", ref: "cc125f516d", target_list: "aarch64-softmmu" }
