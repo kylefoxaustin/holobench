@@ -35,3 +35,15 @@ def test_validate_manifest_ok_when_present(tmp_path):
 def test_setup_manager_lists_buildable_boards():
     boards = {b["id"] for b in SetupManager().boards()}
     assert {"imx95-evk-sd", "imx93-evk-sd", "imx91-evk-sd"} <= boards
+
+
+def test_nxp_manifest_kinds():
+    from holobench.setup import nxp_manifest
+    m = nxp_manifest("imx95-evk-sd")
+    by = {r["name"]: r for r in m["rows"]}
+    # SM firmware is buildable from source (no creds); the rest are operator BYO.
+    assert by["m33_image_M2.elf"]["kind"] == "build"
+    assert "imx-sm" in by["m33_image_M2.elf"]["source"]
+    assert by["Image"]["kind"] == "byo" and by["disk.wic"]["kind"] == "byo"
+    # Flat pipe-delimited serialization for tools/fetch-nxp.sh.
+    assert "m33_image_M2.elf |" in m["manifest"] and "| build |" in m["manifest"]

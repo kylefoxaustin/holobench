@@ -725,6 +725,14 @@
         api(`/api/setup/manifest?board=${encodeURIComponent(board)}${q}`).then(setManifest).catch(() => setManifest(null));
       }, [board, mode, bsp]);
 
+      // Fetch-from-NXP helper manifest (kind per file: build/byo/url). Operator runs
+      // tools/fetch-nxp.sh on THEIR host — Holobench never fetches NXP bits server-side.
+      const [nxpman, setNxpman] = useState(null);
+      useEffect(() => {
+        if (!board || mode !== "fetch") { setNxpman(null); return; }
+        api(`/api/setup/nxp-manifest?board=${encodeURIComponent(board)}`).then(setNxpman).catch(() => setNxpman(null));
+      }, [board, mode]);
+
       const build = async () => {
         setErr("");
         try {
@@ -772,6 +780,7 @@
                           value=${mode} onChange=${e => setMode(e.target.value)} disabled=${running}>
                     <option value="plan">Show plan only (no build)</option>
                     <option value="bsp">I have my own NXP BSP</option>
+                    <option value="fetch">Fetch from NXP (helper)</option>
                     <option value="demo">OSS demo image${sel && !sel.oss_demo ? " (not yet available)" : ""}</option>
                   </select>
                   ${mode === "bsp" && html`<input placeholder="/path/to/my/bsp" value=${bsp} onChange=${e => setBsp(e.target.value)}
@@ -794,6 +803,27 @@
                   </div>
                   ${manifest.missing && manifest.missing.length > 0 && html`<div class="text-[11px] text-rose-400 mt-1">missing ${manifest.missing.length} file(s) — needed to boot this board</div>`}
                   ${manifest.ok && html`<div class="text-[11px] text-emerald-400 mt-1">✓ all artifacts present — ready to run</div>`}
+                </div>`}
+              ${mode === "fetch" && nxpman && html`
+                <div class="rounded border border-slate-800 bg-slate-950/40 p-2 space-y-2">
+                  <div class="text-[11px] text-slate-500">
+                    Run this on <b>your own host</b> — Holobench never fetches NXP bits or sees your credentials.
+                    The SM firmware builds from source (no creds); EULA-gated files you download from nxp.com with your login.
+                  </div>
+                  <div class="text-[11px] font-mono">
+                    ${nxpman.rows.map(r => {
+                      const c = r.kind === "build" ? "text-emerald-400" : r.kind === "url" ? "text-sky-400" : "text-amber-400";
+                      return html`<div key=${r.name}><span class=${c}>[${r.kind}]</span> ${r.name}${r.kind === "build" ? html` <span class="text-slate-500">— ${r.build_cmd}</span>` : html` <span class="text-slate-500">— ${r.source}</span>`}</div>`;
+                    })}
+                  </div>
+                  <code class="block text-[11px] text-slate-400">
+                    # save the manifest, then on your host:<br/>
+                    ART=/my/bsp/${board} IMX_SM_SRC=~/imx-sm tools/fetch-nxp.sh ${board}.manifest
+                  </code>
+                  <details class="text-[11px] text-slate-500">
+                    <summary class="cursor-pointer">show ${board}.manifest</summary>
+                    <pre class="bg-[#0b0f17] border border-slate-800 rounded p-2 mt-1 overflow-auto whitespace-pre-wrap">${nxpman.manifest}</pre>
+                  </details>
                 </div>`}
               <div class="flex items-center gap-2">
                 <button onClick=${build} disabled=${running || !board}

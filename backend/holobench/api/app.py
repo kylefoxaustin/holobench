@@ -41,7 +41,8 @@ from ..auth import AuthService
 from ..profiles import ProfileError, list_profiles, load_profile
 from ..profiles.loader import default_asset_dir
 from ..labs import LabCoordinator, LabError, list_labs, load_lab
-from ..setup import SetupError, SetupManager, required_artifacts, validate_manifest
+from ..setup import (SetupError, SetupManager, required_artifacts,
+                     validate_manifest, nxp_manifest)
 from ..session.manager import Session, SessionError, SessionManager
 
 _FRONTEND_DIR = Path(__file__).resolve().parents[3] / "frontend"
@@ -657,6 +658,18 @@ def setup_manifest(board: str, request: Request, bsp: Optional[str] = None) -> d
         if bsp:
             return validate_manifest(board, bsp)
         return {"board": board, "required": required_artifacts(board)}
+    except ProfileError as exc:
+        raise HTTPException(status_code=404, detail=str(exc))
+
+
+@app.get("/api/setup/nxp-manifest")
+def setup_nxp_manifest(board: str, request: Request) -> dict:
+    """Profile-derived flat manifest for tools/fetch-nxp.sh (the operator-host
+    helper that builds the SM firmware + hands off the EULA-gated NXP files). For
+    the wizard's 'fetch from NXP' path on BYO-BSP boards (e.g. i.MX95)."""
+    _require_admin(request)
+    try:
+        return nxp_manifest(board)
     except ProfileError as exc:
         raise HTTPException(status_code=404, detail=str(exc))
 

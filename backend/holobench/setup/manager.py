@@ -62,6 +62,39 @@ def required_artifacts(board: str) -> list[str]:
     return out
 
 
+def nxp_manifest(board: str) -> dict:
+    """Profile-derived flat manifest for tools/fetch-nxp.sh (the 95 session's
+    pipe-delimited format: name|sha256|required|kind|source|build_cmd|build_out).
+    Source kinds: the SM firmware is `build` (reproducible from imx-sm, no creds);
+    everything else is `byo` (operator downloads from nxp.com with their login+EULA;
+    Holobench hosts/stores nothing). Optional known-good sha256 column stays empty
+    unless pinned. See docs/SETUP.md §(b)."""
+    rows = []
+    for name in required_artifacts(board):
+        if "m33" in name.lower():                       # SM firmware — buildable, no creds
+            rows.append({
+                "name": name, "sha256": "", "required": "true", "kind": "build",
+                "source": "https://github.com/nxp-imx/imx-sm",
+                "build_cmd": "make cfg=mx95evk M=2",
+                "build_out": "build/mx95evk/m33_image.elf",
+            })
+        else:                                           # EULA-gated -> operator BYO
+            hint = ("Yocto core-image .wic or prebuilt demo image (nxp.com login+EULA)"
+                    if name.endswith(".wic") else
+                    "NXP i.MX Yocto BSP build, or prebuilt demo image (nxp.com login+EULA)")
+            rows.append({
+                "name": name, "sha256": "", "required": "true", "kind": "byo",
+                "source": hint, "build_cmd": "", "build_out": "",
+            })
+    header = "# name | sha256 | required | kind | source | build_cmd | build_out"
+    lines = [header] + [
+        " | ".join([r["name"], r["sha256"], r["required"], r["kind"],
+                    r["source"], r["build_cmd"], r["build_out"]])
+        for r in rows
+    ]
+    return {"board": board, "rows": rows, "manifest": "\n".join(lines) + "\n"}
+
+
 def validate_manifest(board: str, bsp_root: str) -> dict:
     """Check the operator's BSP dir against the board manifest. bsp_root is the
     mount root; per-board files live in bsp_root/<board>/."""
