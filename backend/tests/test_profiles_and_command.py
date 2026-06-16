@@ -89,6 +89,34 @@ def test_direct_kernel_artifacts_resolve_against_asset_dir(tmp_path):
     assert "/assets/board.dtb" in argv
 
 
+def test_extra_args_asset_dir_placeholder_expands(tmp_path):
+    # Compliance: the i.MX95 M33 SM firmware is NEVER baked; the profile references
+    # it via {asset_dir} so it resolves from the operator's mounted assets volume.
+    p = load_profile("imx95-evk")
+    rt = SessionRuntime(
+        work_dir=tmp_path,
+        qmp_socket=tmp_path / "qmp.sock",
+        serial_sockets={s.chardev: tmp_path / f"{s.chardev}.sock" for s in p.serial},
+        asset_dir=Path("/artifacts/imx95-evk"),
+    )
+    argv = build_command(p, rt)
+    loaders = [a for a in argv if a.startswith("loader,file=")]
+    assert loaders and "/artifacts/imx95-evk/m33_image_M2.elf" in loaders[0]
+
+
+def test_no_profile_hardcodes_host_bsp_path():
+    # Guard: an absolute /home/... loader path in extra_args would mean a restricted
+    # artifact pinned to the build host (the thing that caused the redistribution
+    # incident). Profiles must use {asset_dir} instead.
+    for pid in list_profiles():
+        try:
+            p = load_profile(pid)
+        except ProfileError:
+            continue
+        for a in p.qemu.extra_args:
+            assert "/home/" not in a, f"{pid} extra_args has a host path: {a}"
+
+
 def test_audio_defaults_to_none(tmp_path):
     p = load_profile("virt-smoke")
     argv = build_command(p, _runtime_for(p, tmp_path))

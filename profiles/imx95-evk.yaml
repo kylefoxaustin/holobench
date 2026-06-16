@@ -35,7 +35,12 @@ qemu:
   # still boots if you point the loader back at your imx-sm build.
   extra_args:
     - "-device"
-    - "loader,file=/home/kyle/Documents/GitHub/95emulator/build/m33_image_M2.elf,cpu-num=6"
+    # {asset_dir} expands to this board's asset dir at launch (assets/imx95-evk/,
+    # or $HOLOBENCH_ASSET_ROOT/imx95-evk/ in the container). The M33 SM firmware is
+    # NXP-non-redistributable, so it is NEVER baked into the image — the operator
+    # supplies their own m33_image_M2.elf in the mounted assets volume. See
+    # docs/DEPLOY.md. (Local dev: drop/symlink it into assets/imx95-evk/.)
+    - "loader,file={asset_dir}/m33_image_M2.elf,cpu-num=6"
     - "-serial"
     - "null"
 

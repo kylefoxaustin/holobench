@@ -265,8 +265,20 @@ def build_command(profile: Profile, rt: SessionRuntime) -> list[str]:
             argv += ["-device", cam.qemu_device]
 
     argv += _boot_args(profile, rt)
-    argv += list(q.extra_args)
+    argv += [_expand_asset_dir(a, rt.asset_dir) for a in q.extra_args]
     return argv
+
+
+def _expand_asset_dir(arg: str, asset_dir: Optional[Path]) -> str:
+    """Expand the `{asset_dir}` placeholder in an extra_args entry against the
+    session's asset dir. Lets a board reference a restricted, operator-supplied
+    artifact (e.g. the i.MX95 M33 System Manager elf) by its location in the
+    mounted assets volume instead of a baked absolute path — so the distributable
+    image carries NO NXP BSP binaries (compliance: see docs/DEPLOY.md). With no
+    asset dir the placeholder resolves to the literal string, surfacing the misuse."""
+    if "{asset_dir}" not in arg:
+        return arg
+    return arg.replace("{asset_dir}", str(asset_dir) if asset_dir else "{asset_dir}")
 
 
 def command_str(argv: list[str]) -> str:

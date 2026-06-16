@@ -213,66 +213,56 @@ Users live in `data/users.yaml` (gitignored) or `$HOLOBENCH_USERS`.
 reverse-proxy, a stable signing key, login throttling, WS-origin allowlist,
 per-session resource caps, and the full env-var reference + hardening checklist.
 
-## Run as a container (self-contained "virtual EVK")
+## Run as a container (the "virtual EVK")
 
-The fat image bakes in the board's QEMU build + boot artifacts, so a user just
-runs it and opens a browser — no setup, no host QEMU:
+> **Distribution & licensing.** The Holobench image bakes in **only**
+> freely-redistributable bits — the OSS app and the **GPL** forked
+> `qemu-system-aarch64`. It deliberately ships with **no NXP BSP artifacts**
+> (kernel `Image`, board `*.dtb`, rootfs/initramfs, the i.MX95 M33 System Manager
+> `m33_image.elf`, or NXP `.ko`): those are **NXP-non-redistributable**, so baking
+> them into a layer you push or share would redistribute NXP's binaries. You supply
+> your **own** BSP-built artifacts and **volume-mount** them at run time. (Earlier
+> "fat" images that embedded the BSP were removed for exactly this reason.)
+
+Build a small, shareable image (the board's forked QEMU + the app), then mount your
+own artifacts:
 
 ```bash
-docker/build.sh imx91-evk            # busybox image  -> holobench:imx91-evk  (~1.7 GB)
-docker run --rm -p 8080:8080 holobench:imx91-evk
+docker/build.sh imx95-evk-sd                 # -> holobench:imx95-evk-sd (QEMU + app only)
+
+docker run --rm -p 8080:8080 \
+  -v /path/to/my/bsp:/artifacts \            # YOUR BSP, supplied by you
+  -e HOLOBENCH_ASSET_ROOT=/artifacts \
+  holobench:imx95-evk-sd
 # open http://localhost:8080 → Reserve & Boot
-
-docker/build.sh imx95-evk-sd         # full i.MX95 BSP distro -> holobench:imx95-sd (~15 GB)
-IMAGE=holobench:imx95-sd docker/build.sh imx95-evk-sd   # (IMAGE= overrides the tag)
 ```
 
-`docker/build.sh <qemu-board> [asset-boards…]` stages a clean build context: the
-Holobench app, the chosen board's forked `qemu-system-aarch64`, the real boot
-artifacts (`Image`/`dtb`/`initrd.cpio.gz`/`disk.wic`), and any loader firmware
-the profile references (e.g. the i.MX95 M33 System Manager elf). The image uses
-TCG (no `/dev/kvm` needed). Add `-e HOLOBENCH_ADMIN_USER=admin -e HOLOBENCH_ADMIN_PASSWORD=…` to require auth + unlock the Admin panel.
-`docker/compose.yaml` runs a pre-built image. Path overrides: `HOLOBENCH_QEMU`
-(binary) and `HOLOBENCH_ASSET_ROOT` (assets) — set automatically inside the image.
-Full-distro images are large (the `.wic` dominates); a busybox image is ~1.7 GB.
+Lay your mounted BSP out per board id:
 
-> The fat image embeds the emulator session's *forked* QEMU (the i.MX models
-> aren't upstreamed yet) — fine for local use/demos; revisit publishing once the
-> models land in stock QEMU. For a tiny image, stage no qemu/assets and mount
-> them at run time instead.
-
-### Try it without building — pull the prebuilt "virtual EVK"
-
-A prebuilt full-distro **i.MX 95** image is published to GHCR (no build, no
-GitHub account, no login needed):
-
-```bash
-docker pull ghcr.io/kylefoxaustin/holobench:imx95-sd        # ~15 GB, one time
-docker run --rm -p 8080:8080 ghcr.io/kylefoxaustin/holobench:imx95-sd
-# open http://localhost:8080 → "i.MX 95 EVK (SD boot, full distro)" → Reserve & Boot
+```
+/path/to/my/bsp/
+  imx95-evk-sd/
+    Image                 # your BSP kernel
+    imx95-19x19-evk.dtb   # your board dtb
+    disk.wic              # (or rootfs / initrd.cpio.gz — whatever the profile boots)
+    m33_image_M2.elf      # i.MX95 M33 System Manager firmware (i.MX95 only)
 ```
 
-Then (right-hand tabs): **Console** (log in as `root`, no password), **LCD**,
-**Files** (drop a file → `/mnt`), introspection, and **Camera** — drop a raw
-**640×480** frame (exactly **1843200 B**), reboot to arm, then in the console:
-`insmod /mnt/ov5640.ko && /mnt/imx95-isi-capture cap /dev/video0`.
+`docker/build.sh <qemu-board> [advertise-boards…]` stages a clean context — the
+Holobench app, the chosen board's forked `qemu-system-aarch64` (GPL), and the
+selected profiles — and **refuses to build** if a restricted-looking artifact is
+present in the context. Boot artifacts resolve from `$HOLOBENCH_ASSET_ROOT/<board>/`;
+the i.MX95 M33 elf via the profile's `{asset_dir}` placeholder. The image uses TCG
+(no `/dev/kvm` needed). Add `-e HOLOBENCH_ADMIN_USER=admin -e HOLOBENCH_ADMIN_PASSWORD=…`
+to require auth + unlock the Admin panel. See [`docs/DEPLOY.md`](docs/DEPLOY.md) for
+the full artifact layout, compose example, and the hardening checklist.
 
-**Host requirements:** **x86-64 Linux** + Docker, ~**30 GB** free disk, ~**8 GB**
-free RAM. (The image runs an aarch64 board under x86-64 QEMU/TCG — Apple-Silicon/
-ARM hosts would nest-emulate and crawl.) First boot takes ~1–2 min (full SoC
-emulation). Runs **open** by default (no login); add `-e HOLOBENCH_ADMIN_USER=admin
--e HOLOBENCH_ADMIN_PASSWORD=secret` to require a login and unlock the **Admin**
-panel (optionally `-e HOLOBENCH_DEMO_LOGIN=admin:secret` for a one-click demo box).
-
-> Pinned tag: `ghcr.io/kylefoxaustin/holobench:imx95-sd-v0.2.6` (bakes the i.MX95
-> M33 density fix — idle board ~0.15 host core, RAM-bound, see `docs/SCALING.md` —
-> a **board LEDs panel** (live SoC GPIO LEDs read over stock QMP), self-service **register / first-run onboarding**, the **admin fleet view**
-> (per-board CPU per-core + % of host / RAM / disk / idle + kill), and the
-> **Attach LCD** button: reboots the board with an LVDS panel dtb so the DPU scans
-> out a Weston desktop). The rolling `:imx95-sd` tag now points here too.
->
-> The **i.MX 91** and **i.MX 93** boards ship too — same Attach-LCD desktop, lighter
-> images: `ghcr.io/kylefoxaustin/holobench:imx91-sd` and `:imx93-sd` (~3.8 GB each).
+**Host requirements:** **x86-64 Linux** + Docker, free RAM for the board(s) you
+run. (The image runs an aarch64 board under x86-64 QEMU/TCG — Apple-Silicon/ARM
+hosts would nest-emulate and crawl.) First boot takes ~1–2 min (full SoC
+emulation). Runs **open** by default; add `-e HOLOBENCH_ADMIN_USER=admin
+-e HOLOBENCH_ADMIN_PASSWORD=secret` to require login + unlock the **Admin** panel
+(optionally `-e HOLOBENCH_DEMO_LOGIN=admin:secret` for a one-click demo box).
 
 ## Repo layout
 

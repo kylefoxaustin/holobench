@@ -1,18 +1,28 @@
 #!/bin/bash
 # SPDX-License-Identifier: GPL-2.0-or-later
-# Build a fat, self-contained Holobench "virtual EVK" image.
+# Build a DISTRIBUTABLE Holobench "virtual EVK" image.
+#
+# COMPLIANCE (do not regress): this image bakes ONLY freely-redistributable bits —
+# the OSS Holobench app + the GPL forked qemu binary. It NEVER bakes NXP BSP
+# artifacts (kernel Image, board dtb, rootfs/initramfs, the i.MX95 M33 SM firmware
+# m33_image.elf, or NXP-derived .ko). Those are NXP-non-redistributable: baking
+# them into a layer and pushing/serving the image = redistributing NXP binaries,
+# which their license forbids (and registry blobs persist even after a tag delete).
+# Instead the operator VOLUME-MOUNTS their own BSP at runtime:
+#   docker run -v /my/bsp:/artifacts -e HOLOBENCH_ASSET_ROOT=/artifacts ...
+# with /my/bsp/<board>/{Image,*.dtb,rootfs,m33_image_M2.elf,...}. See docs/DEPLOY.md.
 #
 # Usage:
 #   docker/build.sh [QEMU_BOARD] [ASSET_BOARD ...]
 #
 #   QEMU_BOARD   profile whose forked qemu-system-aarch64 to BAKE IN  (default: imx91-evk)
-#   ASSET_BOARD  profiles whose boot artifacts to bake in             (default: same as QEMU_BOARD)
+#   ASSET_BOARD  profiles whose PROFILE (not artifacts) to advertise  (default: same as QEMU_BOARD)
 #
 # The baked qemu must register the machine of every ASSET_BOARD. The imx91 build
 # registers BOTH imx91-11x11-evk and imx93-11x11-evk, so:
 #   docker/build.sh imx91-evk imx91-evk imx93-evk
-# yields a 2-board image. (i.MX95 needs its own qemu + M33 firmware — bake it as
-# its own image: docker/build.sh imx95-evk.)
+# yields a 2-board image. (i.MX95 needs its own qemu — build it as its own image:
+# docker/build.sh imx95-evk.)
 set -euo pipefail
 
 REPO="$(cd "$(dirname "$0")/.." && pwd)"
@@ -48,44 +58,27 @@ fi
 cp docker/Dockerfile "$STAGE"/Dockerfile
 cp docker/.dockerignore "$STAGE"/.dockerignore
 
-# Baked forked QEMU.
+# Baked forked QEMU (GPL — freely redistributable).
 mkdir -p "$STAGE/qemu"
 cp -L "$QEMU_BIN" "$STAGE/qemu/qemu-system-aarch64"
 
-# Baked boot artifacts (real files, not the repo's symlinks).
-for b in "${ASSET_BOARDS[@]}"; do
-  src="assets/$b"
-  [ -d "$src" ] || { echo "error: no staged assets at $src (run tools/make-initramfs.sh + symlink Image/dtb first)"; exit 1; }
-  mkdir -p "$STAGE/assets/$b"
-  cp -L "$src"/Image "$STAGE/assets/$b/"
-  cp -L "$src"/*.dtb "$STAGE/assets/$b/"
-  # Virtual-camera sensor modules the guest insmods from /mnt (camera.guest_modules);
-  # resolved from the asset dir at runtime, so they must be baked alongside.
-  cp -L "$src"/*.ko "$STAGE/assets/$b/" 2>/dev/null || true
-  # Optional artifacts — boards vary: initramfs boot vs SD/disk boot vs data disk.
-  for opt in initrd.cpio.gz disk.img disk.wic; do
-    [ -f "$src/$opt" ] && cp -L "$src/$opt" "$STAGE/assets/$b/"
-  done
-  echo "  baked assets: $b ($(ls "$STAGE/assets/$b" | tr '\n' ' '))"
+# NXP BSP boot artifacts (Image / *.dtb / rootfs / initramfs / *.ko) and the
+# i.MX95 M33 SM firmware (m33_image.elf, referenced via {asset_dir} in the
+# profile's extra_args) are DELIBERATELY NOT baked — they are NXP-non-
+# redistributable. The operator volume-mounts them at runtime:
+#   docker run -v /my/bsp:/artifacts -e HOLOBENCH_ASSET_ROOT=/artifacts $IMAGE
+# Boot artifacts resolve from $HOLOBENCH_ASSET_ROOT/<board>/ (loader.default_asset_dir);
+# the M33 elf from the same dir via the profile's {asset_dir} placeholder.
+# Sanity-check the operator didn't accidentally leave restricted files in context:
+for stray in Image "*.dtb" "*.elf" rootfs initrd.cpio.gz disk.img disk.wic; do
+  found="$(find "$STAGE" -name "$stray" -not -path "*/vendor/*" 2>/dev/null | head -1)"
+  [ -z "$found" ] || { echo "error: refusing to build — restricted-looking artifact in context: $found"; exit 1; }
 done
 
-# Bake any loader firmware referenced in the QEMU_BOARD profile's extra_args
-# (e.g. the i.MX95 M33 System Manager elf, a host-absolute path) and rewrite the
-# staged profile to point at the in-container copy.
-# (|| true: boards without an M33 loader — e.g. the i.MX91, single A55 — have no
-# match, and a no-match grep under `set -o pipefail` would otherwise abort here.)
-loader_file="$(grep -oE 'loader,file=[^",]+' "profiles/$QEMU_BOARD.yaml" | head -1 | sed 's/loader,file=//' || true)"
-if [ -n "$loader_file" ] && [ -f "$loader_file" ]; then
-  mkdir -p "$STAGE/extra"
-  cp -L "$loader_file" "$STAGE/extra/$(basename "$loader_file")"
-  sed -i "s|$loader_file|/opt/holobench/extra/$(basename "$loader_file")|" \
-    "$STAGE/profiles/$QEMU_BOARD.yaml"
-  echo "  baked loader firmware: $(basename "$loader_file")"
-fi
-
-echo "building $IMAGE (board qemu: $QEMU_BOARD; boards: ${ASSET_BOARDS[*]}) ..."
+echo "building $IMAGE (board qemu: $QEMU_BOARD; advertises: ${ASSET_BOARDS[*]}; NO baked BSP) ..."
 docker build -t "$IMAGE" "$STAGE"
 echo
-echo "Built $IMAGE. Run it:"
-echo "  docker run --rm -p 8080:8080 $IMAGE"
+echo "Built $IMAGE (distributable: OSS app + GPL qemu only, no NXP artifacts). Run it:"
+echo "  docker run --rm -p 8080:8080 -v /my/bsp:/artifacts -e HOLOBENCH_ASSET_ROOT=/artifacts $IMAGE"
+echo "  # /my/bsp/<board>/ supplies your own Image/*.dtb/rootfs (+ m33_image_M2.elf for imx95)"
 echo "  # open http://localhost:8080  (open mode; auth+admin: -e HOLOBENCH_ADMIN_USER=admin -e HOLOBENCH_ADMIN_PASSWORD=secret)"

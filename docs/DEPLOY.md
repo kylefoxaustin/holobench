@@ -150,66 +150,73 @@ Quotas (count limits, `0` = unlimited):
 
 ## 5. Container deployment
 
-The fat image bakes the board's QEMU + artifacts (see `README.md` → *Run as a
-container*). For a shared service:
+> **Compliance — read this first.** The Holobench image bakes in **only**
+> redistributable bits: the OSS app + the **GPL** forked `qemu-system-aarch64`. It
+> ships with **no NXP BSP artifacts** (`Image`, `*.dtb`, rootfs/initramfs, the
+> i.MX95 M33 `m33_image.elf`, NXP `.ko`) — those are NXP-non-redistributable, so
+> baking them into a pushed/shared layer redistributes NXP's binaries (and registry
+> blobs persist even after a tag delete). You supply your **own** BSP and
+> **volume-mount** it at run time. `docker/build.sh` refuses to build if a
+> restricted-looking artifact is in its context.
+
+The operator supplies a BSP directory laid out per board id and mounts it at
+`/artifacts` (`HOLOBENCH_ASSET_ROOT`):
+
+```
+/srv/holobench-bsp/
+  imx95-evk-sd/  Image  imx95-19x19-evk.dtb  disk.wic  m33_image_M2.elf
+  imx93-evk-sd/  Image  imx93-11x11-evk.dtb  disk.wic
+  imx91-evk-sd/  Image  imx91-11x11-evk.dtb  disk.wic
+```
+
+For a shared service:
 
 ```bash
 docker run -d --restart=unless-stopped \
   -p 127.0.0.1:8080:8080 \
   --memory=10g --cpus=4 \
+  -v /srv/holobench-bsp:/artifacts -e HOLOBENCH_ASSET_ROOT=/artifacts \
   -e HOLOBENCH_SECRET="$(openssl rand -hex 32)" \
   -e HOLOBENCH_NICE=10 \
   -e HOLOBENCH_MAX_PER_USER=2 \
   -e HOLOBENCH_ALLOWED_ORIGINS=https://evk.example.com \
   -v holobench-data:/opt/holobench/data \
-  ghcr.io/kylefoxaustin/holobench:imx95-sd
+  holobench:imx95-evk-sd
 # then point your TLS reverse proxy at 127.0.0.1:8080
 ```
 
 Create users with `docker exec <ctr> holobench user add ...` (persisted in the
 `holobench-data` volume). The image uses TCG (no `/dev/kvm`).
 
-### Rebuilding after the i.MX95 M33 density fix
+### The i.MX95 M33 density fix (M=2 firmware)
 
-`docker/build.sh` resolves both the **forked qemu** (`qemu.binary`) and the
-**M33 SM firmware** (`loader,file=` in `extra_args`) straight from the profile,
-so an image built from the current profiles automatically bakes the fixed qemu
-(upstream WFI fix `6fd2fcdc61b` + 95's `power_state` hygiene) and the **M=2** SM
-firmware (`m33_image_M2.elf`). That's the configuration that drops an *idle*
-board from ~1.1 host cores to ~0.15 (CPU-bound → RAM-bound; see
-`docs/SCALING.md`). Nothing extra to pass — just rebuild:
-
-```bash
-docker/build.sh imx95-evk-sd imx95-evk-sd     # fat full-distro i.MX95 image (~15 GB)
-# bakes: fixed qemu-system-aarch64, m33_image_M2.elf, disk.wic, Image, dtb, *.ko
-```
-
-It bakes the **one** loader for the `QEMU_BOARD` profile (rewritten to an
-in-container path); a second i.MX95 profile baked only as an *asset* board keeps
-its host-absolute loader path, so build the full-distro board as the `QEMU_BOARD`.
-Verify after boot with `top -H -p <qemu_pid>` — no `CPU N/TCG` thread should peg
-while the guest is idle.
+The forked qemu baked into the image carries the WFI fix (upstream `6fd2fcdc61b` +
+95's `power_state` hygiene); pair it with the **M=2** SM firmware
+(`m33_image_M2.elf`) in your mounted BSP to drop an *idle* board from ~1.1 host
+cores to ~0.15 (CPU-bound → RAM-bound; see `docs/SCALING.md`). The i.MX95 profile
+references that elf via the `{asset_dir}` placeholder, so just drop your
+`m33_image_M2.elf` into `/artifacts/imx95-evk-sd/`. Verify after boot with
+`top -H -p <qemu_pid>` — no `CPU N/TCG` thread should peg while the guest is idle.
 
 ### Releasing / republishing the images
 
-Cut a release with one command:
+Cut a release with one command (images are now small — OSS + qemu only — and
+freely publishable, since no NXP artifacts are baked):
 
 ```bash
-tools/release.sh v0.2.6                                       # build all 3, tag rolling + pinned, push to GHCR
-RELEASE_NOTES=notes.md tools/release.sh v0.2.6 --gh-release   # also cut the GitHub release
+tools/release.sh v0.3.0                                       # build all 3, tag rolling + pinned, push to GHCR
+RELEASE_NOTES=notes.md tools/release.sh v0.3.0 --gh-release   # also cut the GitHub release
 ```
 
-It must run on a host that has the forked qemu builds + board assets (the images
-bake them in) — that's why it's a local script, not GitHub-hosted CI (a hosted
-runner has neither the forked QEMU nor the ~12 GB golden `.wic`, and not enough
-disk for a 15 GB image). Run it per *release tag*, not per commit — most commits
-reuse the same golden.
+It runs on a host that has the forked qemu builds (the images bake the GPL binary),
+not GitHub-hosted CI. No BSP/golden disk is needed to build anymore.
 
 ## 6. Publishing caveat (Prime Directive)
 
-The fat images embed the **forked** i.MX QEMU (the models aren't upstreamed
-yet). Fine for internal/demo hosting; revisit public publishing once the machine
-models land in stock QEMU. Holobench itself uses only standard QEMU interfaces.
+The images embed the **forked** i.MX QEMU (GPL — redistributable; the models
+aren't upstreamed yet). Holobench itself uses only standard QEMU interfaces.
+**Never** add NXP BSP artifacts back into the image (§5) — keep the boundary at
+"redistributable bits in the image, operator supplies the restricted BSP."
 
 ## Environment variable reference
 

@@ -32,7 +32,11 @@ qemu:
   # density-correct default now that the fix is in the binary this profile targets.
   extra_args:
     - "-device"
-    - "loader,file=/home/kyle/Documents/GitHub/95emulator/build/m33_image_M2.elf,cpu-num=6"
+    # {asset_dir} expands to assets/imx95-evk-sd/ (or $HOLOBENCH_ASSET_ROOT/...).
+    # The M33 SM firmware is NXP-non-redistributable -> never baked; operator
+    # supplies their own m33_image_M2.elf in the mounted assets volume. See
+    # docs/DEPLOY.md. (Local dev: drop/symlink it into assets/imx95-evk-sd/.)
+    - "loader,file={asset_dir}/m33_image_M2.elf,cpu-num=6"
     - "-serial"
     - "null"
 

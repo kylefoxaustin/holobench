@@ -1,9 +1,12 @@
 # Run a pre-built Holobench image. Build it first with the staging script
-# (it bakes in the forked QEMU + board artifacts that a plain compose build
-# can't stage):
+# (it bakes in the forked QEMU + the app — NO NXP BSP artifacts):
 #
 #   docker/build.sh imx91-evk            # -> image holobench:imx91-evk
 #   docker compose -f docker/compose.yaml up
+#
+# COMPLIANCE: the image ships no NXP BSP. You supply your OWN BSP and mount it at
+# /artifacts (see volumes/env below + docs/DEPLOY.md). Lay it out per board id:
+#   ./bsp/imx91-evk/{Image,imx91-11x11-evk.dtb,initrd.cpio.gz,...}
 #
 # Then open http://localhost:8080
 services:
@@ -11,8 +14,11 @@ services:
     image: holobench:imx91-evk
     ports:
       - "8080:8080"
+    volumes:
+      - ./bsp:/artifacts          # YOUR BSP artifacts (not shipped in the image)
+    environment:
+      HOLOBENCH_ASSET_ROOT: "/artifacts"
     # Uncomment to require auth + unlock the Admin panel (seeds an admin on start):
-    # environment:
     #   HOLOBENCH_ADMIN_USER: "admin"
     #   HOLOBENCH_ADMIN_PASSWORD: "change-me"
     #   HOLOBENCH_DEMO_LOGIN: "admin:change-me"   # optional one-click demo box

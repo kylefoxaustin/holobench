@@ -1,10 +1,11 @@
 #!/usr/bin/env bash
 # SPDX-License-Identifier: GPL-2.0-or-later
 #
-# One-command release: build the fat board images, tag + push them to GHCR
-# (rolling + pinned), and optionally cut the GitHub release. Must run on a host
-# that has the forked qemu builds + board assets (the images bake them in) — a
-# GitHub-hosted runner can't, so this is for your box or a self-hosted runner.
+# One-command release: build the DISTRIBUTABLE board images (OSS app + GPL forked
+# qemu only — NO NXP BSP artifacts; operators volume-mount their own at runtime,
+# see docs/DEPLOY.md), tag + push them to GHCR (rolling + pinned), and optionally
+# cut the GitHub release. Must run on a host that has the forked qemu builds — a
+# GitHub-hosted runner doesn't, so this is for your box. No BSP/golden needed.
 #
 # Usage:
 #   tools/release.sh <version> [board ...]        # build + push images
