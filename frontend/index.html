@@ -772,11 +772,12 @@
                           value=${mode} onChange=${e => setMode(e.target.value)} disabled=${running}>
                     <option value="plan">Show plan only (no build)</option>
                     <option value="bsp">I have my own NXP BSP</option>
-                    <option value="demo">OSS demo image (coming soon)</option>
+                    <option value="demo">OSS demo image${sel && !sel.oss_demo ? " (not yet available)" : ""}</option>
                   </select>
                   ${mode === "bsp" && html`<input placeholder="/path/to/my/bsp" value=${bsp} onChange=${e => setBsp(e.target.value)}
                      class="mt-1 w-full bg-slate-800 border border-slate-700 rounded px-2 py-1 text-xs font-mono" disabled=${running} />`}
-                  ${mode === "demo" && html`<div class="text-[11px] text-amber-500 mt-1">OSS demo artifacts aren’t available yet (i.MX91/93 first; i.MX95 needs the M33 SM). Use “I have my own NXP BSP”.</div>`}
+                  ${mode === "demo" && sel && !sel.oss_demo && html`<div class="text-[11px] text-amber-500 mt-1">No OSS demo bundle for ${sel.id} yet (pending the emulator session's boot recipe; i.MX95 needs the M33 SM). Use “I have my own NXP BSP”.</div>`}
+                  ${mode === "demo" && sel && sel.oss_demo && html`<div class="text-[11px] text-emerald-400 mt-1">An all-OSS bootable bundle is available — no NXP artifacts needed.</div>`}
                 </div>
               </div>
               ${manifest && manifest.required && html`

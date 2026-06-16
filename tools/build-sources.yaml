@@ -12,21 +12,37 @@
 # Pinned commits verified 2026-06-16: public fork tip == local model tip. The
 # emulator sessions are the source of truth — reconfirm on the bus before a release.
 # system_arm = build qemu-system-arm (MCU/Cortex-M); else qemu-system-aarch64.
+#
+# oss_demo (optional): a fully-REDISTRIBUTABLE bootable bundle (mainline/upstream
+# kernel + generic dtb + buildroot/busybox rootfs — all OSS, no NXP BSP) so a user
+# with no NXP artifacts can still boot. `tools/fetch-oss-demo.sh` downloads
+# url -> verifies sha256 -> extracts into the board's asset dir. The bundle's boot
+# recipe (which kernel/dtb actually boots the model) is OWNED BY THE EMULATOR
+# SESSION (Prime Directive §7 — never guess); url/sha256 stay empty until they
+# confirm/publish one (they likely have it from the upstreaming effort). The bundle
+# is built once by tools/build-oss-demo.sh and published as a GitHub release asset.
 
 imx95-evk-sd:
   qemu: { repo: "https://github.com/kylefoxaustin/qemu-imx95.git", ref: "25223218cd", target_list: "aarch64-softmmu" }
+  # oss_demo blocked: i.MX95 needs the M33 SM (NXP) for SCMI — no fully-OSS boot yet (escalation).
+  oss_demo: { url: "", sha256: "" }
 imx95-evk:
   qemu: { repo: "https://github.com/kylefoxaustin/qemu-imx95.git", ref: "25223218cd", target_list: "aarch64-softmmu" }
+  oss_demo: { url: "", sha256: "" }
 
 imx93-evk-sd:
   qemu: { repo: "https://github.com/kylefoxaustin/qemu-imx93.git", ref: "cc125f516d", target_list: "aarch64-softmmu" }
+  oss_demo: { url: "", sha256: "" }   # pending boot recipe from the 93 emulator session
 imx93-evk:
   qemu: { repo: "https://github.com/kylefoxaustin/qemu-imx93.git", ref: "cc125f516d", target_list: "aarch64-softmmu" }
+  oss_demo: { url: "", sha256: "" }
 
 imx91-evk-sd:
   qemu: { repo: "https://github.com/kylefoxaustin/qemu-imx91.git", ref: "f816301c5e", target_list: "aarch64-softmmu" }
+  oss_demo: { url: "", sha256: "" }   # pending boot recipe from the 91 emulator session
 imx91-evk:
   qemu: { repo: "https://github.com/kylefoxaustin/qemu-imx91.git", ref: "f816301c5e", target_list: "aarch64-softmmu" }
+  oss_demo: { url: "", sha256: "" }
 
 # MCU: builds qemu-system-arm. (Holobench's container today targets the i.MX
 # aarch64 boards; the MCX build-me path is here for completeness / future.)

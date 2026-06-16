@@ -106,13 +106,27 @@ credentials; the download goes operator→NXP directly, transiting nothing of ou
 - **BYO BSP (works now):** the user drops their own NXP-built
   `Image`/`*.dtb`/rootfs(/`m33_image_M2.elf` for 95) into the mounted volume,
   laid out per board id. Always faithful; requires NXP access.
-- **OSS demo (phased):** a fully-redistributable bootable set per board so someone
-  with *no* NXP artifacts can still boot — mainline/Yocto kernel + a buildroot/
-  busybox initramfs, published as GitHub **release assets** (all OSS, freely
-  shippable). Start with **i.MX91/93** (plain direct-kernel). **i.MX95 is the open
-  problem:** it needs the M33 SM (NXP) for SCMI — a fully-OSS 95 demo needs either
-  an OSS SM stand-in or a model that tolerates SCMI-absent boot (escalate to the 95
-  session, Prime Directive §2). Until then the 95 wizard path is BYO-BSP only.
+- **OSS demo (plumbing implemented; bundles pending):** a fully-redistributable
+  bootable set per board so someone with *no* NXP artifacts can still boot —
+  mainline/upstream kernel + generic dtb + buildroot/busybox rootfs, published as a
+  GitHub **release asset** (all OSS). The mechanism is live:
+  - `oss_demo: {url, sha256}` per board in `tools/build-sources.yaml` (empty until a
+    bundle is published; `SetupManager.boards()` exposes `oss_demo: bool`).
+  - `tools/fetch-oss-demo.sh <board>` downloads + sha256-verifies + extracts a
+    bundle into the asset dir; `build-me.sh --demo` and the wizard's *OSS demo*
+    option call it. Until a url is set it reports "not available yet" cleanly.
+  - `tools/build-oss-demo.sh <board> <oss-dir>` packages a staged OSS artifact dir
+    into the bundle + prints the sha256 and the `oss_demo:` snippet (and refuses if
+    an NXP M33/imx-sm binary is in the dir).
+
+  **The gating dependency is the boot recipe** — *which* OSS kernel/dtb actually
+  boots each model. That is owned by the emulator session (Prime Directive §7,
+  never guess); they are almost certainly producing exactly this as part of
+  **upstreaming**, so the bundle source is likely their upstream-boot artifacts.
+  Start with **i.MX91/93** (plain direct-kernel). **i.MX95 is the open problem:**
+  it needs the M33 SM (NXP) for SCMI — a fully-OSS 95 demo needs an OSS SM stand-in
+  or a SCMI-absent boot path (escalate to the 95 session, §2). Until a bundle is
+  published, that board's wizard path is BYO-BSP only.
 
 ## Web wizard (wraps the engine)
 

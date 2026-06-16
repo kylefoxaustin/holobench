@@ -60,8 +60,8 @@ fi
 echo "  qemu source : $REPO_URL @ $REF  (target: $TARGETS)"
 echo "  image       : $IMAGE"
 if [ -n "$BSP_DIR" ]; then echo "  artifacts   : your BSP at $BSP_DIR"
-elif [ "$DEMO" = 1 ]; then echo "  artifacts   : OSS demo (not yet available — see docs/SETUP.md §OSS demo)"
-else echo "  artifacts   : none chosen yet (pass --bsp DIR, or --demo when available)"; fi
+elif [ "$DEMO" = 1 ]; then echo "  artifacts   : OSS demo bundle (fetched via tools/fetch-oss-demo.sh after build)"
+else echo "  artifacts   : none chosen yet (pass --bsp DIR, or --demo)"; fi
 
 system_arm=$(python3 - "$SOURCES" "$BOARD" <<'PY'
 import sys, yaml
@@ -102,6 +102,15 @@ docker build -f "$STAGE/Dockerfile.buildme" \
   --build-arg QEMU_REF="$REF" \
   --build-arg QEMU_TARGETS="$TARGETS" \
   -t "$IMAGE" "$STAGE"
+
+if [ "$DEMO" = 1 ]; then
+  echo; echo "fetching OSS demo artifacts ..."
+  if tools/fetch-oss-demo.sh "$BOARD" "oss-demo/$BOARD"; then
+    RUN_HINT="docker run --rm -p 8080:8080 -v $REPO/oss-demo/$BOARD:/artifacts/$BOARD:ro -e HOLOBENCH_ASSET_ROOT=/artifacts $IMAGE"
+  else
+    echo "  (OSS demo unavailable — supply your own BSP with --bsp DIR instead)"
+  fi
+fi
 
 echo; echo "Built $IMAGE (OSS app + GPL qemu from source; no NXP BSP). Run it:"
 echo "  $RUN_HINT"

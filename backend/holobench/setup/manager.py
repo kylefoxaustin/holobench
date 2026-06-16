@@ -140,6 +140,7 @@ class SetupManager:
         for board, entry in _load_sources().items():
             q = (entry or {}).get("qemu", {})
             stock = (entry or {}).get("stock")
+            demo = (entry or {}).get("oss_demo") or {}
             out.append({
                 "id": board,
                 "image_built": self._image_built(board),
@@ -147,6 +148,8 @@ class SetupManager:
                 "qemu_repo": q.get("repo"),
                 "qemu_ref": q.get("ref"),
                 "stock": stock,
+                # OSS demo bundle published yet? (url set in build-sources.yaml)
+                "oss_demo": bool(demo.get("url")),
             })
         return sorted(out, key=lambda b: b["id"])
 
