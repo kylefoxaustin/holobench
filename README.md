@@ -264,7 +264,7 @@ emulation). Runs **open** by default (no login); add `-e HOLOBENCH_ADMIN_USER=ad
 -e HOLOBENCH_ADMIN_PASSWORD=secret` to require a login and unlock the **Admin**
 panel (optionally `-e HOLOBENCH_DEMO_LOGIN=admin:secret` for a one-click demo box).
 
-> Pinned tag: `ghcr.io/kylefoxaustin/holobench:imx95-sd-v0.2.4` (bakes the i.MX95
+> Pinned tag: `ghcr.io/kylefoxaustin/holobench:imx95-sd-v0.2.5` (bakes the i.MX95
 > M33 density fix — idle board ~0.15 host core, RAM-bound, see `docs/SCALING.md` —
 > a **board LEDs panel**, self-service **register / first-run onboarding**, the **admin fleet view**
 > (per-board CPU per-core + % of host / RAM / disk / idle + kill), and the

@@ -29,8 +29,16 @@ QEMU_BIN="$(grep -E '^\s*binary:' "profiles/$QEMU_BOARD.yaml" | head -1 | sed -E
 STAGE="$(mktemp -d)"; trap 'rm -rf "$STAGE"' EXIT
 echo "staging build context in $STAGE ..."
 
-# App (dereference any symlinks; skip venv/caches/big assets).
-cp -rL backend frontend profiles docs tools vendor README.md CLAUDE.md ROADMAP.md LICENSE "$STAGE"/ 2>/dev/null || true
+# App (dereference any symlinks; skip venv/caches/big assets). NOTE: profiles are
+# copied selectively below, NOT wholesale — the image must only advertise boards it
+# can actually launch (the baked qemu serves QEMU_BOARD + ASSET_BOARDS), or the
+# picker lists profiles that error on boot (other SoCs / the MCU / virt-smoke).
+cp -rL backend frontend docs tools vendor README.md CLAUDE.md ROADMAP.md LICENSE "$STAGE"/ 2>/dev/null || true
+mkdir -p "$STAGE/profiles"
+for prof in "$QEMU_BOARD" "${ASSET_BOARDS[@]}"; do
+  [ -f "profiles/$prof.yaml" ] && cp -L "profiles/$prof.yaml" "$STAGE/profiles/"
+done
+echo "  baked profiles (launchable only): $(cd "$STAGE/profiles" && ls *.yaml | tr '\n' ' ')"
 # Ensure the GPL-2.0 capture helpers exist (staged into guests at /mnt). Build if
 # the cross-compiler is present and they're missing; warn (don't fail) otherwise.
 if [ ! -x vendor/camera/bin/imx95-isi-capture ] && command -v aarch64-linux-gnu-gcc >/dev/null; then
