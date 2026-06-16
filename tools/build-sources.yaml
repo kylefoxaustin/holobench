@@ -49,7 +49,11 @@ imx91-evk-sd:
   oss_demo: { url: "", sha256: "" }   # pending boot recipe from the 91 emulator session
 imx91-evk:
   qemu: { repo: "https://github.com/kylefoxaustin/qemu-imx91.git", ref: "f816301c5e", target_list: "aarch64-softmmu" }
-  oss_demo: { url: "", sha256: "" }
+  # All-OSS boot bundle from the 91 emulator session, boot-tested on imx91-11x11-evk:
+  # mainline Linux v6.18-rc3 (i.MX91 only landed post-6.17, so NOT a 6.12 LTS) + mainline
+  # imx91-11x11-evk.dtb + busybox initramfs -> userspace marker + clean power-down, single
+  # A55 (smp 1), zero NXP bits. (initrd.cpio.gz = the bundle's busybox rootfs renamed.)
+  oss_demo: { url: "https://github.com/kylefoxaustin/holobench/releases/download/v0.3.0/oss-demo-imx91-evk.tar.gz", sha256: "712cba08e02b1f9ad2f37e8150ad6bc4d34798aeff060391f2b874c613b4dc98" }
 
 # MCU: builds qemu-system-arm. (Holobench's container today targets the i.MX
 # aarch64 boards; the MCX build-me path is here for completeness / future.)

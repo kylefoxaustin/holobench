@@ -41,8 +41,14 @@ def required_artifacts(board: str) -> list[str]:
     p = load_profile(board)
     art = p.boot.artifacts
     names: list[str] = []
-    for v in (art.flash_bin, art.kernel, art.dtb, art.initrd, art.rootfs, art.disk,
-              getattr(art, "firmware", None)):
+    # Boot-critical artifacts only. When the board boots from an initramfs (initrd
+    # set + rdinit), the rootfs/disk are NOT needed to boot — disk is the optional
+    # image-swap golden (Holobench degrades cleanly without it), so don't demand it.
+    # When there's no initrd, the disk/rootfs IS the root medium -> required.
+    boots_from_initrd = bool(art.initrd)
+    candidates = [art.flash_bin, art.kernel, art.dtb, getattr(art, "firmware", None)]
+    candidates += [art.initrd] if boots_from_initrd else [art.rootfs, art.disk]
+    for v in candidates:
         if v and not Path(v).is_absolute():
             names.append(v)
     for a in p.qemu.extra_args:                      # e.g. loader,file={asset_dir}/m33_image_M2.elf,…
