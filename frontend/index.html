@@ -388,6 +388,45 @@
         </div>`;
     }
 
+    function LedsPanel({ session }) {
+      const [leds, setLeds] = useState(null);
+      useEffect(() => {
+        const load = () => api(`/api/sessions/${session.id}/leds`).then(d => setLeds(d.leds || [])).catch(() => {});
+        load(); const id = setInterval(load, 1000); return () => clearInterval(id);
+      }, [session.id]);
+      const dot = (l) => {
+        // on=true lit, on=false dark, on=null unknown (gpio not yet readable)
+        const lit = l.on === true, unknown = l.on == null;
+        const style = lit
+          ? { background: l.color, boxShadow: `0 0 10px 2px ${l.color}`, borderColor: l.color }
+          : { background: unknown ? "#1e293b" : "#0b1220", borderColor: "#334155" };
+        return html`<span class="inline-block w-4 h-4 rounded-full border-2" style=${style}></span>`;
+      };
+      return html`
+        <div class="h-full flex flex-col">
+          <div class="text-xs text-slate-500 mb-1">Board LEDs <span class="text-slate-600">— live, read-only</span></div>
+          <div class="flex-1 min-h-0 overflow-auto bg-black rounded border border-slate-800 p-3">
+            ${leds == null && html`<div class="text-slate-600 text-sm">reading…</div>`}
+            ${leds && leds.length === 0 && html`<div class="text-slate-600 text-sm">no LEDs declared for this board</div>`}
+            <ul class="space-y-2.5">
+              ${(leds || []).map((l, i) => html`
+                <li key=${i} class="flex items-center gap-3 text-sm">
+                  ${dot(l)}
+                  <span class="text-slate-200">${l.name}</span>
+                  <span class="text-slate-500 text-xs">
+                    ${l.on === true ? "ON" : l.on === false ? "off" : "—"}
+                    ${l.source === "power" ? " · power/status" : l.source === "gpio" && l.on == null ? " · GPIO (model not exposing state yet)" : ""}
+                  </span>
+                </li>`)}
+            </ul>
+          </div>
+          <div class="text-[11px] text-slate-600 mt-2">
+            Power = session state. GPIO LEDs read the board's output register live via a stock read-only
+            interface (no model changes) — they light up once the emulator reports the register map.
+          </div>
+        </div>`;
+    }
+
     function RightPanel({ session, onAction, busy }) {
       const fi = session.file_injection || {}, ins = session.introspection || {};
       const tabs = [];
@@ -399,6 +438,7 @@
       if (ins.snapshots) tabs.push(["snap", "Snapshots"]);
       if (fi.nine_p || fi.tftp) tabs.push(["files", "Files"]);
       if (session.camera && session.camera.enabled) tabs.push(["cam", "Camera"]);
+      tabs.push(["leds", "LEDs"]);   // every board has at least a power/status LED
       const [active, setActive] = useState(tabs.length ? tabs[0][0] : null);
       if (!tabs.length) return null;
       const cur = tabs.some(t => t[0] === active) ? active : tabs[0][0];
@@ -416,6 +456,7 @@
             ${cur === "mem" && html`<${TextPanel} session=${session} kind="mtree" label="Memory map — info mtree" />`}
             ${cur === "dev" && html`<${TextPanel} session=${session} kind="qtree" label="Device tree — info qtree" />`}
             ${cur === "evt" && html`<${EventsPanel} session=${session} />`}
+            ${cur === "leds" && html`<${LedsPanel} session=${session} />`}
             ${cur === "dbg" && html`<${DebugPanel} session=${session} />`}
             ${cur === "snap" && html`<${SnapshotsPanel} session=${session} />`}
             ${cur === "files" && html`<${Files} session=${session} />`}

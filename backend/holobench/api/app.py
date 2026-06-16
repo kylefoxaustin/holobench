@@ -900,6 +900,42 @@ def session_events(session_id: str) -> dict:
     return {"events": s.recent_events()}
 
 
+_XP_RE = re.compile(r":\s*0x([0-9a-fA-F]+)")
+
+
+async def _read_word(s: Session, addr: int) -> Optional[int]:
+    """Read a 32-bit word from guest *physical* memory via the stock read-only HMP
+    `xp` (examine physical) — no CPU halt, no model change. Used to sample a GPIO
+    output-data register for the LEDs panel. Returns None if unreadable."""
+    try:
+        out = await s.hmp(f"xp/1wx 0x{addr:x}")
+        m = _XP_RE.search(out or "")
+        return int(m.group(1), 16) if m else None
+    except SessionError:
+        return None
+
+
+@app.get("/api/sessions/{session_id}/leds")
+async def session_leds(session_id: str) -> dict:
+    """Board LED panel. Always includes a synthetic Power/status LED (session state
+    — Phase 1). Profile-declared `gpio` LEDs (Phase 2) are read from the guest's own
+    GPIO output register via a stock read-only interface — no model changes."""
+    s = _get_session(session_id)
+    leds = [{
+        "name": "Power", "color": "#22c55e", "source": "power",
+        "on": s.state.value == "running",
+    }]
+    for spec in s.profile.leds:
+        on = None
+        if spec.source == "gpio" and spec.reg is not None and spec.bit is not None:
+            val = await _read_word(s, spec.reg)
+            if val is not None:
+                bit = bool(val & (1 << spec.bit))
+                on = bit if spec.active_high else not bit
+        leds.append({"name": spec.name, "color": spec.color, "source": spec.source, "on": on})
+    return {"leds": leds}
+
+
 # --- snapshots (savevm/loadvm) ---------------------------------------------
 
 

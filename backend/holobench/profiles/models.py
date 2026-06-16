@@ -101,6 +101,27 @@ class DisplaySpec(_Strict):
     attach_label: Optional[str] = None  # human label, e.g. "1280×800 LVDS"
 
 
+# --- LEDs (board indicator panel) ------------------------------------------
+
+
+class LedSpec(_Strict):
+    """One board LED shown in the LEDs panel.
+
+    source="power": a synthetic power/status indicator driven by session state
+    (no model support needed — Phase 1). source="gpio": a real SoC-driven LED;
+    Holobench reads the GPIO output data register at `reg` and masks `bit` via a
+    stock read-only interface (HMP `xp`, gdbstub, or qom-get) — NO model change,
+    so it can't affect upstreaming. The emulator only reports reg/bit/color/polarity
+    (board facts). off_color is shown when unlit.
+    """
+    name: str
+    color: str = "green"          # lit color (CSS name or hex)
+    source: str = "gpio"          # "power" | "gpio"
+    reg: Optional[int] = None     # gpio output-data register physical address (source=gpio)
+    bit: Optional[int] = None     # which pin/bit in that register
+    active_high: bool = True      # LED lit when the bit is 1 (else active-low)
+
+
 # --- Networking ------------------------------------------------------------
 
 
@@ -244,6 +265,7 @@ class Profile(_Strict):
     net: NetSpec = Field(default_factory=NetSpec)
     file_injection: FileInjection = Field(default_factory=FileInjection)
     camera: CameraSpec = Field(default_factory=CameraSpec)
+    leds: list[LedSpec] = Field(default_factory=list)
     power: PowerSpec = Field(default_factory=PowerSpec)
     introspection: Introspection = Field(default_factory=Introspection)
     reservation: Reservation = Field(default_factory=Reservation)
