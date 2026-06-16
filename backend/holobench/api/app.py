@@ -41,6 +41,7 @@ from ..auth import AuthService
 from ..profiles import ProfileError, list_profiles, load_profile
 from ..profiles.loader import default_asset_dir
 from ..labs import LabCoordinator, LabError, list_labs, load_lab
+from ..setup import SetupError, SetupManager, required_artifacts, validate_manifest
 from ..session.manager import Session, SessionError, SessionManager
 
 _FRONTEND_DIR = Path(__file__).resolve().parents[3] / "frontend"
@@ -134,6 +135,7 @@ def _bootstrap_admin(auth: AuthService) -> None:
 async def lifespan(app: FastAPI):
     app.state.manager = SessionManager()
     app.state.labs = LabCoordinator(app.state.manager)
+    app.state.setup = SetupManager()
     auth = AuthService()
     _bootstrap_admin(auth)
     # Re-init so the signing key matches the now-configured store (persistent
@@ -201,6 +203,12 @@ class LaunchRequest(BaseModel):
 class LaunchLabRequest(BaseModel):
     lab_id: str
     minutes: Optional[int] = None  # reservation applied to every node; <=0 = infinite
+
+
+class SetupBuildRequest(BaseModel):
+    board: str
+    mode: str = "plan"            # "plan" | "bsp" | "demo"
+    bsp_path: Optional[str] = None
 
 
 class SnapshotRequest(BaseModel):
@@ -613,6 +621,51 @@ async def stop_lab(lab_id: str, request: Request) -> dict:
         raise HTTPException(status_code=404, detail=str(exc))
     _audit("lab_stop", user.username, lab=lab_id)
     return {"stopped": lab_id}
+
+
+# --- setup wizard ("build me a board") -------------------------------------
+
+
+@app.get("/api/setup")
+def get_setup(request: Request) -> dict:
+    """First-run build status: docker availability, buildable boards (from
+    tools/build-sources.yaml) + whether each image is built, and any active build."""
+    _require_admin(request)
+    return app_ref.state.setup.status()
+
+
+@app.post("/api/setup/build")
+async def setup_build(req: SetupBuildRequest, request: Request) -> dict:
+    """Kick off `build-me.sh <board>` (build the forked qemu from source + the
+    distributable image). Admin-only — it runs server-side and uses Docker."""
+    user = _require_admin(request)
+    try:
+        view = await app_ref.state.setup.start(req.board, req.mode, req.bsp_path)
+    except SetupError as exc:
+        raise HTTPException(status_code=400, detail=str(exc))
+    _audit("setup_build", user.username, board=req.board, mode=req.mode)
+    return view
+
+
+@app.get("/api/setup/manifest")
+def setup_manifest(board: str, request: Request, bsp: Optional[str] = None) -> dict:
+    """The per-board artifact manifest (derived from the profile). If `bsp` (the
+    operator's mount root) is given, validate it: which required files are present
+    vs missing. The wizard refuses to launch until ok=true."""
+    _require_admin(request)
+    try:
+        if bsp:
+            return validate_manifest(board, bsp)
+        return {"board": board, "required": required_artifacts(board)}
+    except ProfileError as exc:
+        raise HTTPException(status_code=404, detail=str(exc))
+
+
+@app.post("/api/setup/cancel")
+async def setup_cancel(request: Request) -> dict:
+    _require_admin(request)
+    await app_ref.state.setup.cancel()
+    return app_ref.state.setup.status()
 
 
 # --- sessions --------------------------------------------------------------

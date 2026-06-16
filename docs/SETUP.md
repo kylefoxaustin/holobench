@@ -69,7 +69,39 @@ imx95 `qemu-imx95@imx95-netc 25223218cd`, mcxn947 `mcxn947qemu@mcxn947 f6831ff3a
 The forked-qemu build is the slow part (~20–40 min) and fully cached after the
 first run (keyed on repo+ref), so a re-`build-me` of the same board is fast.
 
+## Compliance litmus (the rule the wizard must satisfy)
+
+From the 95 session, the one-line test for the whole flow: **does any NXP-built
+binary originate from Holobench (a holobench-hosted mirror/registry), or only from
+the operator / NXP-direct-with-operator-credentials?** It must be the latter. We
+host and ship **nothing** NXP; the operator's artifacts reach QEMU only through a
+runtime mount they own. (A purely-local build that never leaves the operator's box
+could even bake them in — but the mount approach keeps the boundary obvious and is
+what we do.) Reminder: a pushed registry layer counts as distributed even after a
+tag delete — purge registry-side, never just `docker rmi`.
+
 ## Artifacts: BYO BSP vs OSS demo
+
+The wizard validates a per-board **manifest** before it will run a board and
+**refuses if a required artifact is missing** (95's advice). The manifest is
+derived from the profile — boot artifacts referenced by relative name + any
+`{asset_dir}/…` in `extra_args` — so it stays correct as profiles change:
+
+| board | required in `<bsp>/<board>/` |
+|---|---|
+| imx95-evk-sd | `Image`, `imx95-19x19-evk.dtb`, `disk.wic`, **`m33_image_M2.elf`** (SM fw — only SCMI provider, REQUIRED) |
+| imx93-evk-sd | `Image`, `imx93-11x11-evk.dtb`, `disk.wic` |
+| imx91-evk-sd | `Image`, `imx91-11x11-evk.dtb`, `disk.wic` |
+
+`GET /api/setup/manifest?board=…[&bsp=DIR]` returns `{required, present, missing,
+ok}`; the wizard shows ✓/✗ per file.
+
+Three ways the operator points at artifacts (all keep NXP bits off our servers):
+**(a) local folder** — pick a dir of per-board files; the manifest validates it
+(implemented). **(b) fetch from NXP** — the operator enters *their own* NXP
+credentials; the download goes operator→NXP directly, transiting nothing of ours
+(future). **(c) build the BSP** — link the NXP Yocto steps; produces the same dir
+(future, doc link).
 
 - **BYO BSP (works now):** the user drops their own NXP-built
   `Image`/`*.dtb`/rootfs(/`m33_image_M2.elf` for 95) into the mounted volume,
