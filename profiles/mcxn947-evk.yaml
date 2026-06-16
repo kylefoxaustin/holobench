@@ -57,20 +57,21 @@ display: { enabled: false, device: null, vnc: false }
 
 # FRDM-MCXN947 RGB user LED (facts from mcxn947qemu). All ACTIVE-LOW (PDOR bit 0
 # = LED ON). PDOR = GPIO_base + 0x40; read live via stock HMP `xp` (side-effect-
-# free, no halt, no model change). VERIFIED with mcxn-blinky.elf: PDOR bit10
-# toggles 0x400<->0x0 ~1Hz, so Red lights and clears live in the panel.
+# free, no halt, no model change).
 #
-# Only Red is declared: blinky drives it, so it's a real, verified indicator.
-# Green/Blue are intentionally omitted — the stock DTS leaves their pins disabled
-# and no shipped image drives them, so their PDOR bit stays 0, which active-low
-# logic would render as a permanently-lit LED that the physical board never shows.
-# This model doesn't track pin direction (PDDR at +0x14 reads 0x0 even while red
-# is actively toggling), so there's no register gate to distinguish "undriven" from
-# "driven low". Add Green/Blue here once an app drives them (or once a mux/direction
-# read can confirm the pin is an output). Facts unchanged: green=0x40096040 bit27,
-# blue=0x40098040 bit2, both active-low.
+# enable_reg = PDDR (data-direction reg) = GPIO_base + 0x54 (RGPIO map: PDOR 0x40,
+# PSOR 0x44, PCOR 0x48, PTOR 0x4C, PDIR 0x50, PDDR 0x54). The model only drives a
+# pin's output line when its PDDR bit=1, so we gate the active-low read on PDDR:
+# an UNDRIVEN pin (PDDR bit 0) reads OFF instead of falsely lighting (active-low
+# PDOR default 0 would otherwise show "on"). Both PDOR and PDDR reads are
+# side-effect-free (no clear-on-read, no halt). VERIFIED with mcxn-blinky.elf:
+# blinky sets PDDR bit10=1 and toggles PDOR bit10 ~1Hz -> Red lights/clears live;
+# green/blue PDDR bits stay 0 -> dark, matching the physical board. Zero model
+# changes. (Secondary signal if ever needed: PORT PCR mux at PORT_base+pin*4.)
 leds:
-  - { name: "Red", color: "#ef4444", source: gpio, reg: 0x40096040, bit: 10, active_high: false }
+  - { name: "Red",   color: "#ef4444", source: gpio, reg: 0x40096040, bit: 10, active_high: false, enable_reg: 0x40096054, enable_bit: 10 }
+  - { name: "Green", color: "#22c55e", source: gpio, reg: 0x40096040, bit: 27, active_high: false, enable_reg: 0x40096054, enable_bit: 27 }
+  - { name: "Blue",  color: "#3b82f6", source: gpio, reg: 0x40098040, bit: 2,  active_high: false, enable_reg: 0x40098054, enable_bit: 2 }
 
 net: { user_nics: 0 }
 
