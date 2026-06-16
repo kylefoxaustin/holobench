@@ -1,0 +1,34 @@
+# SPDX-License-Identifier: GPL-2.0-or-later
+# QEMU source per board for `tools/build-me.sh` (see docs/SETUP.md).
+#
+# Each entry says where to get a GPL qemu that knows the board's machine type, and
+# how to build it. This absorbs the fork -> upstream transition with a one-line
+# edit, no code change:
+#   stage 1 (now):       repo+ref = the public fork at a pinned commit
+#   stage 2 (upstreamed): repo+ref = gitlab qemu-project at a release tag
+#   stage 3 (in distros): replace qemu: with `stock: { min_version: "X.Y" }`
+#                         -> build-me skips the compile; the image's apt qemu suffices
+#
+# Pinned commits verified 2026-06-16: public fork tip == local model tip. The
+# emulator sessions are the source of truth — reconfirm on the bus before a release.
+# system_arm = build qemu-system-arm (MCU/Cortex-M); else qemu-system-aarch64.
+
+imx95-evk-sd:
+  qemu: { repo: "https://github.com/kylefoxaustin/qemu-imx95.git", ref: "25223218cd", target_list: "aarch64-softmmu" }
+imx95-evk:
+  qemu: { repo: "https://github.com/kylefoxaustin/qemu-imx95.git", ref: "25223218cd", target_list: "aarch64-softmmu" }
+
+imx93-evk-sd:
+  qemu: { repo: "https://github.com/kylefoxaustin/qemu-imx93.git", ref: "cc125f516d", target_list: "aarch64-softmmu" }
+imx93-evk:
+  qemu: { repo: "https://github.com/kylefoxaustin/qemu-imx93.git", ref: "cc125f516d", target_list: "aarch64-softmmu" }
+
+imx91-evk-sd:
+  qemu: { repo: "https://github.com/kylefoxaustin/qemu-imx91.git", ref: "f816301c5e", target_list: "aarch64-softmmu" }
+imx91-evk:
+  qemu: { repo: "https://github.com/kylefoxaustin/qemu-imx91.git", ref: "f816301c5e", target_list: "aarch64-softmmu" }
+
+# MCU: builds qemu-system-arm. (Holobench's container today targets the i.MX
+# aarch64 boards; the MCX build-me path is here for completeness / future.)
+mcxn947-evk:
+  qemu: { repo: "https://github.com/kylefoxaustin/mcxn947qemu.git", ref: "f6831ff3aa", target_list: "arm-softmmu", system_arm: true }

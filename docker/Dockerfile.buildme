@@ -1,0 +1,56 @@
+# SPDX-License-Identifier: GPL-2.0-or-later
+# Holobench "build me a board" image — multi-stage: build the GPL forked QEMU from
+# source (stage 1), then assemble the distributable runtime (stage 2). NO NXP BSP
+# is ever baked (operator volume-mounts /artifacts). See docs/SETUP.md + DEPLOY.md.
+#
+# build-args (supplied by tools/build-me.sh from build-sources.yaml):
+#   QEMU_REPO   public git URL of the (forked or upstream) qemu
+#   QEMU_REF    commit/tag/branch to build
+#   QEMU_TARGETS  e.g. aarch64-softmmu  (or arm-softmmu for MCU)
+
+# ---- stage 1: build qemu from source (GPL, freely redistributable) ----
+FROM ubuntu:22.04 AS qemu-builder
+ARG QEMU_REPO
+ARG QEMU_REF
+ARG QEMU_TARGETS=aarch64-softmmu
+ENV DEBIAN_FRONTEND=noninteractive
+RUN apt-get update && apt-get install -y --no-install-recommends \
+      git ca-certificates build-essential ninja-build pkg-config python3 \
+      python3-venv flex bison \
+      libglib2.0-dev libpixman-1-dev libslirp-dev \
+      libsdl2-dev libgtk-3-dev libpulse-dev libvirglrenderer-dev \
+    && rm -rf /var/lib/apt/lists/*
+WORKDIR /src
+# Shallow-fetch just the pinned ref (fast, no full history).
+RUN git init -q . \
+    && git remote add origin "$QEMU_REPO" \
+    && git fetch -q --depth 1 origin "$QEMU_REF" \
+    && git checkout -q FETCH_HEAD
+RUN ./configure --target-list="$QEMU_TARGETS" --disable-docs --disable-werror \
+    && make -j"$(nproc)"
+# Normalize the built binary name (system-arm vs system-aarch64) to a stable path.
+RUN set -e; b="$(ls build/qemu-system-aarch64 build/qemu-system-arm 2>/dev/null | head -1)"; \
+    cp "$b" /qemu-system && /qemu-system --version | head -1
+
+# ---- stage 2: the distributable runtime image (mirrors docker/Dockerfile) ----
+FROM ubuntu:22.04
+ENV DEBIAN_FRONTEND=noninteractive
+RUN apt-get update && apt-get install -y --no-install-recommends \
+      python3 python3-pip qemu-utils ca-certificates \
+      libsdl2-2.0-0 libgtk-3-0 libgdk-pixbuf-2.0-0 libcairo2 libx11-6 \
+      libvirglrenderer1 libpulse0 libsndio7.0 libglib2.0-0 libpixman-1-0 libslirp0 \
+    && rm -rf /var/lib/apt/lists/*
+
+COPY . /opt/holobench
+# The forked qemu built in stage 1 (GPL). Named to match the runtime's HOLOBENCH_QEMU.
+COPY --from=qemu-builder /qemu-system /opt/holobench/qemu/qemu-system-aarch64
+RUN pip3 install --no-cache-dir --upgrade pip setuptools wheel \
+    && pip3 install --no-cache-dir -e /opt/holobench/backend
+
+RUN mkdir -p /artifacts
+ENV HOLOBENCH_QEMU=/opt/holobench/qemu/qemu-system-aarch64 \
+    HOLOBENCH_ASSET_ROOT=/artifacts \
+    PYTHONUNBUFFERED=1
+WORKDIR /opt/holobench
+EXPOSE 8080
+CMD ["holobench", "serve", "--host", "0.0.0.0", "--port", "8080"]
