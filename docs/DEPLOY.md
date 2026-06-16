@@ -190,6 +190,27 @@ its host-absolute loader path, so build the full-distro board as the `QEMU_BOARD
 Verify after boot with `top -H -p <qemu_pid>` — no `CPU N/TCG` thread should peg
 while the guest is idle.
 
+### Releasing / republishing the images
+
+The build must run on a host that has the forked qemu builds + board assets (the
+images bake them in), so this can't run on a GitHub-hosted runner — those don't
+have the forked QEMU or the ~12 GB golden `.wic`, and their disk is too small for
+a 15 GB image. Two options:
+
+```bash
+# One command: build all 3 boards, tag rolling + pinned, push to GHCR
+tools/release.sh v0.2.4
+RELEASE_NOTES=notes.md tools/release.sh v0.2.4 --gh-release   # also cut the GH release
+```
+
+Or automate it on a **self-hosted runner**: `.github/workflows/release.yml` runs
+`tools/release.sh` on a `[self-hosted, holobench-builder]` runner when you push a
+`v*` tag (`git tag v0.2.4 && git push origin v0.2.4`). One-time setup: register a
+self-hosted runner on your build box (Settings → Actions → Runners) with the
+`holobench-builder` label, and add a `CR_PAT` secret (a token with
+`write:packages`). Tag → images build + publish automatically. Trigger per
+*release tag*, not per commit — most commits reuse the same golden.
+
 ## 6. Publishing caveat (Prime Directive)
 
 The fat images embed the **forked** i.MX QEMU (the models aren't upstreamed
