@@ -104,6 +104,19 @@ def test_extra_args_asset_dir_placeholder_expands(tmp_path):
     assert loaders and "/artifacts/imx95-evk/m33_image_M2.elf" in loaders[0]
 
 
+def test_qemu_binary_override_wins(tmp_path, monkeypatch):
+    # The wizard-built per-board binary (rt.qemu_binary) beats $HOLOBENCH_QEMU and
+    # the profile path — this is what closes the build->boot seam.
+    monkeypatch.setenv("HOLOBENCH_QEMU", "/env/qemu")
+    p = load_profile("imx91-evk")
+    rt = SessionRuntime(
+        work_dir=tmp_path, qmp_socket=tmp_path / "qmp.sock",
+        serial_sockets={s.chardev: tmp_path / f"{s.chardev}.sock" for s in p.serial},
+        qemu_binary="/built/qemu-system-aarch64",
+    )
+    assert build_command(p, rt)[0] == "/built/qemu-system-aarch64"
+
+
 def test_no_profile_hardcodes_host_bsp_path():
     # Guard: an absolute /home/... loader path in extra_args would mean a restricted
     # artifact pinned to the build host (the thing that caused the redistribution

@@ -42,7 +42,7 @@ from ..profiles import ProfileError, list_profiles, load_profile
 from ..profiles.loader import default_asset_dir
 from ..labs import LabCoordinator, LabError, list_labs, load_lab
 from ..setup import (SetupError, SetupManager, required_artifacts,
-                     validate_manifest, nxp_manifest)
+                     validate_manifest, nxp_manifest, installed_qemu)
 from ..session.manager import Session, SessionError, SessionManager
 
 _FRONTEND_DIR = Path(__file__).resolve().parents[3] / "frontend"
@@ -728,8 +728,12 @@ async def launch_session(req: LaunchRequest, request: Request) -> dict:
         minutes = 0 if (maxm <= 0 or user.is_admin) else maxm
     else:
         minutes = req.minutes if maxm <= 0 else min(req.minutes, maxm)
+    # If the setup wizard built this board's QEMU on this host, boot with it (closes
+    # the build->boot seam — no separate `docker run`).
+    qemu_binary = installed_qemu(profile.id)
     try:
-        session = await mgr.launch(profile, asset_dir=asset_dir, owner=owner, minutes=minutes)
+        session = await mgr.launch(profile, asset_dir=asset_dir, owner=owner,
+                                   minutes=minutes, qemu_binary=qemu_binary)
     except SessionError as exc:
         raise HTTPException(status_code=500, detail=str(exc))
     _audit("session_launch", user.username, session=session.id,

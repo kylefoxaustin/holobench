@@ -13,6 +13,7 @@ a time.
 from __future__ import annotations
 
 import asyncio
+import os
 import shutil
 import time
 from collections import deque
@@ -26,6 +27,17 @@ from ..profiles.loader import _REPO_ROOT
 
 _SOURCES = _REPO_ROOT / "tools" / "build-sources.yaml"
 _BUILD_ME = _REPO_ROOT / "tools" / "build-me.sh"
+_FETCH_DEMO = _REPO_ROOT / "tools" / "fetch-oss-demo.sh"
+# Where a wizard-built per-board QEMU binary is extracted so the RUNNING app can
+# launch the board with it (closing the build->boot seam). Gitignored.
+_QEMU_BUILDS = _REPO_ROOT / "qemu-builds"
+
+
+def installed_qemu(board: str) -> Optional[str]:
+    """Path to the QEMU binary the setup wizard built+extracted for this board on
+    this host, or None. Lets the launch path boot a just-built board in-place."""
+    p = _QEMU_BUILDS / board / "qemu-system-aarch64"
+    return str(p) if p.is_file() and os.access(p, os.X_OK) else None
 
 
 class SetupError(Exception):
@@ -236,6 +248,8 @@ class SetupManager:
                 "stock": stock,
                 # OSS demo bundle published yet? (url set in build-sources.yaml)
                 "oss_demo": bool(demo.get("url")),
+                # QEMU built+extracted on this host -> the running app can boot it.
+                "installed": installed_qemu(board) is not None,
             })
         return sorted(out, key=lambda b: b["id"])
 
@@ -287,12 +301,72 @@ class SetupManager:
                 job.log.append(raw.decode(errors="replace").rstrip("\n"))
             job.returncode = await job.proc.wait()
             job.state = "done" if job.returncode == 0 else "failed"
+            # Close the build->boot seam: on a real build, extract the QEMU binary
+            # onto the host (+ fetch OSS demo artifacts) so the running app can boot
+            # this board in place — no second `docker run`.
+            if job.state == "done" and job.mode in ("bsp", "demo"):
+                await self._install(job)
         except Exception as exc:  # spawn failure etc.
             job.log.append(f"build error: {exc}")
             job.state = "failed"
             job.returncode = -1
         finally:
             job.ended_at = time.time()
+
+    async def _sh(self, job: "_Build", *argv: str) -> int:
+        """Run a command, streaming output into the build log. Returns rc."""
+        job.log.append(f"$ {' '.join(argv)}")
+        proc = await asyncio.create_subprocess_exec(
+            *argv, cwd=str(_REPO_ROOT),
+            stdout=asyncio.subprocess.PIPE, stderr=asyncio.subprocess.STDOUT)
+        assert proc.stdout is not None
+        async for raw in proc.stdout:
+            job.log.append(raw.decode(errors="replace").rstrip("\n"))
+        return await proc.wait()
+
+    async def _install(self, job: "_Build") -> None:
+        """Extract the freshly-built QEMU binary from the holobench:<board> image to
+        qemu-builds/<board>/, and (demo mode) fetch the OSS artifacts into the asset
+        dir, so the current app can launch the board."""
+        board = job.board
+        dest = _QEMU_BUILDS / board
+        dest.mkdir(parents=True, exist_ok=True)
+        job.log.append(f"== installing for in-app boot ({board}) ==")
+        # docker create + cp the binary out, then rm the temp container.
+        try:
+            cid_proc = await asyncio.create_subprocess_exec(
+                "docker", "create", f"holobench:{board}",
+                stdout=asyncio.subprocess.PIPE, stderr=asyncio.subprocess.PIPE)
+            out, err = await cid_proc.communicate()
+            cid = out.decode().strip()
+            if cid_proc.returncode != 0 or not cid:
+                job.log.append(f"WARN extract: docker create failed: {err.decode().strip()}")
+                return
+            try:
+                rc = await self._sh(
+                    job, "docker", "cp",
+                    f"{cid}:/opt/holobench/qemu/qemu-system-aarch64",
+                    str(dest / "qemu-system-aarch64"))
+            finally:
+                await (await asyncio.create_subprocess_exec(
+                    "docker", "rm", cid,
+                    stdout=asyncio.subprocess.DEVNULL,
+                    stderr=asyncio.subprocess.DEVNULL)).wait()
+            if rc != 0 or installed_qemu(board) is None:
+                job.log.append("WARN extract: qemu binary not extracted")
+                return
+            job.log.append(f"extracted qemu -> {dest / 'qemu-system-aarch64'}")
+        except Exception as exc:
+            job.log.append(f"WARN extract failed: {exc}")
+            return
+        # demo mode: fetch the OSS artifacts into the asset dir so the launch finds them.
+        if job.mode == "demo":
+            rc = await self._sh(job, "bash", str(_FETCH_DEMO), board)
+            if rc == 0:
+                job.log.append("OSS demo artifacts fetched into the asset dir")
+            else:
+                job.log.append("note: OSS demo fetch unavailable — supply your BSP")
+        job.log.append(">>> INSTALLED — this board can now be booted from the app")
 
     async def cancel(self) -> None:
         if self._active and self._active.state == "running" and self._active.proc:

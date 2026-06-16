@@ -52,6 +52,11 @@ class SessionRuntime:
     # backend specs (e.g. "socket,mcast=230.0.0.10:1234"), so a board joins a
     # multi-board L2 segment instead of slirp. None = use the profile's user NICs.
     nic_override: Optional[list[str]] = None
+    # Per-board QEMU binary built on this host by the setup wizard ("build me a
+    # board"). When set it wins over $HOLOBENCH_QEMU / the profile path, so the
+    # running app boots a board with the QEMU it just built — closing the
+    # build->boot seam. None = normal resolution.
+    qemu_binary: Optional[str] = None
 
 
 class CommandError(Exception):
@@ -146,9 +151,9 @@ def _boot_args(profile: Profile, rt: SessionRuntime) -> list[str]:
 def build_command(profile: Profile, rt: SessionRuntime) -> list[str]:
     """Build the full QEMU argv for a session. Pure function, no side effects."""
     q = profile.qemu
-    # HOLOBENCH_QEMU overrides the profile's binary path (used by the container
-    # image so one baked qemu serves every profile); else expand any ${VARS}.
-    binary = os.environ.get("HOLOBENCH_QEMU") or os.path.expandvars(q.binary)
+    # Priority: a wizard-built per-board binary (rt.qemu_binary) > $HOLOBENCH_QEMU
+    # (container's one baked qemu) > the profile's path (with ${VARS} expanded).
+    binary = rt.qemu_binary or os.environ.get("HOLOBENCH_QEMU") or os.path.expandvars(q.binary)
     argv: list[str] = [binary]
 
     argv += ["-machine", q.machine]

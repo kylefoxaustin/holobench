@@ -699,7 +699,7 @@
 
     // First-run "build me a board": build the GPL forked qemu from source + the
     // distributable image (no NXP BSP), watching live progress. Admin-gated.
-    function SetupWizard({ onClose }) {
+    function SetupWizard({ onClose, onBoot }) {
       const [data, setData] = useState(null);
       const [err, setErr] = useState("");
       const [board, setBoard] = useState("");
@@ -844,6 +844,8 @@
                   ${running ? "Building…" : mode === "plan" ? "Show plan" : "Build it"}</button>
                 ${running && html`<button onClick=${cancel} class="px-3 py-1.5 rounded bg-rose-700 hover:bg-rose-600 text-sm">Cancel</button>`}
                 ${active && html`<span class="text-xs ${stCls(active.state)}">${active.board}: ${active.state}${active.returncode != null && active.state !== "running" ? ` (rc ${active.returncode})` : ""}</span>`}
+                ${sel && sel.installed && onBoot && html`
+                  <button onClick=${() => onBoot(board)} class="px-3 py-1.5 rounded bg-sky-600 hover:bg-sky-500 text-sm font-medium" title="boot this board in the app now">▶ Boot it now</button>`}
                 <div class="flex-1"></div>
                 <span class="text-[11px] text-slate-600">first source build ~20–40 min, then cached</span>
               </div>
@@ -1020,17 +1022,23 @@
       // this on mount would 401 under enforced auth — the token isn't set yet.
       useEffect(() => { if (me) { setErr(null); refreshProfiles(); } }, [me]);
 
-      const launch = async () => {
+      const launchBoard = async (boardId, opts = {}) => {
         setBusy(true); setErr(null);
         try {
           const s = await api("/api/sessions", {
             method: "POST", headers: { "Content-Type": "application/json" },
-            body: JSON.stringify({ profile_id: selected, ...(infinite ? { minutes: 0 } : {}) }),
+            body: JSON.stringify({ profile_id: boardId, ...(opts.infinite ? { minutes: 0 } : {}) }),
           });
           setSession(s);
           focusDefaultTab(s);
-        } catch (e) { setErr(e.detail || String(e)); }
+          return s;
+        } catch (e) { setErr(e.detail || String(e)); throw e; }
         finally { setBusy(false); }
+      };
+      const launch = () => launchBoard(selected, { infinite });
+      // Build-wizard "Boot it now": launch the just-built board in THIS app, then close.
+      const bootBuilt = async (boardId) => {
+        try { await launchBoard(boardId); setSetupOpen(false); } catch (e) { /* err shown */ }
       };
 
       const focusDefaultTab = (s) => {
@@ -1163,7 +1171,7 @@
 
           ${adminOpen && html`<${AdminPanel} me=${me} onClose=${() => setAdminOpen(false)} />`}
           ${labsOpen && html`<${LabsPanel} onClose=${() => setLabsOpen(false)} onOpenNode=${openNode} />`}
-          ${setupOpen && html`<${SetupWizard} onClose=${() => setSetupOpen(false)} />`}
+          ${setupOpen && html`<${SetupWizard} onClose=${() => setSetupOpen(false)} onBoot=${bootBuilt} />`}
         </div>`;
     }
 

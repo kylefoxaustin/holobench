@@ -220,6 +220,20 @@ Security: the build runs server-side and touches the Docker socket — gate it t
 admin/first-run, validate `board` against the profile list, never pass a
 client-supplied repo/ref (only `build-sources.yaml` entries).
 
+### Closing the build→boot seam (in-place boot)
+
+So "Build" lands the board in the *current* app (no second `docker run`), a
+successful build also **installs** it host-side: the QEMU binary is extracted from
+the built image (`docker create` + `docker cp` from
+`/opt/holobench/qemu/qemu-system-aarch64`) to `qemu-builds/<board>/` (gitignored),
+and — for the OSS-demo path — the artifacts are fetched into the board's asset dir.
+The launch path then prefers that binary: `build_command` resolves the QEMU as
+`rt.qemu_binary` (the wizard-built one) > `$HOLOBENCH_QEMU` > the profile path, and
+`POST /api/sessions` passes `setup.installed_qemu(board)`. `SetupManager.boards()`
+reports `installed: true`, and the wizard shows **▶ Boot it now**, which launches the
+board as an ordinary session in place. Net flow: Build → (qemu compiled + extracted,
+artifacts fetched) → Boot it now → the running app launches the board.
+
 ## Sequencing
 
 1. **Foundation (this doc + landing):** `build-sources.yaml`, `Dockerfile.buildme`,
