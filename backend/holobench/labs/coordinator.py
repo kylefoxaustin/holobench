@@ -142,7 +142,18 @@ class LabCoordinator:
                 if link.type == "eth" and link.segment not in seg_group:
                     seg_group[link.segment] = self._alloc_group()
 
+            # 1b) Load each node's profile once (need it for the NIC model= below
+            # and the launch). A bad profile downs only that node, not the lab.
+            node_profiles: dict[str, object] = {}
+            for node in lab.nodes:
+                try:
+                    node_profiles[node.name] = load_profile(node.profile)
+                except Exception as exc:
+                    running.node_errors[node.name] = str(exc)
+
             # 2) Build each node's nic_override (one socket NIC per segment it joins).
+            # Append model=<fabric_nic_model> when the board needs it to bind the
+            # right modeled NIC (MCXN947 ENET-QoS, i.MX9 FEC); else QEMU auto-attaches.
             node_nics: dict[str, list[str]] = {n.name: [] for n in lab.nodes}
             for link in lab.links:
                 if link.type != "eth":
@@ -150,8 +161,11 @@ class LabCoordinator:
                 group = seg_group[link.segment]
                 for member in link.members:
                     nic_i = len(node_nics[member])
+                    prof = node_profiles.get(member)
+                    model = getattr(prof.net, "fabric_nic_model", None) if prof else None
                     spec = (f"socket,mcast={group}:{_MCAST_PORT},"
-                            f"mac={_mac(running.lab_idx, node_idx[member], nic_i)}")
+                            f"mac={_mac(running.lab_idx, node_idx[member], nic_i)}"
+                            + (f",model={model}" if model else ""))
                     node_nics[member].append(spec)
                     running.node_links.setdefault(member, []).append(
                         f"{link.segment}@{group}:{_MCAST_PORT}")
@@ -159,8 +173,10 @@ class LabCoordinator:
             # 3) Launch each node as a Session with its fabric NICs.
             any_ok = False
             for node in lab.nodes:
+                profile = node_profiles.get(node.name)
+                if profile is None:
+                    continue  # profile load already recorded in node_errors
                 try:
-                    profile = load_profile(node.profile)
                     asset_dir = default_asset_dir(profile.id)
                     nics = node_nics[node.name] or None
                     session = await self.manager.launch(

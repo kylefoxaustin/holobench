@@ -49,6 +49,19 @@ netdev backend differs (`socket` vs `user`). Holobench's resolver gains a per-NI
 mcast group per `eth` segment and points each member's NIC at it. Addressing on a
 bare segment is the lab's choice: static IPs, or one node runs DHCP.
 
+**Per-node NIC `model=`.** Some boards expose more than one modeled NIC and need
+disambiguation so the fabric binds the *functional* one — the MCXN947's ENET-QoS is
+`model=mcxn-enet`, the i.MX9 FEC is `model=imx.enet` (NOT the eQOS registration
+stub). A board carries this in `profile.net.fabric_nic_model`; the coordinator
+appends `,model=<x>` to that node's socket spec (i.MX91, with FEC first, needs none
+— it auto-attaches, as the α PoC proved). This is what lets a **mixed-binary**
+lab work: the `mcx93-eth` lab puts an MCXN947 (forked `qemu-system-arm`) and an
+i.MX93 (`qemu-system-aarch64`) on one mcast L2 segment — the segment is host-side
+and binary-agnostic. Readiness ladder with the emulators: M1 raw L2 (broadcast +
+ethertype 0x88B5), M2 i.MX93-Linux pings a static-IP MCX (ARP+ICMP), stretch iperf.
+(M1+ needs the MCX booting its ENET test firmware, pending from the mcxn947 session;
+the lab + wiring are ready now.)
+
 ### USB — 🟡 stock transport, but model-dependent (after MCX qemu)
 **usbredir** (`usb-redir` chardev over a unix socket) is the upstream-clean
 transport: one board exports a USB **device/gadget**, another imports it as a

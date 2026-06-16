@@ -1,0 +1,26 @@
+# SPDX-License-Identifier: GPL-2.0-or-later
+# Cross-SoC Ethernet: an MCXN947 MCU and an i.MX93 gateway on one virtual segment.
+# This is the first MIXED-binary lab — the MCX node runs the forked qemu-system-arm
+# (mcxn947), the i.MX93 runs qemu-system-aarch64; the mcast L2 segment is host-side
+# and binary-agnostic, so they share one broadcast domain over stock QEMU.
+#
+# Per the emulator sessions: the 93 pairs on its FEC (model=imx.enet, NOT the eQOS
+# stub) and the MCX on its DesignWare ENET-QoS (model=mcxn-enet) — both carried by
+# each profile's net.fabric_nic_model, so the coordinator emits
+# `-nic socket,mcast=<grp:port>,model=<x>,mac=<unique>` per node.
+#
+# Readiness ladder (with mcxn947): M1 = raw L2 frame both directions (broadcast +
+# experimental ethertype 0x88B5); M2 = 93-Linux pings a static-IP MCX (ARP+ICMP);
+# stretch = a short iperf. NOTE: M1+ needs the MCX node booting mcxn947's ENET test
+# firmware (a tiny L2 emitter / Zephyr net app) instead of the default hello.elf —
+# pending from the mcxn947 session; this lab wires the segment + NICs so it's ready
+# the moment that firmware lands. Until then, launching it proves the wiring (both
+# boards up on the segment with the right modeled NICs).
+id:           mcx93-eth
+display_name: "MCX <-> i.MX93 over Ethernet (cross-SoC)"
+description:  "An MCXN947 MCU and an i.MX93 gateway on one stock mcast L2 segment. First mixed-binary lab."
+nodes:
+  - { name: mcx, profile: mcxn947-evk }
+  - { name: gw,  profile: imx93-evk-sd }
+links:
+  - { type: eth, segment: lan0, members: [mcx, gw] }

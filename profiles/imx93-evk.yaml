@@ -46,7 +46,7 @@ display:
   attach_dtb: imx93-11x11-evk-rm67199.dtb   # BSP panel dtb (Raydium RM67199 MIPI-DSI)
   attach_label: "1080×1920 DSI"
 
-net: { user_nics: 1 }
+net: { user_nics: 1, fabric_nic_model: imx.enet }   # FEC (not the eQOS stub) for v3.0 eth labs
 
 file_injection:
   nine_p: { enabled: true, mount_tag: holobench }

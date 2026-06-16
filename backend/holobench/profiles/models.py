@@ -137,6 +137,11 @@ class NetSpec(_Strict):
     # Number of QEMU user-mode NICs to attach (slirp). The board's modeled NICs
     # auto-attach to these in order (e.g. 91 = FEC + ENET_QoS -> 2).
     user_nics: int = 1
+    # v3.0 fabric: the QEMU NIC `model=` to bind when this board joins a lab's
+    # Ethernet segment, when the board needs disambiguation (e.g. the MCXN947's
+    # ENET-QoS = "mcxn-enet", the i.MX9 FEC = "imx.enet" to avoid the eQOS stub).
+    # None = let QEMU auto-attach the first modeled NIC (works for the i.MX91 PoC).
+    fabric_nic_model: Optional[str] = None
 
 
 # --- File injection --------------------------------------------------------

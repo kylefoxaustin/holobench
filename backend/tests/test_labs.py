@@ -127,6 +127,24 @@ def test_separate_segments_get_isolated_groups():
     assert grp(b.nic_override[0]) != grp(b.nic_override[1])
 
 
+def test_mixed_lab_sets_per_node_nic_model():
+    # mcx93-eth: the MCX node gets model=mcxn-enet, the 93 gets model=imx.enet
+    # (from each profile's net.fabric_nic_model), on one shared mcast group.
+    mgr = _FakeManager()
+    coord = LabCoordinator(mgr)
+    running = asyncio.run(coord.launch(load_lab("mcx93-eth")))
+    assert running.state == LabState.RUNNING
+    by_node = {s.lab_node: s for s in mgr.launches}
+    mcx = by_node["mcx"].nic_override[0]
+    gw = by_node["gw"].nic_override[0]
+    assert "model=mcxn-enet" in mcx, mcx
+    assert "model=imx.enet" in gw, gw
+    # same segment -> same group; unique MACs.
+    grp = lambda s: s.split("mcast=")[1].split(",")[0]
+    assert grp(mcx) == grp(gw)
+    assert mcx.split("mac=")[1].split(",")[0] != gw.split("mac=")[1].split(",")[0]
+
+
 def test_usb_lab_is_gated():
     mgr = _FakeManager()
     coord = LabCoordinator(mgr)
