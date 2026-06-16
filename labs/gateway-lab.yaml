@@ -1,0 +1,15 @@
+# SPDX-License-Identifier: GPL-2.0-or-later
+# GATED (not launchable yet): an i.MX93 gateway with an MCXN947 sensor node on
+# USB. USB links use usbredir, which depends on the board models exposing USB
+# host/device (gadget) roles — a board-capability question for the emulator
+# sessions (docs/TOPOLOGIES.md §USB). The coordinator refuses to launch a lab with
+# USB links until that's confirmed; this file documents the intended topology so
+# it's ready the moment the models support it.
+id:           gateway-lab
+display_name: "Gateway lab — i.MX93 + MCXN947 over USB (gated)"
+description:  "i.MX93 gateway with an MCXN947 sensor node on USB. Gated on model usbredir support."
+nodes:
+  - { name: gw,     profile: imx93-evk-sd }
+  - { name: sensor, profile: mcxn947-evk }
+links:
+  - { type: usb, host: gw, device: sensor }

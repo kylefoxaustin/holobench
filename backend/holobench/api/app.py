@@ -40,6 +40,7 @@ from pydantic import BaseModel
 from ..auth import AuthService
 from ..profiles import ProfileError, list_profiles, load_profile
 from ..profiles.loader import default_asset_dir
+from ..labs import LabCoordinator, LabError, list_labs, load_lab
 from ..session.manager import Session, SessionError, SessionManager
 
 _FRONTEND_DIR = Path(__file__).resolve().parents[3] / "frontend"
@@ -132,6 +133,7 @@ def _bootstrap_admin(auth: AuthService) -> None:
 @asynccontextmanager
 async def lifespan(app: FastAPI):
     app.state.manager = SessionManager()
+    app.state.labs = LabCoordinator(app.state.manager)
     auth = AuthService()
     _bootstrap_admin(auth)
     # Re-init so the signing key matches the now-configured store (persistent
@@ -148,6 +150,7 @@ async def lifespan(app: FastAPI):
             await reaper
         except asyncio.CancelledError:
             pass
+        await app.state.labs.shutdown_all()
         await app.state.manager.shutdown_all()
 
 
@@ -195,6 +198,11 @@ class LaunchRequest(BaseModel):
     minutes: Optional[int] = None  # reservation length; <=0 = infinite (no expiry)
 
 
+class LaunchLabRequest(BaseModel):
+    lab_id: str
+    minutes: Optional[int] = None  # reservation applied to every node; <=0 = infinite
+
+
 class SnapshotRequest(BaseModel):
     name: str
 
@@ -219,6 +227,7 @@ def _session_view(s: Session) -> dict:
         "state": s.state.value,
         "pid": s.pid,
         "owner": s.owner,
+        "lab": ({"id": s.lab_id, "node": s.lab_node} if s.lab_id else None),
         "serial": [
             {"name": p.name, "chardev": p.chardev, "role": p.role, "default": p.default}
             for p in s.profile.serial
@@ -523,6 +532,87 @@ def get_profiles() -> list[dict]:
             }
         )
     return out
+
+
+# --- labs (v3.0 multi-board topologies) ------------------------------------
+
+
+def _lab_catalog_entry(lab_id: str) -> Optional[dict]:
+    """A lab spec as catalog metadata (no launch). None if it doesn't load."""
+    try:
+        lab = load_lab(lab_id)
+    except LabError:
+        return None
+    eth = [l for l in lab.links if l.type == "eth"]
+    usb = [l for l in lab.links if l.type == "usb"]
+    return {
+        "id": lab.id,
+        "display_name": lab.display_name,
+        "description": lab.description,
+        "nodes": [{"name": n.name, "profile": n.profile} for n in lab.nodes],
+        "links": [
+            ({"type": "eth", "segment": l.segment, "members": l.members}
+             if l.type == "eth" else
+             {"type": "usb", "host": l.host, "device": l.device})
+            for l in lab.links
+        ],
+        "node_count": len(lab.nodes),
+        "eth_segments": len(eth),
+        # USB links aren't launchable yet (gated on model usbredir support).
+        "launchable": not usb,
+        "gated_reason": ("declares USB links (usbredir support not yet confirmed "
+                         "by the board models)") if usb else None,
+    }
+
+
+@app.get("/api/labs")
+def get_labs(request: Request) -> dict:
+    """Catalog of declared labs + the currently-running ones."""
+    catalog = [e for e in (_lab_catalog_entry(i) for i in list_labs()) if e]
+    running = [rl.view() for rl in app_ref.state.labs.list()]
+    return {"catalog": catalog, "running": running}
+
+
+@app.post("/api/labs")
+async def launch_lab(req: LaunchLabRequest, request: Request) -> dict:
+    user = request.state.user
+    try:
+        lab = load_lab(req.lab_id)
+    except LabError as exc:
+        raise HTTPException(status_code=404, detail=str(exc))
+    owner = user.username if request.app.state.auth.enabled else None
+    minutes = req.minutes
+    try:
+        running = await app_ref.state.labs.launch(lab, owner=owner, minutes=minutes)
+    except LabError as exc:
+        raise HTTPException(status_code=400, detail=str(exc))
+    _audit("lab_launch", user.username, lab=lab.id,
+           nodes=len(lab.nodes), state=running.state.value)
+    return running.view()
+
+
+@app.get("/api/labs/{lab_id}")
+def get_lab(lab_id: str, request: Request) -> dict:
+    """A running lab's live status, or the spec (with a running:false flag) if it
+    isn't launched."""
+    running = app_ref.state.labs.peek(lab_id)
+    if running is not None:
+        return {"running": True, **running.view()}
+    entry = _lab_catalog_entry(lab_id)
+    if entry is None:
+        raise HTTPException(status_code=404, detail=f"no lab '{lab_id}'")
+    return {"running": False, **entry}
+
+
+@app.delete("/api/labs/{lab_id}")
+async def stop_lab(lab_id: str, request: Request) -> dict:
+    user = request.state.user
+    try:
+        await app_ref.state.labs.stop(lab_id)
+    except LabError as exc:
+        raise HTTPException(status_code=404, detail=str(exc))
+    _audit("lab_stop", user.username, lab=lab_id)
+    return {"stopped": lab_id}
 
 
 # --- sessions --------------------------------------------------------------

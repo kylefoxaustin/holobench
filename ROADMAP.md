@@ -22,8 +22,13 @@ socket`/`mcast`, `usbredir`).
 - **v3.0-α — Ethernet foundation — ✅ PROVEN.** `nic_override` swaps a board NIC
   onto a `socket`/`mcast` segment (virtual switch). PoC: two i.MX91s (separate
   QEMU procs) ping across a mcast segment, 3/3 packets, ~1 ms — no model changes.
-- **v3.0-β — lab spec + fabric coordinator + topology UI.** `labs/*.yaml`,
-  `/api/labs`, a node/link topology view; eth segments + hubs.
+- **v3.0-β — lab spec + fabric coordinator + topology UI — ✅ SHIPPED.**
+  `labs/*.yaml` (pydantic-validated), a fabric coordinator that allocates an
+  isolated mcast group per eth segment + unique MACs and launches each node as a
+  Session via `nic_override`, `/api/labs` (list/launch/status/stop), a **Labs**
+  modal (topology view → click a node to open its console), and `holobench
+  lab` CLI. Verified: `eth-pair` boots two real i.MX91s on one mcast group.
+  Shipped labs: `eth-pair`, `lan-trio`, `gateway-lab` (gated).
 - **v3.0 — USB links.** After MCX qemu is done + the emulators confirm `usbredir`
   device/host export-import (escalation). 93↔MCX over USB, then USB hubs.
 

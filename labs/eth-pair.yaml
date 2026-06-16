@@ -1,0 +1,15 @@
+# SPDX-License-Identifier: GPL-2.0-or-later
+# Two i.MX91 boards on one virtual Ethernet segment (a point-to-point "cable").
+# This is the v3.0-alpha PoC made durable: each board's first modeled NIC (the
+# FEC = eth0) is attached to a shared multicast group (stock `-nic socket,mcast`),
+# giving an L2 link across two separate QEMU processes — no model changes.
+# Addressing is the lab's choice; bring eth0 up with static IPs (e.g. 10.9.9.1/.2)
+# from each console and ping across. Busybox profile keeps both boards light.
+id:           eth-pair
+display_name: "Ethernet pair — two i.MX91 on one segment"
+description:  "Two i.MX91 boards cabled over a stock mcast L2 segment. The proven v3.0 foundation."
+nodes:
+  - { name: nodeA, profile: imx91-evk }
+  - { name: nodeB, profile: imx91-evk }
+links:
+  - { type: eth, segment: lan0, members: [nodeA, nodeB] }

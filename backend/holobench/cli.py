@@ -15,12 +15,13 @@ import sys
 from pathlib import Path
 from typing import Optional
 
+from .labs import LabCoordinator, LabError, list_labs, load_lab
 from .profiles import ProfileError, list_profiles, load_profile
 from .profiles.loader import default_asset_dir
 from .session import SessionError, build_command, command_str
 from .session import control
 from .session.command import SessionRuntime
-from .session.manager import Session
+from .session.manager import Session, SessionManager
 
 
 def _print_err(msg: str) -> None:
@@ -206,6 +207,82 @@ def cmd_stop(args: argparse.Namespace) -> int:
     return _run_session_verb(args, control.stop, "stopped (quit)")
 
 
+def cmd_labs(_args: argparse.Namespace) -> int:
+    ids = list_labs()
+    if not ids:
+        print("(no labs found)")
+        return 0
+    for lid in ids:
+        try:
+            lab = load_lab(lid)
+            usb = " [USB: gated]" if lab.has_usb_links() else ""
+            segs = sum(1 for l in lab.links if l.type == "eth")
+            print(f"{lid:14}  {lab.display_name:42}  {len(lab.nodes)} nodes, {segs} eth seg{usb}")
+        except LabError as exc:
+            print(f"{lid:14}  <invalid: {exc}>")
+    return 0
+
+
+def cmd_lab_show(args: argparse.Namespace) -> int:
+    try:
+        lab = load_lab(args.id)
+    except LabError as exc:
+        _print_err(str(exc))
+        return 1
+    print(json.dumps(lab.model_dump(), indent=2))
+    return 0
+
+
+async def _lab_launch(args: argparse.Namespace) -> int:
+    try:
+        lab = load_lab(args.id)
+    except LabError as exc:
+        _print_err(str(exc))
+        return 1
+    mgr = SessionManager()
+    coord = LabCoordinator(mgr)
+    print(f"launching lab: {lab.display_name}  ({len(lab.nodes)} nodes)")
+    try:
+        running = await coord.launch(lab)
+    except LabError as exc:
+        _print_err(str(exc))
+        return 1
+    print(f"lab state: {running.state.value}")
+    for node in lab.nodes:
+        sid = running.node_sessions.get(node.name)
+        if sid:
+            s = mgr.get(sid)
+            fabric = [a for a in s.argv if "socket,mcast" in a]
+            print(f"  {node.name:8} {node.profile:14} pid={s.pid} {s.state.value}")
+            for f in fabric:
+                print(f"           fabric: {f}")
+        else:
+            print(f"  {node.name:8} {node.profile:14} FAILED: {running.node_errors.get(node.name)}")
+    rc = 0
+    try:
+        if args.hold:
+            print(f"holding for {args.hold}s (Ctrl-C to stop early) ...")
+            try:
+                await asyncio.sleep(args.hold)
+            except asyncio.CancelledError:
+                pass
+    finally:
+        if args.keep:
+            print("--keep: leaving lab running.")
+        else:
+            print("stopping lab ...")
+            await coord.stop(lab.id)
+            print("done.")
+    return rc
+
+
+def cmd_lab_launch(args: argparse.Namespace) -> int:
+    try:
+        return asyncio.run(_lab_launch(args))
+    except KeyboardInterrupt:
+        return 130
+
+
 def cmd_serve(args: argparse.Namespace) -> int:
     import uvicorn
 
@@ -270,6 +347,21 @@ def build_parser() -> argparse.ArgumentParser:
     p.add_argument("--quiet-console", action="store_true", help="do not print console tail")
     p.add_argument("--keep", action="store_true", help="do not quit/cleanup at the end")
     p.set_defaults(func=cmd_launch)
+
+    p = sub.add_parser("labs", help="list available multi-board labs (v3.0 topologies)")
+    p.set_defaults(func=cmd_labs)
+
+    p = sub.add_parser("lab", help="launch/inspect a multi-board lab (v3.0 topology)")
+    lsub = p.add_subparsers(dest="lab_cmd", required=True)
+    lsub.add_parser("list", help="list available labs").set_defaults(func=cmd_labs)
+    ls = lsub.add_parser("show", help="print a validated lab spec as JSON")
+    ls.add_argument("id")
+    ls.set_defaults(func=cmd_lab_show)
+    ll = lsub.add_parser("launch", help="launch all nodes of a lab and wire the fabric")
+    ll.add_argument("id")
+    ll.add_argument("--hold", type=float, default=0.0, help="keep the lab up N seconds")
+    ll.add_argument("--keep", action="store_true", help="do not stop the lab at the end")
+    ll.set_defaults(func=cmd_lab_launch)
 
     p = sub.add_parser("serve", help="run the Holobench web backend (REST + console WS + UI)")
     p.add_argument("--host", default="127.0.0.1")

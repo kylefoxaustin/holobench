@@ -125,6 +125,7 @@ class Session:
         owner: Optional[str] = None,
         minutes: Optional[int] = None,
         lcd_attached: bool = False,
+        nic_override: Optional[list[str]] = None,
     ) -> None:
         self.profile = profile
         # Boot with the attachable display panel (display.attach_dtb) so the DPU
@@ -193,7 +194,11 @@ class Session:
             disk_overlay=disk_overlay,
             camera_frames_dir=self.camera_frames_dir,
             lcd_attached=self.lcd_attached,
+            nic_override=nic_override,
         )
+        # v3.0 fabric: which lab (if any) owns this node, and its node name in it.
+        self.lab_id: Optional[str] = None
+        self.lab_node: Optional[str] = None
         self.argv: list[str] = []
         self._proc: Optional[asyncio.subprocess.Process] = None
         self._qmp: Optional[QMPClient] = None
@@ -660,13 +665,14 @@ class SessionManager:
         owner: Optional[str] = None,
         minutes: Optional[int] = None,
         lcd_attached: bool = False,
+        nic_override: Optional[list[str]] = None,
     ) -> Session:
         if self._launch_sem is not None:
             await self._launch_sem.acquire()
         try:
             session = Session(
                 profile, base_dir=self.base_dir, asset_dir=asset_dir, owner=owner,
-                minutes=minutes, lcd_attached=lcd_attached,
+                minutes=minutes, lcd_attached=lcd_attached, nic_override=nic_override,
             )
             await session.launch()
             self._sessions[session.id] = session

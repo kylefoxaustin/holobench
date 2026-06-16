@@ -1,0 +1,15 @@
+# SPDX-License-Identifier: GPL-2.0-or-later
+# A three-board shared Ethernet segment (a virtual switch): two i.MX95 + one
+# i.MX93, all on one multicast L2 domain. Every member's first modeled NIC joins
+# group lan0; bring eth0 up with static IPs and they all see each other (one node
+# can run DHCP if you prefer). Full-distro (-sd) profiles so each board has a real
+# userland with ip/ping. Heavier than eth-pair — needs RAM for three boards.
+id:           lan-trio
+display_name: "LAN trio — two i.MX95 + one i.MX93 on a switch"
+description:  "Three boards on one shared Ethernet segment (virtual switch over stock mcast)."
+nodes:
+  - { name: a95, profile: imx95-evk-sd }
+  - { name: b95, profile: imx95-evk-sd }
+  - { name: c93, profile: imx93-evk-sd }
+links:
+  - { type: eth, segment: lan0, members: [a95, b95, c93] }

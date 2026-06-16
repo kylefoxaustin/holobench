@@ -97,8 +97,16 @@ device.
    multi-board L2 over stock QEMU, no model changes. Gotchas captured: give each
    node a unique `mac=` (else collision), and the i.MX91's first non-`lo` iface is
    `can0` alphabetically — the fabric NIC is `eth0`. Next: the coordinator + lab spec.
-2. **v3.0-β — lab spec + coordinator + topology UI:** `labs/*.yaml`, `/api/labs`,
-   the topology view; eth segments + hubs.
+2. **v3.0-β — lab spec + coordinator + topology UI — ✅ SHIPPED.** `labs/*.yaml`
+   (validated by pydantic, profiles checked at load), a **fabric coordinator**
+   (`backend/holobench/labs/coordinator.py`) that allocates an isolated mcast group
+   per `eth` segment, assigns a unique MAC per node-NIC, and launches each node as
+   an ordinary Session via `nic_override`; `/api/labs` (list/launch/status/stop) +
+   a **Labs** modal in the UI (topology view: node tiles → click to open a node's
+   console; segment edges listed). CLI: `holobench labs` / `lab show` / `lab
+   launch`. Verified end-to-end: the `eth-pair` lab boots two real i.MX91 boards
+   on one mcast group with unique MACs (same wiring as the proven α PoC). Shipped
+   labs: `eth-pair`, `lan-trio`, `gateway-lab` (gated). Next: USB links.
 3. **v3.0 — USB links:** after MCX qemu + emulator usbredir confirmation; 93↔MCX
    over USB, then USB hubs.
 
