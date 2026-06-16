@@ -35,7 +35,11 @@ imx93-evk-sd:
   oss_demo: { url: "", sha256: "" }   # pending boot recipe from the 93 emulator session
 imx93-evk:
   qemu: { repo: "https://github.com/kylefoxaustin/qemu-imx93.git", ref: "cc125f516d", target_list: "aarch64-softmmu" }
-  oss_demo: { url: "", sha256: "" }
+  # All-OSS boot bundle from the 93 emulator session, boot-tested on imx93-11x11-evk:
+  # mainline Linux 6.12.93 (arm64 defconfig) + mainline imx93-11x11-evk.dtb + busybox
+  # initramfs -> shell in ~10s, 2x A55 up, zero NXP bits. (initrd.cpio.gz = the bundle's
+  # busybox rootfs, renamed to the profile's initrd name.)
+  oss_demo: { url: "https://github.com/kylefoxaustin/holobench/releases/download/v0.3.0/oss-demo-imx93-evk.tar.gz", sha256: "ff0528c8a63ec7d8f0fa2ccb681fafde5079ee9d61b21236911dad080c7d4783" }
 
 imx91-evk-sd:
   qemu: { repo: "https://github.com/kylefoxaustin/qemu-imx91.git", ref: "f816301c5e", target_list: "aarch64-softmmu" }

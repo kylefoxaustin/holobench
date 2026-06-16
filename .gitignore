@@ -22,3 +22,4 @@ assets/
 flash.bin
 Image
 *.dtb
+dist/

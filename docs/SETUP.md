@@ -98,10 +98,38 @@ ok}`; the wizard shows ✓/✗ per file.
 
 Three ways the operator points at artifacts (all keep NXP bits off our servers):
 **(a) local folder** — pick a dir of per-board files; the manifest validates it
-(implemented). **(b) fetch from NXP** — the operator enters *their own* NXP
-credentials; the download goes operator→NXP directly, transiting nothing of ours
-(future). **(c) build the BSP** — link the NXP Yocto steps; produces the same dir
-(future, doc link).
+(implemented). **(b) fetch from NXP** — the operator gets the bytes from nxp.com
+themselves (design below, from the 95 session). **(c) build the BSP** — link the
+NXP Yocto steps; produces the same dir (future, doc link).
+
+### (b) NXP-credential fetch UX (design — 95 session)
+
+Rule: **nothing NXP transits or is stored on Holobench** — credentials and bytes
+are operator↔NXP only; we ship URLs + scripts + a validator, never binaries or
+tokens. Two modes:
+
+- **b1 — browser hand-off (preferred, zero credential handling):** the wizard
+  shows the manifest + a per-file **source link out to nxp.com** (BSP/Yocto or
+  prebuilt demo page). The operator logs in with *their* NXP account, accepts the
+  EULA (operator action — the wizard must **not** click through for them),
+  downloads to their machine, then points the wizard at the file(s); the validator
+  checks present + sha256 and only then enables Run. Holobench never sees the login,
+  EULA, or bytes.
+- **b2 — local fetch script (headless/CI):** ship `tools/fetch-nxp.sh` that runs
+  **on the operator host** (never our server), reads `NXP_USER`/`NXP_TOKEN` from the
+  operator's own env, curls each manifest URL from nxp.com directly into their
+  `/artifacts`, then validates. Never persist/log the token; scrub it from echoed
+  commands.
+
+Guardrails (live next to the litmus rule): Holobench hosts **no** NXP binaries and
+**no** mirror (only links to nxp.com); stores **no** NXP credentials (operator-env
+only, never server-side, never logged); EULA acceptance is the operator's (link
+out, never auto-accept); any audit log records only "operator fetched <manifest> at
+<time>", never bytes or creds. 95 source map: i.MX95 `Image`/`imx95-19x19-evk.dtb`/
+`disk.wic` from the NXP i.MX Yocto BSP (or NXP prebuilt demo image, login+EULA);
+`m33_image_M2.elf` is built **M=2 from NXP imx-sm source** — link the operator at
+the imx-sm repo + the M=2 build line, not at a binary. (`fetch-nxp.sh` skeleton +
+the optional known-good-sha256-per-file validator schema are the next build step.)
 
 - **BYO BSP (works now):** the user drops their own NXP-built
   `Image`/`*.dtb`/rootfs(/`m33_image_M2.elf` for 95) into the mounted volume,
