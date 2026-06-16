@@ -120,6 +120,14 @@ class LedSpec(_Strict):
     reg: Optional[int] = None     # gpio output-data register physical address (source=gpio)
     bit: Optional[int] = None     # which pin/bit in that register
     active_high: bool = True      # LED lit when the bit is 1 (else active-low)
+    # Optional driven-gate: a register whose `enable_bit` says the pin is actually
+    # an output driving the LED (e.g. the GPIO data-direction register, PDDR). If
+    # set and the pin is NOT an output, the LED reads OFF — so an undriven
+    # active-low pin (PDOR bit defaults 0 = "on") doesn't falsely light. Read via
+    # the same stock `xp`; still no model change.
+    enable_reg: Optional[int] = None
+    enable_bit: Optional[int] = None
+    enable_high: bool = True       # pin is an output when enable_bit == 1
 
 
 # --- Networking ------------------------------------------------------------

@@ -55,6 +55,23 @@ serial:
 
 display: { enabled: false, device: null, vnc: false }
 
+# FRDM-MCXN947 RGB user LED (facts from mcxn947qemu). All ACTIVE-LOW (PDOR bit 0
+# = LED ON). PDOR = GPIO_base + 0x40; read live via stock HMP `xp` (side-effect-
+# free, no halt, no model change). VERIFIED with mcxn-blinky.elf: PDOR bit10
+# toggles 0x400<->0x0 ~1Hz, so Red lights and clears live in the panel.
+#
+# Only Red is declared: blinky drives it, so it's a real, verified indicator.
+# Green/Blue are intentionally omitted — the stock DTS leaves their pins disabled
+# and no shipped image drives them, so their PDOR bit stays 0, which active-low
+# logic would render as a permanently-lit LED that the physical board never shows.
+# This model doesn't track pin direction (PDDR at +0x14 reads 0x0 even while red
+# is actively toggling), so there's no register gate to distinguish "undriven" from
+# "driven low". Add Green/Blue here once an app drives them (or once a mux/direction
+# read can confirm the pin is an output). Facts unchanged: green=0x40096040 bit27,
+# blue=0x40098040 bit2, both active-low.
+leds:
+  - { name: "Red", color: "#ef4444", source: gpio, reg: 0x40096040, bit: 10, active_high: false }
+
 net: { user_nics: 0 }
 
 file_injection:

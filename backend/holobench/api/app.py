@@ -928,10 +928,19 @@ async def session_leds(session_id: str) -> dict:
     for spec in s.profile.leds:
         on = None
         if spec.source == "gpio" and spec.reg is not None and spec.bit is not None:
-            val = await _read_word(s, spec.reg)
-            if val is not None:
-                bit = bool(val & (1 << spec.bit))
-                on = bit if spec.active_high else not bit
+            driven = True
+            if spec.enable_reg is not None and spec.enable_bit is not None:
+                en = await _read_word(s, spec.enable_reg)
+                if en is not None:
+                    en_bit = bool(en & (1 << spec.enable_bit))
+                    driven = en_bit if spec.enable_high else not en_bit
+            if not driven:
+                on = False  # pin not configured as output → LED not driven
+            else:
+                val = await _read_word(s, spec.reg)
+                if val is not None:
+                    bit = bool(val & (1 << spec.bit))
+                    on = bit if spec.active_high else not bit
         leds.append({"name": spec.name, "color": spec.color, "source": spec.source, "on": on})
     return {"leds": leds}
 
