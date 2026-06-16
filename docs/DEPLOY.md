@@ -195,8 +195,8 @@ while the guest is idle.
 Cut a release with one command:
 
 ```bash
-tools/release.sh v0.2.5                                       # build all 3, tag rolling + pinned, push to GHCR
-RELEASE_NOTES=notes.md tools/release.sh v0.2.5 --gh-release   # also cut the GitHub release
+tools/release.sh v0.2.6                                       # build all 3, tag rolling + pinned, push to GHCR
+RELEASE_NOTES=notes.md tools/release.sh v0.2.6 --gh-release   # also cut the GitHub release
 ```
 
 It must run on a host that has the forked qemu builds + board assets (the images
