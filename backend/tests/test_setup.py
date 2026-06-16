@@ -47,3 +47,8 @@ def test_nxp_manifest_kinds():
     assert by["Image"]["kind"] == "byo" and by["disk.wic"]["kind"] == "byo"
     # Flat pipe-delimited serialization for tools/fetch-nxp.sh.
     assert "m33_image_M2.elf |" in m["manifest"] and "| build |" in m["manifest"]
+    # b1 browser hand-off: durable landing URLs + hints + EULA guidance (95 source map).
+    assert "nxp.com" in by["disk.wic"]["source_url"]
+    assert "imx-sm" in by["m33_image_M2.elf"]["source_url"]
+    assert by["disk.wic"]["hint"]
+    assert m["guidance"]["notes"] and m["guidance"]["release_notes"]

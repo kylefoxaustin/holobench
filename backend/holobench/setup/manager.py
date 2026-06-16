@@ -62,29 +62,73 @@ def required_artifacts(board: str) -> list[str]:
     return out
 
 
+# NXP b1 browser-hand-off source map (i.MX95 emulator session). Link to STABLE
+# landing pages, NOT deep download URLs — the file links are login/session/EULA-gated
+# and rot per release; the Getting Started guide is the durable entry that routes the
+# operator to the current prebuilt image + BSP. imx-sm is open source (no login).
+_IMX_SM_URL = "https://github.com/nxp-imx/imx-sm"
+_GS_IMX95 = ("https://www.nxp.com/document/guide/getting-started-with-the-i-mx-95-"
+             "19-mm-x-19-mm-evk-board:GS-IMX95LPD5EVK-19")
+# Per (board-family, artifact) -> (source_url, button hint). Family matched by id prefix.
+_NXP_SOURCE_MAP = {
+    "imx95": {
+        "disk.wic":            (_GS_IMX95, "Download i.MX95 EVK demo image (nxp.com login+EULA)"),
+        "Image":               (_GS_IMX95, "Kernel: extract from demo .wic, or build via Yocto BSP"),
+        "imx95-19x19-evk.dtb": (_GS_IMX95, "DTB: extract from demo .wic, or build via Yocto BSP"),
+        "m33_image_M2.elf":    (_IMX_SM_URL, "Build SM firmware from open imx-sm (no login)"),
+    },
+}
+_NXP_GUIDANCE = {
+    "imx95": {
+        "notes": [
+            "A free nxp.com account is required to download the BSP / prebuilt image.",
+            "On download you must accept NXP's Software Content Register / EULA (per-user; not auto-accepted).",
+            "The prebuilt demo image AND the Yocto BSP are both reached from the Getting Started guide.",
+            "The SM firmware (m33_image_M2.elf) is open source — built from imx-sm, no login/EULA.",
+        ],
+        "release_notes": "https://www.nxp.com/docs/en/release-note/IMX_LINUX_RELEASE_NOTES.pdf",
+        "yocto_manifest": "https://github.com/nxp-imx/imx-manifest",
+    },
+}
+
+
+def _board_family(board: str) -> str:
+    for fam in _NXP_SOURCE_MAP:
+        if board.startswith(fam):
+            return fam
+    return ""
+
+
 def nxp_manifest(board: str) -> dict:
-    """Profile-derived flat manifest for tools/fetch-nxp.sh (the 95 session's
-    pipe-delimited format: name|sha256|required|kind|source|build_cmd|build_out).
-    Source kinds: the SM firmware is `build` (reproducible from imx-sm, no creds);
-    everything else is `byo` (operator downloads from nxp.com with their login+EULA;
-    Holobench hosts/stores nothing). Optional known-good sha256 column stays empty
-    unless pinned. See docs/SETUP.md §(b)."""
+    """Profile-derived manifest for the NXP credential/BYO path. Returns the flat
+    pipe-delimited form for tools/fetch-nxp.sh (name|sha256|required|kind|source|
+    build_cmd|build_out) PLUS per-row source_url + hint for the wizard's b1 browser
+    hand-off (link-out buttons), and EULA/landing guidance. Source kinds: the SM
+    firmware is `build` (reproducible from imx-sm, no creds); everything else is
+    `byo` (operator downloads from nxp.com with their own login+EULA — Holobench
+    hosts/stores nothing). See docs/SETUP.md §(b)."""
+    fam = _board_family(board)
+    smap = _NXP_SOURCE_MAP.get(fam, {})
     rows = []
     for name in required_artifacts(board):
+        src_url, hint = smap.get(name, ("", ""))
         if "m33" in name.lower():                       # SM firmware — buildable, no creds
             rows.append({
                 "name": name, "sha256": "", "required": "true", "kind": "build",
-                "source": "https://github.com/nxp-imx/imx-sm",
+                "source": _IMX_SM_URL,
                 "build_cmd": "make cfg=mx95evk M=2",
                 "build_out": "build/mx95evk/m33_image.elf",
+                "source_url": src_url or _IMX_SM_URL,
+                "hint": hint or "Build SM firmware from open imx-sm (no login)",
             })
         else:                                           # EULA-gated -> operator BYO
-            hint = ("Yocto core-image .wic or prebuilt demo image (nxp.com login+EULA)"
-                    if name.endswith(".wic") else
-                    "NXP i.MX Yocto BSP build, or prebuilt demo image (nxp.com login+EULA)")
+            fallback = ("Yocto core-image .wic or prebuilt demo image (nxp.com login+EULA)"
+                        if name.endswith(".wic") else
+                        "NXP i.MX Yocto BSP build, or prebuilt demo image (nxp.com login+EULA)")
             rows.append({
                 "name": name, "sha256": "", "required": "true", "kind": "byo",
-                "source": hint, "build_cmd": "", "build_out": "",
+                "source": hint or fallback, "build_cmd": "", "build_out": "",
+                "source_url": src_url, "hint": hint or fallback,
             })
     header = "# name | sha256 | required | kind | source | build_cmd | build_out"
     lines = [header] + [
@@ -92,7 +136,10 @@ def nxp_manifest(board: str) -> dict:
                     r["source"], r["build_cmd"], r["build_out"]])
         for r in rows
     ]
-    return {"board": board, "rows": rows, "manifest": "\n".join(lines) + "\n"}
+    return {
+        "board": board, "rows": rows, "manifest": "\n".join(lines) + "\n",
+        "guidance": _NXP_GUIDANCE.get(fam, {}),
+    }
 
 
 def validate_manifest(board: str, bsp_root: str) -> dict:

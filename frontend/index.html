@@ -807,19 +807,32 @@
               ${mode === "fetch" && nxpman && html`
                 <div class="rounded border border-slate-800 bg-slate-950/40 p-2 space-y-2">
                   <div class="text-[11px] text-slate-500">
-                    Run this on <b>your own host</b> — Holobench never fetches NXP bits or sees your credentials.
-                    The SM firmware builds from source (no creds); EULA-gated files you download from nxp.com with your login.
+                    These come from <b>you / NXP directly</b> — Holobench hosts no NXP files and never sees your credentials.
+                    The SM firmware builds from open source (no login); the rest you download from nxp.com with <b>your own</b> login + EULA.
                   </div>
-                  <div class="text-[11px] font-mono">
+                  <div class="space-y-1">
                     ${nxpman.rows.map(r => {
                       const c = r.kind === "build" ? "text-emerald-400" : r.kind === "url" ? "text-sky-400" : "text-amber-400";
-                      return html`<div key=${r.name}><span class=${c}>[${r.kind}]</span> ${r.name}${r.kind === "build" ? html` <span class="text-slate-500">— ${r.build_cmd}</span>` : html` <span class="text-slate-500">— ${r.source}</span>`}</div>`;
+                      return html`<div key=${r.name} class="flex items-center gap-2 text-[11px]">
+                        <span class="font-mono ${c} w-12">[${r.kind}]</span>
+                        <span class="font-mono w-48 truncate" title=${r.name}>${r.name}</span>
+                        ${r.source_url
+                          ? html`<a href=${r.source_url} target="_blank" rel="noopener noreferrer"
+                                    class="px-2 py-0.5 rounded ${r.kind === "build" ? "bg-emerald-900 hover:bg-emerald-800 text-emerald-200" : "bg-amber-900 hover:bg-amber-800 text-amber-200"}"
+                                    title=${r.hint}>${r.kind === "build" ? "imx-sm ↗" : "Download from NXP ↗"}</a>`
+                          : html`<span class="text-slate-600">—</span>`}
+                        <span class="text-slate-500 truncate" title=${r.hint}>${r.hint}</span>
+                      </div>`;
                     })}
                   </div>
-                  <code class="block text-[11px] text-slate-400">
-                    # save the manifest, then on your host:<br/>
-                    ART=/my/bsp/${board} IMX_SM_SRC=~/imx-sm tools/fetch-nxp.sh ${board}.manifest
-                  </code>
+                  ${nxpman.guidance && nxpman.guidance.notes && html`
+                    <ul class="text-[11px] text-slate-500 list-disc ml-4 space-y-0.5">
+                      ${nxpman.guidance.notes.map((n, i) => html`<li key=${i}>${n}</li>`)}
+                      ${nxpman.guidance.release_notes && html`<li>Confirm a matching kernel/dtb/.wic set in the
+                        <a class="text-sky-400 hover:underline" href=${nxpman.guidance.release_notes} target="_blank" rel="noopener noreferrer">i.MX Linux release notes ↗</a>.</li>`}
+                    </ul>`}
+                  <div class="text-[11px] text-slate-500">After downloading, point <b>I have my own NXP BSP</b> at the folder to validate, or run the helper on your host:</div>
+                  <code class="block text-[11px] text-slate-400">ART=/my/bsp/${board} IMX_SM_SRC=~/imx-sm tools/fetch-nxp.sh ${board}.manifest</code>
                   <details class="text-[11px] text-slate-500">
                     <summary class="cursor-pointer">show ${board}.manifest</summary>
                     <pre class="bg-[#0b0f17] border border-slate-800 rounded p-2 mt-1 overflow-auto whitespace-pre-wrap">${nxpman.manifest}</pre>

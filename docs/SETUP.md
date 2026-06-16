@@ -191,6 +191,21 @@ EULA (a cookie/session flow, so b1 browser hand-off is the real path, not a blin
 token curl); the SM firmware is open-source-buildable (no creds). The optional
 `url`+`NXP_TOKEN` mode is operator-env only, never logged.
 
+**b1 source map (i.MX95, 95 session) — implemented.** `setup.nxp_manifest()` adds a
+`source_url` + `hint` per file and an EULA `guidance` block; the wizard's *Fetch
+from NXP* mode renders per-file link-out buttons. Link to **stable landing pages,
+not deep download URLs** (the file links are session/EULA-gated and rot per release):
+- `disk.wic` / `Image` / `imx95-19x19-evk.dtb` → the i.MX95 EVK **Getting Started
+  guide** (routes to the current prebuilt demo image + the Yocto BSP). A stranger
+  with an NXP login but no Yocto build wants the **prebuilt `.wic`** (kernel + dtb
+  live in its boot partition; or build all three via the Yocto BSP / `imx-manifest`).
+- `m33_image_M2.elf` → `github.com/nxp-imx/imx-sm`, `make cfg=mx95evk M=2` (open
+  source, **no login**; stays `kind=build`).
+- EULA notes surfaced: free nxp.com account required; accept the Software Content
+  Register/EULA per-user (never auto-accepted); confirm a matching kernel/dtb/.wic
+  set via the i.MX Linux release notes. Holobench links out only — hosts no NXP
+  binaries and no mirror.
+
 ## Web wizard (wraps the engine)
 
 When Holobench has no launchable board, the UI shows **Set up a board**:
