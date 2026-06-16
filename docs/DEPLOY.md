@@ -198,18 +198,20 @@ references that elf via the `{asset_dir}` placeholder, so just drop your
 `m33_image_M2.elf` into `/artifacts/imx95-evk-sd/`. Verify after boot with
 `top -H -p <qemu_pid>` — no `CPU N/TCG` thread should peg while the guest is idle.
 
-### Releasing / republishing the images
+### Cutting a release
 
-Cut a release with one command (images are now small — OSS + qemu only — and
-freely publishable, since no NXP artifacts are baked):
+Holobench does **not** publish prebuilt images — users build from source (the
+image is OSS app + GPL qemu only). A release builds + tags the images locally and
+cuts the GitHub release:
 
 ```bash
-tools/release.sh v0.3.0                                       # build all 3, tag rolling + pinned, push to GHCR
-RELEASE_NOTES=notes.md tools/release.sh v0.3.0 --gh-release   # also cut the GitHub release
+RELEASE_NOTES=notes.md tools/release.sh v0.3.1 --gh-release   # build + tag + GitHub release
 ```
 
-It runs on a host that has the forked qemu builds (the images bake the GPL binary),
-not GitHub-hosted CI. No BSP/golden disk is needed to build anymore.
+Pushing the images to a registry is **opt-in** (`--push-ghcr`) and off by default,
+so a release never recreates a registry package. Only ever push images that carry
+no NXP artifacts (the build guard enforces this). Runs on a host with the forked
+qemu builds; no BSP/golden disk is needed to build.
 
 ## 6. Publishing caveat (Prime Directive)
 
