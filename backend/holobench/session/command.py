@@ -48,6 +48,10 @@ class SessionRuntime:
     # Boot with the display.attach_dtb (panel attached) instead of the stock dtb,
     # so the DPU has a connector/mode and scans out ("Attach LCD").
     lcd_attached: bool = False
+    # v3.0 fabric: replace the profile's user-mode NICs with these exact `-nic`
+    # backend specs (e.g. "socket,mcast=230.0.0.10:1234"), so a board joins a
+    # multi-board L2 segment instead of slirp. None = use the profile's user NICs.
+    nic_override: Optional[list[str]] = None
 
 
 class CommandError(Exception):
@@ -201,11 +205,17 @@ def build_command(profile: Profile, rt: SessionRuntime) -> list[str]:
     # in order. The first NIC carries the TFTP server when file injection wants
     # it (guest `tftp -g ... 10.0.2.2` / u-boot tftpboot, mirroring the farm).
     tftp = profile.file_injection.tftp
-    for i in range(profile.net.user_nics):
-        opts = "user"
-        if i == 0 and tftp.enabled and rt.share_dir is not None:
-            opts += f",tftp={rt.share_dir}"
-        argv += ["-nic", opts]
+    if rt.nic_override is not None:
+        # v3.0 fabric: the board's modeled NICs attach to these backends in order
+        # (socket/mcast segment), not slirp.
+        for spec in rt.nic_override:
+            argv += ["-nic", spec]
+    else:
+        for i in range(profile.net.user_nics):
+            opts = "user"
+            if i == 0 and tftp.enabled and rt.share_dir is not None:
+                opts += f",tftp={rt.share_dir}"
+            argv += ["-nic", opts]
 
     # Image-swap: per-session qcow2 overlay over the golden disk. Guest writes hit
     # the overlay; the golden is never touched; "reinstall" = fresh overlay.

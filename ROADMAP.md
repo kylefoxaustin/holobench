@@ -10,6 +10,23 @@ Ground rule for every task: it stays inside the Prime Directive
 binary. If a task can't be done that way, it's not a Holobench task; it's an
 escalation to an emulator repo.
 
+---
+
+## v3.0 — Multi-board topologies (next major) — design: [`docs/TOPOLOGIES.md`](docs/TOPOLOGIES.md)
+
+The unit of work goes from *one board* to a **lab of boards wired together**
+(a gateway i.MX93 + an MCXN947 sensor on USB; two i.MX95s + a 93 on a shared
+Ethernet segment; USB hubs). Interconnect over stock QEMU only (`-netdev
+socket`/`mcast`, `usbredir`).
+
+- **v3.0-α — Ethernet foundation — ✅ PROVEN.** `nic_override` swaps a board NIC
+  onto a `socket`/`mcast` segment (virtual switch). PoC: two i.MX91s (separate
+  QEMU procs) ping across a mcast segment, 3/3 packets, ~1 ms — no model changes.
+- **v3.0-β — lab spec + fabric coordinator + topology UI.** `labs/*.yaml`,
+  `/api/labs`, a node/link topology view; eth segments + hubs.
+- **v3.0 — USB links.** After MCX qemu is done + the emulators confirm `usbredir`
+  device/host export-import (escalation). 93↔MCX over USB, then USB hubs.
+
 Legend: `[H]` Holobench session · `[E:95/93/91]` emulator session · `🔒` blocked
 until a dependency clears.
 

@@ -1,0 +1,110 @@
+<!-- SPDX-License-Identifier: GPL-2.0-or-later -->
+# Holobench v3.0 — multi-board topologies (the virtual board lab)
+
+**Status: design / in progress.** v1–v2 unit of work = *one board*. v3.0 = a
+**topology of boards wired together** — a composable virtual lab. A gateway
+i.MX93 with an MCXN947 sensor node on USB; two i.MX95s + an i.MX93 on a shared
+Ethernet segment; a USB hub fanning out nodes. Things a fixed physical farm can't
+do without literally cabling boards on a bench.
+
+This stays inside the Prime Directive: boards interconnect over **stock QEMU
+interfaces only** (`-netdev socket`/`mcast`, `usbredir`) — no custom inter-board
+devices, no machine-model patches.
+
+## The unit of work becomes a *lab*
+
+A **lab** (topology) = a named set of **nodes** (each a board = a profile) plus
+the **links** between them. Declared like profiles, in `labs/<id>.yaml`:
+
+```yaml
+id: gateway-lab
+display_name: "i.MX93 gateway + MCXN947 sensor"
+nodes:
+  - { name: gw,     profile: imx93-evk-sd }
+  - { name: sensor, profile: mcxn947-evk }
+links:
+  - { type: usb, host: gw, device: sensor }          # 93 (host) <-> MCX (device)
+
+# a multi-board Ethernet segment (a virtual switch/hub):
+# nodes: [{name: a, profile: imx95-evk-sd}, {name: b, profile: imx95-evk-sd}, {name: c, profile: imx93-evk-sd}]
+# links: [{ type: eth, segment: lan0, members: [a, b, c] }]
+```
+
+The session manager already runs one QEMU per board; a **fabric coordinator**
+launches all of a lab's nodes together and wires their netdevs/USB to the links.
+
+## Link types and the stock-QEMU mechanism behind each
+
+### Ethernet — ✅ stock QEMU, no model changes (the v3.0 foundation)
+A board NIC is attached to a **socket netdev** instead of user-mode slirp:
+
+- **Point-to-point cable** (two boards): `-nic socket,connect=` ⇄ `-nic socket,listen=`.
+- **Shared segment / virtual switch** (N boards): every member joins one multicast
+  group — `-nic socket,mcast=<group:port>` — giving a single L2 broadcast domain
+  across N separate QEMU processes.
+
+The boards' *modeled* NICs (ENET/ENETC/FEC) need no changes — only the host-side
+netdev backend differs (`socket` vs `user`). Holobench's resolver gains a per-NIC
+"fabric" backend (see `SessionRuntime.nic_override`); the coordinator allocates a
+mcast group per `eth` segment and points each member's NIC at it. Addressing on a
+bare segment is the lab's choice: static IPs, or one node runs DHCP.
+
+### USB — 🟡 stock transport, but model-dependent (after MCX qemu)
+**usbredir** (`usb-redir` chardev over a unix socket) is the upstream-clean
+transport: one board exports a USB **device/gadget**, another imports it as a
+**host**. Holobench would bridge the two processes' usbredir sockets.
+
+**Dependency / escalation:** the board models must support the USB **host and
+device (gadget) roles** and a **redirectable endpoint**. This is a board-capability
+question for the emulator sessions (per CLAUDE.md §7) — Holobench can't add it.
+Gated on: MCX qemu finished + 93/MCX confirming usbredir export/import. A **USB
+hub** is then either a modeled `usb-hub` on the host node or a fan-out of redirects.
+
+### Future links
+`can` (`-object can-bus` shared across procs), a second `serial` cross-link,
+SPI/I2C bridges — same pattern: stock transport + per-board facts, never a custom
+device.
+
+## Architecture
+
+```
+            labs/<id>.yaml  (nodes = profiles, links = eth/usb/…)
+                     │
+            ┌────────▼─────────┐   allocates mcast groups / usbredir sockets,
+            │ Fabric coordinator│   launches each node as a Session with the
+            └────────┬─────────┘   right netdev/usb wiring, tracks the lab
+        ┌────────────┼────────────┐
+   ┌────▼───┐   ┌────▼───┐   ┌────▼───┐     each node = one existing Session
+   │ node A │   │ node B │   │ node C │     (QEMU proc + QMP + serial), unchanged
+   └────┬───┘   └────┬───┘   └────┬───┘
+        └──── -nic socket,mcast=lan0 ───┘   ← stock L2 segment (virtual switch)
+```
+
+- **Reuses the session manager** — a node is just a `Session`. New: a `Lab`
+  object owning N sessions + the link wiring, with lab-level launch/stop/reserve.
+- **API:** `/api/labs` (list/launch/stop), `/api/labs/{id}` (status + per-node
+  sessions). Per-node console/LCD/etc. reuse the existing session endpoints.
+- **UI:** a topology view (nodes as tiles, links as edges) → click a node for its
+  console/panels. The single-board UI becomes the per-node view.
+
+## Sequencing
+
+1. **v3.0-α — Ethernet foundation — ✅ PROVEN.** `nic_override` is in the resolver
+   (swap a board NIC's backend to a `socket`/`mcast` segment). PoC: two i.MX91
+   boards (separate QEMU procs), each `-nic socket,mcast=230.0.0.10:1234,mac=…`
+   (unique MAC per node!), static IPs on eth0 (the first modeled NIC = the FEC) —
+   `ping` across them: **3/3 packets, 0% loss, ~1 ms**. Core mechanism confirmed:
+   multi-board L2 over stock QEMU, no model changes. Gotchas captured: give each
+   node a unique `mac=` (else collision), and the i.MX91's first non-`lo` iface is
+   `can0` alphabetically — the fabric NIC is `eth0`. Next: the coordinator + lab spec.
+2. **v3.0-β — lab spec + coordinator + topology UI:** `labs/*.yaml`, `/api/labs`,
+   the topology view; eth segments + hubs.
+3. **v3.0 — USB links:** after MCX qemu + emulator usbredir confirmation; 93↔MCX
+   over USB, then USB hubs.
+
+## Open questions (to resolve with the emulator sessions / Kyle)
+- USB: do the i.MX + MCX models support usbredir device/host export/import? (the
+  gating dependency).
+- Fabric addressing default: static IPs vs a DHCP node vs auto-assign.
+- Reservation model for a lab (reserve the whole topology vs per node).
+- Cross-host scale-out (later): mcast→a real bridge / VXLAN when nodes span hosts.
