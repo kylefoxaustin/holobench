@@ -20,8 +20,8 @@ id:           mcx93-eth
 display_name: "MCX <-> i.MX93 over Ethernet (cross-SoC)"
 description:  "An MCXN947 MCU and an i.MX93 gateway on one stock mcast L2 segment. First mixed-binary lab."
 nodes:
-  - { name: mcx, profile: mcxn947-evk }
-  - { name: gw,  profile: imx93-evk }     # busybox (per 93): lighter/deterministic for M1, FEC same
+  - { name: mcx, profile: mcxn947-enet }  # boots the ENET-QoS L2 emitter firmware (0x88B5)
+  - { name: gw,  profile: imx93-evk-m1 }  # BSP kernel + the 93's ENET-FEC emit+sniff rootfs
 links:
   - { type: eth, segment: lan0, members: [mcx, gw] }
 # M1 artifacts (both pending, then live): the MCX node boots mcxn947's ENET

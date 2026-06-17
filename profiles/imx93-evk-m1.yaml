@@ -1,0 +1,59 @@
+# Holobench board profile — i.MX 93 EVK, ENET M1-lab variant.
+#
+# Identical to imx93-evk EXCEPT the initrd is the 93 session's ENET M1 rootfs
+# (assets/imx93-evk-m1/initrd.cpio.gz -> enet93-rootfs.cpio.gz): a busybox
+# initramfs whose /init brings up eth0 (the FEC) and runs a static AF_PACKET tool
+# that broadcasts a 64B ethertype-0x88B5 frame (src 02:93:00:00:00:01) ~1Hz and
+# prints every received 0x88B5 frame ("ENET93 rx: ... src <mac>"). For the
+# mcx93-eth M1 raw-L2 smoke. Per the 93 session: REQUIRES the NXP BSP kernel (the
+# FEC defers forever on the OSS mainline kernel — OCOTP MAC nvmem only resolves on
+# BSP via the ELE responder) and -m >= 2G; both already true here (BSP Image, 4G).
+# NO model/BSP change — just which rootfs -initrd loads (a board-software choice).
+
+id:           imx93-evk-m1
+display_name: "i.MX 93 EVK (ENET L2 lab)"
+soc:          "i.MX 93"
+description:  "i.MX93 booting the 93 session's ENET-FEC L2 emit+sniff tool (0x88B5) for the mcx93-eth Ethernet lab."
+
+qemu:
+  binary:  /home/kyle/Documents/GitHub/93emulator/build-imx93/qemu-system-aarch64
+  machine: imx93-11x11-evk
+  memory:  "4G"
+  smp:     3
+  audio:   none
+  extra_args: ["-serial", "null"]
+
+boot:
+  mode: direct-kernel
+  artifacts:
+    flash_bin: null
+    kernel:    Image
+    dtb:       imx93-11x11-evk.dtb
+    initrd:    initrd.cpio.gz
+    rootfs:    null
+  append: "console=ttyLP0,115200 cpuidle.off=1 rdinit=/init ignore_loglevel"
+  command_template: null
+
+serial:
+  - { name: "A-core console", chardev: console0, role: a-core, default: true }
+
+display: { enabled: false, device: null, vnc: false }
+
+net: { user_nics: 1, fabric_nic_model: imx.enet }   # FEC (not the eQOS stub)
+
+file_injection:
+  nine_p: { enabled: false, mount_tag: holobench }
+  tftp:   { enabled: false }
+  nfs:    { enabled: false }
+  image_swap: { enabled: false, target_drive: null }
+
+power: { warm_reset: true, cold_cycle: true, pause: true, reinstall: false }
+
+introspection:
+  qmp_events: true
+  memory_map: true
+  device_tree: true
+  gdbstub: { enabled: true }
+  snapshots: false
+
+reservation: { default_minutes: 60, max_minutes: 240 }
