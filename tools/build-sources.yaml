@@ -23,21 +23,21 @@
 # is built once by tools/build-oss-demo.sh and published as a GitHub release asset.
 
 imx95-evk-sd:
-  qemu: { repo: "https://github.com/kylefoxaustin/qemu-imx95.git", ref: "25223218cd", target_list: "aarch64-softmmu" }
+  qemu: { repo: "https://github.com/kylefoxaustin/qemu-imx95.git", ref: "25223218cddcc8304594c9ad39a95341c049ca17", target_list: "aarch64-softmmu" }
   # NO OSS demo possible (95 session's verdict): the 95 boot is SCMI/SM-gated — Linux
   # needs the M33 System Manager (NXP) as its only SCMI provider, so no mainline kernel
   # boots standalone. i.MX95 is BYO-BSP only (fetch-nxp.sh); zero-NXP see-it-run is the
   # bare-metal tests/hello-imx95. Leave url empty permanently.
   oss_demo: { url: "", sha256: "" }
 imx95-evk:
-  qemu: { repo: "https://github.com/kylefoxaustin/qemu-imx95.git", ref: "25223218cd", target_list: "aarch64-softmmu" }
+  qemu: { repo: "https://github.com/kylefoxaustin/qemu-imx95.git", ref: "25223218cddcc8304594c9ad39a95341c049ca17", target_list: "aarch64-softmmu" }
   oss_demo: { url: "", sha256: "" }   # SCMI/SM-gated — no OSS demo possible; BYO-BSP only
 
 imx93-evk-sd:
-  qemu: { repo: "https://github.com/kylefoxaustin/qemu-imx93.git", ref: "cc125f516d", target_list: "aarch64-softmmu" }
+  qemu: { repo: "https://github.com/kylefoxaustin/qemu-imx93.git", ref: "951fbc893b19b63933c79accfd152e9717a7e1a8", target_list: "aarch64-softmmu" }
   oss_demo: { url: "", sha256: "" }   # pending boot recipe from the 93 emulator session
 imx93-evk:
-  qemu: { repo: "https://github.com/kylefoxaustin/qemu-imx93.git", ref: "cc125f516d", target_list: "aarch64-softmmu" }
+  qemu: { repo: "https://github.com/kylefoxaustin/qemu-imx93.git", ref: "951fbc893b19b63933c79accfd152e9717a7e1a8", target_list: "aarch64-softmmu" }
   # All-OSS boot bundle from the 93 emulator session, boot-tested on imx93-11x11-evk:
   # mainline Linux 6.12.93 (arm64 defconfig) + mainline imx93-11x11-evk.dtb + busybox
   # initramfs -> shell in ~10s, 2x A55 up, zero NXP bits. (initrd.cpio.gz = the bundle's
@@ -45,10 +45,10 @@ imx93-evk:
   oss_demo: { url: "https://github.com/kylefoxaustin/holobench/releases/download/v0.3.0/oss-demo-imx93-evk.tar.gz", sha256: "ff0528c8a63ec7d8f0fa2ccb681fafde5079ee9d61b21236911dad080c7d4783" }
 
 imx91-evk-sd:
-  qemu: { repo: "https://github.com/kylefoxaustin/qemu-imx91.git", ref: "f816301c5e", target_list: "aarch64-softmmu" }
+  qemu: { repo: "https://github.com/kylefoxaustin/qemu-imx91.git", ref: "91b14c8cbd9b9f578b10d648f952352b58a7b11a", target_list: "aarch64-softmmu" }
   oss_demo: { url: "", sha256: "" }   # pending boot recipe from the 91 emulator session
 imx91-evk:
-  qemu: { repo: "https://github.com/kylefoxaustin/qemu-imx91.git", ref: "f816301c5e", target_list: "aarch64-softmmu" }
+  qemu: { repo: "https://github.com/kylefoxaustin/qemu-imx91.git", ref: "91b14c8cbd9b9f578b10d648f952352b58a7b11a", target_list: "aarch64-softmmu" }
   # All-OSS boot bundle from the 91 emulator session, boot-tested on imx91-11x11-evk:
   # mainline Linux v6.18-rc3 (i.MX91 only landed post-6.17, so NOT a 6.12 LTS) + mainline
   # imx91-11x11-evk.dtb + busybox initramfs -> userspace marker + clean power-down, single
@@ -58,4 +58,4 @@ imx91-evk:
 # MCU: builds qemu-system-arm. (Holobench's container today targets the i.MX
 # aarch64 boards; the MCX build-me path is here for completeness / future.)
 mcxn947-evk:
-  qemu: { repo: "https://github.com/kylefoxaustin/mcxn947qemu.git", ref: "f6831ff3aa", target_list: "arm-softmmu", system_arm: true }
+  qemu: { repo: "https://github.com/kylefoxaustin/mcxn947qemu.git", ref: "53a865533662fd5de0d74b4fc28ccb75589ebae4", target_list: "arm-softmmu", system_arm: true }

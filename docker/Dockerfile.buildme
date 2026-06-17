@@ -21,11 +21,15 @@ RUN apt-get update && apt-get install -y --no-install-recommends \
       libsdl2-dev libgtk-3-dev libpulse-dev libvirglrenderer-dev \
     && rm -rf /var/lib/apt/lists/*
 WORKDIR /src
-# Shallow-fetch just the pinned ref (fast, no full history).
+# Fetch the pinned ref. QEMU_REF MUST be a full 40-char SHA (or a branch/tag):
+# `git fetch <short-sha>` fails ("couldn't find remote ref"). Shallow-fetch the
+# exact commit (GitHub allows any reachable full SHA); fall back to a full clone +
+# checkout if the server won't serve that SHA shallowly (non-tip on a strict host).
 RUN git init -q . \
     && git remote add origin "$QEMU_REPO" \
-    && git fetch -q --depth 1 origin "$QEMU_REF" \
-    && git checkout -q FETCH_HEAD
+    && ( git fetch -q --depth 1 origin "$QEMU_REF" && git checkout -q FETCH_HEAD ) \
+       || ( echo "shallow fetch of $QEMU_REF failed; full clone fallback" \
+            && rm -rf .git && git clone -q "$QEMU_REPO" . && git checkout -q "$QEMU_REF" )
 RUN ./configure --target-list="$QEMU_TARGETS" --disable-docs --disable-werror \
     && make -j"$(nproc)"
 # Normalize the built binary name (system-arm vs system-aarch64) to a stable path.
