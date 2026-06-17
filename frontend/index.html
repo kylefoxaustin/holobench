@@ -887,20 +887,42 @@
                     </div>`}
                   `; })()}
                 </div>`}
-              <div class="flex items-center gap-2 border-t border-slate-800 pt-3">
-                <span class="text-[11px] text-slate-500 mr-1">QEMU:</span>
-                ${sel && sel.installed
-                  ? html`<span class="text-[11px] text-emerald-400">✓ built</span>`
-                  : html`<button onClick=${build} disabled=${running || !board}
-                      class="px-3 py-1.5 rounded bg-emerald-600 hover:bg-emerald-500 disabled:opacity-50 text-sm font-medium"
-                      title="compile this board's forked QEMU from source (one-time, ~20-40 min)">
-                      ${running ? "Building…" : "Build QEMU (from source)"}</button>`}
-                ${running && html`<button onClick=${cancel} class="px-3 py-1.5 rounded bg-rose-700 hover:bg-rose-600 text-sm">Cancel</button>`}
-                ${active && html`<span class="text-xs ${stCls(active.state)}">${active.board}: ${active.state}${active.returncode != null && active.state !== "running" ? ` (rc ${active.returncode})` : ""}</span>`}
-                <div class="flex-1"></div>
-                ${sel && sel.installed && onBoot && html`
-                  <button onClick=${() => onBoot(board)} class="px-3 py-1.5 rounded bg-sky-600 hover:bg-sky-500 text-sm font-medium" title="boot this board with your supplied artifacts">▶ Boot it now</button>`}
-              </div>
+              ${(() => {
+                const qok = !!(sel && sel.installed);
+                const aok = !!(manifest && manifest.ok);
+                const ready = qok && aok;
+                return html`
+                <div class="border-t border-slate-800 pt-3 space-y-2">
+                  <div class="text-[11px] uppercase tracking-wide text-slate-500">Readiness</div>
+                  <div class="flex items-center gap-3 text-sm">
+                    <span class="w-20 text-[11px] uppercase tracking-wide text-slate-500">QEMU</span>
+                    ${qok
+                      ? html`<span class="text-emerald-400">✓ built</span>`
+                      : html`<span class="text-rose-400">✗ need build</span>
+                          <button onClick=${build} disabled=${running || !board}
+                            class="px-3 py-1 rounded bg-emerald-600 hover:bg-emerald-500 disabled:opacity-50 text-xs font-medium"
+                            title="compile this board's forked QEMU from source (one-time, ~20-40 min)">
+                            ${running ? "Building…" : "Build QEMU (from source)"}</button>`}
+                    ${running && html`<button onClick=${cancel} class="px-2 py-1 rounded bg-rose-700 hover:bg-rose-600 text-xs">Cancel</button>`}
+                    ${active && html`<span class="text-xs ${stCls(active.state)}">${active.board}: ${active.state}${active.returncode != null && active.state !== "running" ? ` (rc ${active.returncode})` : ""}</span>`}
+                  </div>
+                  <div class="flex items-center gap-3 text-sm">
+                    <span class="w-20 text-[11px] uppercase tracking-wide text-slate-500">Artifacts</span>
+                    ${!manifest ? html`<span class="text-slate-500 text-xs">checking…</span>`
+                      : aok
+                        ? html`<span class="text-emerald-400">✓ all present</span>`
+                        : html`<span class="text-rose-400">✗ need ${manifest.missing.length} file${manifest.missing.length === 1 ? "" : "s"}</span>
+                               <span class="text-[11px] text-slate-500 truncate">via the option above → ${manifest.dir}</span>`}
+                  </div>
+                  <div class="flex items-center gap-2 pt-1">
+                    ${onBoot && html`
+                      <button onClick=${() => onBoot(board)} disabled=${!ready}
+                        class="px-3 py-1.5 rounded bg-sky-600 hover:bg-sky-500 disabled:opacity-40 text-sm font-medium"
+                        title=${ready ? "boot this board now" : "both QEMU and Artifacts must be ✓"}>▶ Boot it now</button>`}
+                    ${!ready && html`<span class="text-[11px] text-slate-500">both must be ✓ to boot</span>`}
+                  </div>
+                </div>`;
+              })()}
               ${active && html`
                 <div>
                   <div class="text-[11px] uppercase tracking-wide text-slate-500 mb-1">Build log</div>
