@@ -848,8 +848,17 @@
                     running. Heavy: multi-hour, tens of GB. Nothing NXP is hosted by Holobench — the build + EULA happen on your machine.
                   </div>
                   ${(() => { const running = cb && cb.state === "running"; const ended = cb && ["done","failed","stopped"].includes(cb.state); return html`
-                  ${sel && !sel.container_build && html`
-                    <div class="text-[11px] text-amber-500">⚠ No container-build recipe for <b>${sel.id}</b> — Yocto emits a <b>.wic</b> (full-distro), so it targets the <b>-sd</b> profile. Pick <b>imx95-evk-sd</b> for a real build. (Mock still runs here to preview the UX.)</div>`}
+                  ${sel && !sel.container_build && (() => {
+                    const soc = sel.id.replace(/-evk.*$/, "");
+                    const alt = (boards || []).find(b => b.container_build && b.id.startsWith(soc));
+                    return html`<div class="text-[11px] text-amber-500">
+                      ⚠ Container build emits a full-distro <b>.wic</b>, so it targets the full-distro (<b>-sd</b>) profile — not the busybox <b>${sel.id}</b>.
+                      ${alt
+                        ? html` <button onClick=${() => setBoard(alt.id)} class="ml-1 px-2 py-0.5 rounded bg-amber-700 hover:bg-amber-600 text-amber-50">→ Switch to ${alt.id}</button>`
+                        : html` <span class="text-slate-500">(no container-capable variant configured for this SoC yet.)</span>`}
+                      <span class="text-slate-500"> Mock still previews the UX here.</span>
+                    </div>`;
+                  })()}
                   ${!running && !cbTerm && html`
                     <div class="flex items-center gap-3">
                       <button onClick=${startContainer} disabled=${!cbMock && sel && !sel.container_build}
