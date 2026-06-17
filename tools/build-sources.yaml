@@ -29,18 +29,19 @@ imx95-evk-sd:
   # boots standalone. i.MX95 is BYO-BSP only (fetch-nxp.sh); zero-NXP see-it-run is the
   # bare-metal tests/hello-imx95. Leave url empty permanently.
   oss_demo: { url: "", sha256: "" }
-  # Container build (artifact source #3): NXP Yocto build params (from the 95 session).
-  # CONFIRM manifest_branch + manifest_xml with the 95 session before a real run — the
-  # on-box BSP shows "6.12-walnascar"; pick the matching imx-manifest branch/release.
+  # Container build (artifact source #3): NXP Yocto build params — CONFIRMED by the
+  # 95 session (pinned to what the model is validated against: kernel 6.12.49-walnascar
+  # + SM from imx-sm lf-6.18.2-1.0.0, the proven 3/3 set; SCMI is fwd/back compatible).
   nxp_bsp:
     machine: imx95-19x19-lpddr5-evk
-    distro: fsl-imx-wayland
-    manifest_branch: imx-linux-walnascar      # CONFIRM with 95
-    manifest_xml: imx-6.12.3-1.0.0.xml         # CONFIRM exact release with 95
-    image_target: imx-image-full
+    distro: fsl-imx-xwayland                   # weston desktop (matches Attach-LCD)
+    manifest_branch: imx-linux-walnascar
+    manifest_xml: imx-6.12.49-2.2.0.xml
+    image_target: imx-image-full              # lighter: imx-image-multimedia / imx-image-core
     dtb_name: imx95-19x19-evk.dtb
     sm_cfg: mx95evk
-    sm_m: 2
+    sm_m: 2                                    # REQUIRED: M=1 busy-polls the debug UART (~90% host core)
+    sm_tag: lf-6.18.2-1.0.0                    # proven SM (forward-compat with the 6.12.49 kernel)
 imx95-evk:
   qemu: { repo: "https://github.com/kylefoxaustin/qemu-imx95.git", ref: "25223218cddcc8304594c9ad39a95341c049ca17", target_list: "aarch64-softmmu" }
   oss_demo: { url: "", sha256: "" }   # SCMI/SM-gated — no OSS demo possible; BYO-BSP only

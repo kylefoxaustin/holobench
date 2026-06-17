@@ -45,8 +45,12 @@ case "$wic" in
 esac
 
 if [ -n "${SM_CFG:-}" ]; then
-  echo "==> building SM firmware (imx-sm cfg=$SM_CFG M=${SM_M:-2}) — creds-free"
-  git clone --depth 1 https://github.com/nxp-imx/imx-sm "$HOME/imx-sm"
+  echo "==> building SM firmware (imx-sm ${SM_TAG:-default} cfg=$SM_CFG M=${SM_M:-2}) — creds-free"
+  if [ -n "${SM_TAG:-}" ]; then
+    git clone --depth 1 --branch "$SM_TAG" https://github.com/nxp-imx/imx-sm "$HOME/imx-sm"
+  else
+    git clone --depth 1 https://github.com/nxp-imx/imx-sm "$HOME/imx-sm"
+  fi
   make -C "$HOME/imx-sm" cfg="$SM_CFG" M="${SM_M:-2}"
   cp -L "$HOME/imx-sm/build/$SM_CFG/m33_image.elf" "$OUT/m33_image_M2.elf"
 fi

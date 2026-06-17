@@ -25,7 +25,7 @@ if not b:
     sys.exit(0)
 m = {"MACHINE":b.get("machine"),"DISTRO":b.get("distro"),"MANIFEST_BRANCH":b.get("manifest_branch"),
      "MANIFEST_XML":b.get("manifest_xml"),"IMAGE_TARGET":b.get("image_target"),"DTB_NAME":b.get("dtb_name"),
-     "SM_CFG":b.get("sm_cfg",""),"SM_M":str(b.get("sm_m",2))}
+     "SM_CFG":b.get("sm_cfg",""),"SM_M":str(b.get("sm_m",2)),"SM_TAG":b.get("sm_tag","")}
 for k,v in m.items():
     print(f"export {k}={shlex.quote(str(v or ''))}")
 PY
@@ -43,5 +43,5 @@ echo "    MACHINE=$MACHINE DISTRO=$DISTRO  $MANIFEST_BRANCH/$MANIFEST_XML -> $IM
 exec docker run -i --rm --name "$NAME" \
   -v "$OUT:/out" \
   -e MACHINE -e DISTRO -e MANIFEST_BRANCH -e MANIFEST_XML \
-  -e IMAGE_TARGET -e DTB_NAME -e SM_CFG -e SM_M \
+  -e IMAGE_TARGET -e DTB_NAME -e SM_CFG -e SM_M -e SM_TAG \
   "$IMAGE"
