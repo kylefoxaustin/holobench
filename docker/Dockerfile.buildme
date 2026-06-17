@@ -16,10 +16,12 @@ ARG QEMU_TARGETS=aarch64-softmmu
 ENV DEBIAN_FRONTEND=noninteractive
 RUN apt-get update && apt-get install -y --no-install-recommends \
       git ca-certificates build-essential ninja-build pkg-config python3 \
-      python3-venv flex bison \
+      python3-venv python3-pip python3-tomli flex bison \
       libglib2.0-dev libpixman-1-dev libslirp-dev \
       libsdl2-dev libgtk-3-dev libpulse-dev libvirglrenderer-dev \
     && rm -rf /var/lib/apt/lists/*
+# Note: QEMU's configure mkvenv needs tomli on Python <3.11 (Ubuntu 22.04 = 3.10);
+# without python3-tomli configure dies with "found no usable tomli".
 WORKDIR /src
 # Fetch the pinned ref. QEMU_REF MUST be a full 40-char SHA (or a branch/tag):
 # `git fetch <short-sha>` fails ("couldn't find remote ref"). Shallow-fetch the
