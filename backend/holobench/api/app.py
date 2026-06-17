@@ -212,6 +212,11 @@ class SetupBuildRequest(BaseModel):
     bsp_path: Optional[str] = None
 
 
+class ContainerBuildRequest(BaseModel):
+    board: str
+    mock: bool = False            # mock = simulate EULA+build (UX demo, no docker/Yocto)
+
+
 class SnapshotRequest(BaseModel):
     name: str
 
@@ -679,6 +684,32 @@ async def setup_cancel(request: Request) -> dict:
     _require_admin(request)
     await app_ref.state.setup.cancel()
     return app_ref.state.setup.status()
+
+
+@app.post("/api/setup/container-build")
+async def setup_container_build(req: ContainerBuildRequest, request: Request) -> dict:
+    """Start the interactive NXP BSP container build (artifact source #3). Returns
+    the build view; attach the terminal via the WS to see/accept the EULA."""
+    user = _require_admin(request)
+    try:
+        cb = await app_ref.state.setup.start_container_build(req.board, mock=req.mock)
+    except SetupError as exc:
+        raise HTTPException(status_code=400, detail=str(exc))
+    _audit("container_build", user.username, board=req.board, mock=req.mock)
+    return cb.view()
+
+
+@app.get("/api/setup/container-build")
+def setup_container_status(request: Request) -> dict:
+    _require_admin(request)
+    return app_ref.state.setup.container_status() or {"state": "none"}
+
+
+@app.post("/api/setup/container-build/stop")
+async def setup_container_stop(request: Request) -> dict:
+    _require_admin(request)
+    await app_ref.state.setup.stop_container_build()
+    return app_ref.state.setup.container_status() or {"state": "none"}
 
 
 # --- sessions --------------------------------------------------------------
@@ -1230,6 +1261,64 @@ async def console_ws(
         out_task.cancel()
         in_task.cancel()
         await session.release_tap(chardev)
+
+
+# --- container-build terminal websocket (interactive EULA) -----------------
+
+
+@app.websocket("/api/setup/container-build/term")
+async def container_build_term(websocket: WebSocket, token: Optional[str] = None):
+    """Bridge the interactive BSP container build's PTY to a browser xterm so the
+    operator sees + accepts the NXP EULA, then can detach (close) while it runs.
+    Admin-only; terminal bytes only."""
+    if not _origin_ok(websocket.headers):
+        await websocket.close(code=4403, reason="bad origin"); return
+    auth: AuthService = websocket.app.state.auth
+    user = auth.resolve(token or websocket.cookies.get("hb_token"))
+    if user is None or not user.is_admin:
+        await websocket.close(code=4401, reason="unauthorized"); return
+    cb = websocket.app.state.setup.container_build()
+    if cb is None:
+        await websocket.close(code=4404, reason="no container build"); return
+    await websocket.accept()
+
+    queue: asyncio.Queue[bytes] = asyncio.Queue(maxsize=4096)
+
+    def on_bytes(data: bytes) -> None:
+        try:
+            queue.put_nowait(data)
+        except asyncio.QueueFull:
+            pass
+
+    snap = cb.snapshot()
+    if snap:
+        await websocket.send_bytes(snap)
+    cb.subscribe(on_bytes)
+
+    async def pump_out() -> None:
+        while True:
+            await websocket.send_bytes(await queue.get())
+
+    async def pump_in() -> None:
+        while True:
+            msg = await websocket.receive()
+            if msg["type"] == "websocket.disconnect":
+                raise WebSocketDisconnect()
+            data = msg.get("bytes")
+            if data is None and msg.get("text") is not None:
+                data = msg["text"].encode()
+            if data:
+                cb.write(data)   # keystrokes / EULA accept -> the PTY
+
+    out_task = asyncio.create_task(pump_out())
+    in_task = asyncio.create_task(pump_in())
+    try:
+        await asyncio.wait({out_task, in_task}, return_when=asyncio.FIRST_COMPLETED)
+    except WebSocketDisconnect:
+        pass
+    finally:
+        cb.unsubscribe(on_bytes)   # detach: build keeps running
+        out_task.cancel(); in_task.cancel()
 
 
 # --- static frontend (mounted last so /api/* wins) -------------------------

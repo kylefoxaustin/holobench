@@ -28,6 +28,7 @@ from ..profiles.loader import _REPO_ROOT
 _SOURCES = _REPO_ROOT / "tools" / "build-sources.yaml"
 _BUILD_ME = _REPO_ROOT / "tools" / "build-me.sh"
 _FETCH_DEMO = _REPO_ROOT / "tools" / "fetch-oss-demo.sh"
+_BUILD_NXP_BSP = _REPO_ROOT / "tools" / "build-nxp-bsp.sh"
 # Where a wizard-built per-board QEMU binary is extracted so the RUNNING app can
 # launch the board with it (closing the build->boot seam). Gitignored.
 _QEMU_BUILDS = _REPO_ROOT / "qemu-builds"
@@ -211,6 +212,7 @@ class SetupManager:
 
     def __init__(self) -> None:
         self._active: Optional[_Build] = None
+        self._cbuild = None    # Optional[ContainerBuild] — the interactive BSP build
 
     # --- discovery ---------------------------------------------------------
     @staticmethod
@@ -374,3 +376,52 @@ class SetupManager:
                 self._active.proc.terminate()
             except ProcessLookupError:
                 pass
+
+    # --- container build (interactive, artifact-source #3) -----------------
+    def _asset_out_dir(self, board: str) -> "Path":
+        from ..profiles.loader import DEFAULT_ASSET_ROOT
+        root = Path(os.environ.get("HOLOBENCH_ASSET_ROOT") or DEFAULT_ASSET_ROOT)
+        out = root / board
+        out.mkdir(parents=True, exist_ok=True)
+        return out
+
+    async def start_container_build(self, board: str, *, mock: bool = False):
+        """Start the interactive NXP BSP container build for `board`. Returns the
+        ContainerBuild (PTY-backed; attach a terminal via the WS). `mock` runs a
+        tiny EULA+build simulation to exercise the UX without docker/Yocto."""
+        from .container_build import ContainerBuild
+        if board not in _load_sources():
+            raise SetupError(f"unknown board '{board}'")
+        if self._cbuild and self._cbuild.state == "running":
+            raise SetupError("a container build is already running")
+        out = self._asset_out_dir(board)
+        if mock:
+            script = (
+                'printf "=== NXP i.MX Yocto build (MOCK) ===\\n"; '
+                'printf "Software Content Register / EULA ... \\n"; '
+                'printf "Do you accept the EULA? [y/N]: "; read a; '
+                '[ "$a" = y ] || { echo "declined"; exit 3; }; '
+                'echo "EULA accepted"; '
+                'for s in "repo sync" "bitbake imx-image-full" "build imx-sm M=2" "stage Image/dtb/.wic"; '
+                'do echo "==> $s"; sleep 0.4; done; '
+                f'echo "artifacts -> {out}"; echo "BUILD COMPLETE"')
+            argv = ["bash", "-c", script]
+            name = None
+        else:
+            name = f"hb-bsp-{board}"
+            argv = ["bash", str(_BUILD_NXP_BSP), board, str(out)]
+        cb = ContainerBuild(board, argv, name=name,
+                            stop_argv=(["docker", "stop", name] if name else None))
+        await cb.start()
+        self._cbuild = cb
+        return cb
+
+    def container_build(self):
+        return self._cbuild
+
+    def container_status(self) -> Optional[dict]:
+        return self._cbuild.view() if self._cbuild else None
+
+    async def stop_container_build(self) -> None:
+        if self._cbuild:
+            await self._cbuild.stop()

@@ -29,6 +29,18 @@ imx95-evk-sd:
   # boots standalone. i.MX95 is BYO-BSP only (fetch-nxp.sh); zero-NXP see-it-run is the
   # bare-metal tests/hello-imx95. Leave url empty permanently.
   oss_demo: { url: "", sha256: "" }
+  # Container build (artifact source #3): NXP Yocto build params (from the 95 session).
+  # CONFIRM manifest_branch + manifest_xml with the 95 session before a real run — the
+  # on-box BSP shows "6.12-walnascar"; pick the matching imx-manifest branch/release.
+  nxp_bsp:
+    machine: imx95-19x19-lpddr5-evk
+    distro: fsl-imx-wayland
+    manifest_branch: imx-linux-walnascar      # CONFIRM with 95
+    manifest_xml: imx-6.12.3-1.0.0.xml         # CONFIRM exact release with 95
+    image_target: imx-image-full
+    dtb_name: imx95-19x19-evk.dtb
+    sm_cfg: mx95evk
+    sm_m: 2
 imx95-evk:
   qemu: { repo: "https://github.com/kylefoxaustin/qemu-imx95.git", ref: "25223218cddcc8304594c9ad39a95341c049ca17", target_list: "aarch64-softmmu" }
   oss_demo: { url: "", sha256: "" }   # SCMI/SM-gated — no OSS demo possible; BYO-BSP only

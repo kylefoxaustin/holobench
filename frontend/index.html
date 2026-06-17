@@ -697,6 +697,32 @@
         </div>`;
     }
 
+    // Interactive terminal into the NXP BSP container build (see + accept the EULA,
+    // then detach while it runs). Reuses the board-console xterm/WS pattern.
+    function BuildTerminal() {
+      const elRef = useRef(null);
+      useEffect(() => {
+        const term = new window.Terminal({
+          convertEol: false, cursorBlink: true, fontSize: 12,
+          fontFamily: "ui-monospace, SFMono-Regular, Menlo, monospace",
+          theme: { background: "#0b0f17", foreground: "#cbd5e1" },
+        });
+        const fit = new window.FitAddon.FitAddon();
+        term.loadAddon(fit); term.open(elRef.current);
+        try { fit.fit(); } catch {}
+        const onResize = () => { try { fit.fit(); } catch {} };
+        window.addEventListener("resize", onResize);
+        const proto = location.protocol === "https:" ? "wss" : "ws";
+        const ws = new WebSocket(withToken(`${proto}://${location.host}/api/setup/container-build/term`));
+        ws.binaryType = "arraybuffer";
+        ws.onmessage = (e) => term.write(e.data instanceof ArrayBuffer ? new Uint8Array(e.data) : e.data);
+        ws.onclose = () => term.write("\r\n\x1b[33m[holobench: detached — build continues]\x1b[0m\r\n");
+        const disp = term.onData((d) => { if (ws.readyState === 1) ws.send(d); });
+        return () => { window.removeEventListener("resize", onResize); disp.dispose(); ws.close(); term.dispose(); };
+      }, []);
+      return html`<div ref=${elRef} class="h-full w-full"></div>`;
+    }
+
     // First-run "build me a board": build the GPL forked qemu from source + the
     // distributable image (no NXP BSP), watching live progress. Admin-gated.
     function SetupWizard({ onClose, onBoot }) {
@@ -732,6 +758,25 @@
         if (!board || mode !== "fetch") { setNxpman(null); return; }
         api(`/api/setup/nxp-manifest?board=${encodeURIComponent(board)}`).then(setNxpman).catch(() => setNxpman(null));
       }, [board, mode]);
+
+      // Container build (#3): poll status; interactive terminal for the EULA.
+      const [cb, setCb] = useState(null);
+      const [cbTerm, setCbTerm] = useState(false);
+      const [cbMock, setCbMock] = useState(false);
+      useEffect(() => {
+        if (mode !== "container") return;
+        const load = () => api("/api/setup/container-build").then(setCb).catch(() => {});
+        load(); const id = setInterval(load, 2000); return () => clearInterval(id);
+      }, [mode]);
+      const startContainer = async () => {
+        setErr("");
+        try {
+          await api("/api/setup/container-build", { method: "POST", headers: { "Content-Type": "application/json" },
+            body: JSON.stringify({ board, mock: cbMock }) });
+          setCbTerm(true);
+        } catch (e) { setErr(e.detail || `couldn't start container build (${e.status || e})`); }
+      };
+      const stopContainer = async () => { try { await api("/api/setup/container-build/stop", { method: "POST" }); } catch (e) {} };
 
       const build = async () => {
         setErr("");
@@ -778,10 +823,11 @@
                   <label class="block text-[11px] uppercase tracking-wide text-slate-500 mb-1">Artifacts</label>
                   <select class="w-full bg-slate-800 border border-slate-700 rounded px-2 py-1 text-sm"
                           value=${mode} onChange=${e => setMode(e.target.value)} disabled=${running}>
-                    <option value="plan">Show plan only (no build)</option>
-                    <option value="bsp">I have my own NXP BSP</option>
-                    <option value="fetch">Fetch from NXP (helper)</option>
-                    <option value="demo">OSS demo image${sel && !sel.oss_demo ? " (not yet available)" : ""}</option>
+                    <option value="demo">1 · OSS demo — run now${sel && !sel.oss_demo ? " (91/93 only)" : ""}</option>
+                    <option value="bsp">2 · I'll load my own BSP</option>
+                    <option value="container">3 · Container build (Yocto, all-in-one)</option>
+                    <option value="fetch">4 · Download from NXP (website)</option>
+                    <option value="plan">· show build plan (diagnostic)</option>
                   </select>
                   ${mode === "bsp" && html`<input placeholder="/path/to/my/bsp" value=${bsp} onChange=${e => setBsp(e.target.value)}
                      class="mt-1 w-full bg-slate-800 border border-slate-700 rounded px-2 py-1 text-xs font-mono" disabled=${running} />`}
@@ -837,6 +883,35 @@
                     <summary class="cursor-pointer">show ${board}.manifest</summary>
                     <pre class="bg-[#0b0f17] border border-slate-800 rounded p-2 mt-1 overflow-auto whitespace-pre-wrap">${nxpman.manifest}</pre>
                   </details>
+                </div>`}
+              ${mode === "container" && html`
+                <div class="rounded border border-slate-800 bg-slate-950/40 p-3 space-y-2">
+                  <div class="text-[11px] text-slate-500">
+                    Runs the NXP Yocto build in a container → emits <b>Image + dtb + .wic + the SM firmware</b>, no extraction.
+                    You'll watch the build and <b>accept the NXP EULA yourself</b> in the terminal, then can detach while it keeps
+                    running. Heavy: multi-hour, tens of GB. Nothing NXP is hosted by Holobench — the build + EULA happen on your machine.
+                  </div>
+                  ${(!cb || ["none","done","failed","stopped"].includes(cb.state)) && !cbTerm && html`
+                    <div class="flex items-center gap-3">
+                      <button onClick=${startContainer} class="px-3 py-1.5 rounded bg-emerald-600 hover:bg-emerald-500 text-sm font-medium">Run build container</button>
+                      <label class="flex items-center gap-1 text-[11px] text-slate-500"><input type="checkbox" checked=${cbMock} onChange=${e => setCbMock(e.target.checked)} /> mock (UX demo — no docker/Yocto)</label>
+                      ${cb && cb.state && cb.state !== "none" && html`<span class="text-[11px] ${cb.state === "done" ? "text-emerald-400" : cb.state === "failed" ? "text-rose-400" : "text-slate-400"}">last run: ${cb.state}${cb.elapsed_s != null ? ` (${cb.elapsed_s}s)` : ""}</span>`}
+                    </div>`}
+                  ${(cbTerm || (cb && cb.state === "running")) && html`
+                    <div>
+                      <div class="flex items-center gap-2 mb-1">
+                        <span class="text-[11px] ${cb && cb.state === "running" ? "text-amber-400" : "text-slate-400"}">container: ${cb ? cb.state : "starting"}${cb && cb.elapsed_s != null ? ` · ${cb.elapsed_s}s` : ""}</span>
+                        <div class="flex-1"></div>
+                        ${cbTerm
+                          ? html`<button onClick=${() => setCbTerm(false)} class="px-2 py-0.5 rounded bg-slate-700 hover:bg-slate-600 text-[11px]" title="close terminal; build keeps running">Detach</button>`
+                          : (cb && cb.state === "running" && html`<button onClick=${() => setCbTerm(true)} class="px-2 py-0.5 rounded bg-slate-700 hover:bg-slate-600 text-[11px]">Reattach</button>`)}
+                        <button onClick=${stopContainer} class="px-2 py-0.5 rounded bg-rose-800 hover:bg-rose-700 text-[11px]">Stop build</button>
+                      </div>
+                      ${cbTerm
+                        ? html`<div class="h-[42vh] rounded border border-slate-800 overflow-hidden bg-[#0b0f17]"><${BuildTerminal} /></div>`
+                        : html`<div class="text-[11px] text-slate-500">detached — building in the background; Reattach to watch (and accept the EULA if prompted) or Stop to cancel.</div>`}
+                    </div>`}
+                  ${cb && cb.state === "done" && html`<div class="text-[11px] text-emerald-400">✓ container build complete — artifacts in the asset dir. Boot it now ▶</div>`}
                 </div>`}
               <div class="flex items-center gap-2">
                 <button onClick=${build} disabled=${running || !board}

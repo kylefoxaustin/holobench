@@ -1,0 +1,30 @@
+# SPDX-License-Identifier: GPL-2.0-or-later
+# NXP i.MX Yocto BSP *builder* image (artifact source #3 of the build-me wizard).
+# This image carries only the OSS Yocto build host + the ARM bare-metal toolchain
+# for the SM firmware — NO NXP artifacts. At `docker run` it executes the Yocto
+# build on the operator's machine (interactive NXP EULA), emitting Image + dtb +
+# .wic + the SM firmware into a mounted /out. See docker/nxp-bsp-entrypoint.sh.
+FROM ubuntu:22.04
+ENV DEBIAN_FRONTEND=noninteractive
+# Yocto host deps (per the Yocto Project quick-start for Ubuntu 22.04) + repo +
+# the arm-none-eabi toolchain for imx-sm (the M33 System Manager firmware) + zstd.
+RUN apt-get update && apt-get install -y --no-install-recommends \
+      gawk wget git diffstat unzip texinfo gcc build-essential chrpath socat \
+      cpio python3 python3-pip python3-pexpect xz-utils debianutils iputils-ping \
+      python3-git python3-jinja2 python3-subunit zstd liblz4-tool file locales \
+      libacl1 curl ca-certificates sudo gcc-arm-none-eabi \
+    && rm -rf /var/lib/apt/lists/* \
+    && locale-gen en_US.UTF-8
+ENV LANG=en_US.UTF-8 LC_ALL=en_US.UTF-8
+# The `repo` tool (Yocto/imx-manifest uses it).
+RUN curl -fsSL https://storage.googleapis.com/git-repo-downloads/repo -o /usr/local/bin/repo \
+    && chmod +x /usr/local/bin/repo
+# Yocto/bitbake refuses to run as root — build as an unprivileged user.
+RUN useradd -m -s /bin/bash builder
+COPY nxp-bsp-entrypoint.sh /usr/local/bin/nxp-bsp-entrypoint.sh
+RUN chmod +x /usr/local/bin/nxp-bsp-entrypoint.sh
+USER builder
+WORKDIR /home/builder
+ENV USER=builder
+# Build params come from the environment (set by tools/build-nxp-bsp.sh per board).
+ENTRYPOINT ["/usr/local/bin/nxp-bsp-entrypoint.sh"]
