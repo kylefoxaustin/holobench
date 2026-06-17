@@ -729,7 +729,7 @@
       const [data, setData] = useState(null);
       const [err, setErr] = useState("");
       const [board, setBoard] = useState("");
-      const [mode, setMode] = useState("plan");   // plan | bsp | demo
+      const [mode, setMode] = useState("bsp");   // demo | bsp | container
       const [bsp, setBsp] = useState("");
       const refresh = useCallback(() => {
         api("/api/setup").then(d => { setData(d); if (!board && d.boards && d.boards.length) setBoard(d.boards[0].id); })
@@ -750,14 +750,6 @@
         const q = mode === "bsp" && bsp ? `&bsp=${encodeURIComponent(bsp)}` : "";
         api(`/api/setup/manifest?board=${encodeURIComponent(board)}${q}`).then(setManifest).catch(() => setManifest(null));
       }, [board, mode, bsp]);
-
-      // Fetch-from-NXP helper manifest (kind per file: build/byo/url). Operator runs
-      // tools/fetch-nxp.sh on THEIR host — Holobench never fetches NXP bits server-side.
-      const [nxpman, setNxpman] = useState(null);
-      useEffect(() => {
-        if (!board || mode !== "fetch") { setNxpman(null); return; }
-        api(`/api/setup/nxp-manifest?board=${encodeURIComponent(board)}`).then(setNxpman).catch(() => setNxpman(null));
-      }, [board, mode]);
 
       // Container build (#3): poll status; interactive terminal for the EULA.
       const [cb, setCb] = useState(null);
@@ -826,8 +818,6 @@
                     <option value="demo">1 · OSS demo — run now${sel && !sel.oss_demo ? " (91/93 only)" : ""}</option>
                     <option value="bsp">2 · I'll load my own BSP</option>
                     <option value="container">3 · Container build (Yocto, all-in-one)</option>
-                    <option value="fetch">4 · Download from NXP (website)</option>
-                    <option value="plan">· show build plan (diagnostic)</option>
                   </select>
                   ${mode === "bsp" && html`<input placeholder="/path/to/my/bsp" value=${bsp} onChange=${e => setBsp(e.target.value)}
                      class="mt-1 w-full bg-slate-800 border border-slate-700 rounded px-2 py-1 text-xs font-mono" disabled=${running} />`}
@@ -849,40 +839,6 @@
                   </div>
                   ${manifest.missing && manifest.missing.length > 0 && html`<div class="text-[11px] text-rose-400 mt-1">missing ${manifest.missing.length} file(s) — needed to boot this board</div>`}
                   ${manifest.ok && html`<div class="text-[11px] text-emerald-400 mt-1">✓ all artifacts present — ready to run</div>`}
-                </div>`}
-              ${mode === "fetch" && nxpman && html`
-                <div class="rounded border border-slate-800 bg-slate-950/40 p-2 space-y-2">
-                  <div class="text-[11px] text-slate-500">
-                    These come from <b>you / NXP directly</b> — Holobench hosts no NXP files and never sees your credentials.
-                    The SM firmware builds from open source (no login); the rest you download from nxp.com with <b>your own</b> login + EULA.
-                  </div>
-                  <div class="space-y-1">
-                    ${nxpman.rows.map(r => {
-                      const c = r.kind === "build" ? "text-emerald-400" : r.kind === "url" ? "text-sky-400" : "text-amber-400";
-                      return html`<div key=${r.name} class="flex items-center gap-2 text-[11px]">
-                        <span class="font-mono ${c} w-12">[${r.kind}]</span>
-                        <span class="font-mono w-48 truncate" title=${r.name}>${r.name}</span>
-                        ${r.source_url
-                          ? html`<a href=${r.source_url} target="_blank" rel="noopener noreferrer"
-                                    class="px-2 py-0.5 rounded ${r.kind === "build" ? "bg-emerald-900 hover:bg-emerald-800 text-emerald-200" : "bg-amber-900 hover:bg-amber-800 text-amber-200"}"
-                                    title=${r.hint}>${r.kind === "build" ? "imx-sm ↗" : "Download from NXP ↗"}</a>`
-                          : html`<span class="text-slate-600">—</span>`}
-                        <span class="text-slate-500 truncate" title=${r.hint}>${r.hint}</span>
-                      </div>`;
-                    })}
-                  </div>
-                  ${nxpman.guidance && nxpman.guidance.notes && html`
-                    <ul class="text-[11px] text-slate-500 list-disc ml-4 space-y-0.5">
-                      ${nxpman.guidance.notes.map((n, i) => html`<li key=${i}>${n}</li>`)}
-                      ${nxpman.guidance.release_notes && html`<li>Confirm a matching kernel/dtb/.wic set in the
-                        <a class="text-sky-400 hover:underline" href=${nxpman.guidance.release_notes} target="_blank" rel="noopener noreferrer">i.MX Linux release notes ↗</a>.</li>`}
-                    </ul>`}
-                  <div class="text-[11px] text-slate-500">After downloading, point <b>I have my own NXP BSP</b> at the folder to validate, or run the helper on your host:</div>
-                  <code class="block text-[11px] text-slate-400">ART=/my/bsp/${board} IMX_SM_SRC=~/imx-sm tools/fetch-nxp.sh ${board}.manifest</code>
-                  <details class="text-[11px] text-slate-500">
-                    <summary class="cursor-pointer">show ${board}.manifest</summary>
-                    <pre class="bg-[#0b0f17] border border-slate-800 rounded p-2 mt-1 overflow-auto whitespace-pre-wrap">${nxpman.manifest}</pre>
-                  </details>
                 </div>`}
               ${mode === "container" && html`
                 <div class="rounded border border-slate-800 bg-slate-950/40 p-3 space-y-2">
@@ -929,8 +885,7 @@
                   : html`<button onClick=${build} disabled=${running || !board}
                       class="px-3 py-1.5 rounded bg-emerald-600 hover:bg-emerald-500 disabled:opacity-50 text-sm font-medium"
                       title="compile this board's forked QEMU from source (one-time, ~20-40 min)">
-                      ${running ? "Building…" : mode === "plan" ? "Show plan" : "Build QEMU (from source)"}</button>`}
-                ${mode === "plan" && sel && sel.installed && html`<button onClick=${build} disabled=${running} class="px-2 py-1 rounded bg-slate-700 hover:bg-slate-600 text-xs">show plan</button>`}
+                      ${running ? "Building…" : "Build QEMU (from source)"}</button>`}
                 ${running && html`<button onClick=${cancel} class="px-3 py-1.5 rounded bg-rose-700 hover:bg-rose-600 text-sm">Cancel</button>`}
                 ${active && html`<span class="text-xs ${stCls(active.state)}">${active.board}: ${active.state}${active.returncode != null && active.state !== "running" ? ` (rc ${active.returncode})` : ""}</span>`}
                 <div class="flex-1"></div>

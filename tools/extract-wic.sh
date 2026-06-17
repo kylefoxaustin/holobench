@@ -86,6 +86,13 @@ for p in json.load(sys.stdin)["partitiontable"]["partitions"]:
           for cand in "$dir/$DTB" "$dir/freescale/$DTB" "$dir"/dtbs/*/freescale/"$DTB" "$dir"/*/freescale/"$DTB"; do
             [ -f "$cand" ] && { cp -f "$cand" "$DEST/$DTB"; GOT_D=1; break; }
           done
+          # Glob fallback (95's suggestion): a release may ship only a versioned dtb
+          # (imx95-19x19-evk-<ver>.dtb) without the plain symlink.
+          if [ "$GOT_D" = 0 ]; then
+            for cand in "$dir/${DTB%.dtb}"*.dtb "$dir/freescale/${DTB%.dtb}"*.dtb "$dir"/*/freescale/"${DTB%.dtb}"*.dtb; do
+              [ -f "$cand" ] && { cp -f "$cand" "$DEST/$DTB"; GOT_D=1; break; }
+            done
+          fi
         fi
       done
       $UMOUNT "$mnt" 2>/dev/null || true
