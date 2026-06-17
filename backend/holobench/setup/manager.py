@@ -252,6 +252,9 @@ class SetupManager:
                 "oss_demo": bool(demo.get("url")),
                 # QEMU built+extracted on this host -> the running app can boot it.
                 "installed": installed_qemu(board) is not None,
+                # Container build configured (a confirmed nxp_bsp recipe)? Yocto
+                # imx-image-full emits a .wic -> fits the full-distro (-sd) profiles.
+                "container_build": bool((entry or {}).get("nxp_bsp")),
             })
         return sorted(out, key=lambda b: b["id"])
 
@@ -391,10 +394,18 @@ class SetupManager:
         ContainerBuild (PTY-backed; attach a terminal via the WS). `mock` runs a
         tiny EULA+build simulation to exercise the UX without docker/Yocto."""
         from .container_build import ContainerBuild
-        if board not in _load_sources():
+        src = _load_sources()
+        if board not in src:
             raise SetupError(f"unknown board '{board}'")
         if self._cbuild and self._cbuild.state == "running":
             raise SetupError("a container build is already running")
+        if not mock and not (src.get(board) or {}).get("nxp_bsp"):
+            have = sorted(b for b, e in src.items() if (e or {}).get("nxp_bsp"))
+            raise SetupError(
+                f"container build isn't configured for '{board}'. Yocto produces a "
+                f".wic (full-distro), so it targets the -sd profile — try: "
+                f"{', '.join(have) or '(none yet)'}. (Other boards need their recipe "
+                f"confirmed by the emulator session first.)")
         out = self._asset_out_dir(board)
         if mock:
             script = (

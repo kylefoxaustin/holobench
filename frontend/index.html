@@ -892,9 +892,12 @@
                     running. Heavy: multi-hour, tens of GB. Nothing NXP is hosted by Holobench — the build + EULA happen on your machine.
                   </div>
                   ${(() => { const running = cb && cb.state === "running"; const ended = cb && ["done","failed","stopped"].includes(cb.state); return html`
+                  ${sel && !sel.container_build && html`
+                    <div class="text-[11px] text-amber-500">⚠ No container-build recipe for <b>${sel.id}</b> — Yocto emits a <b>.wic</b> (full-distro), so it targets the <b>-sd</b> profile. Pick <b>imx95-evk-sd</b> for a real build. (Mock still runs here to preview the UX.)</div>`}
                   ${!running && !cbTerm && html`
                     <div class="flex items-center gap-3">
-                      <button onClick=${startContainer} class="px-3 py-1.5 rounded bg-emerald-600 hover:bg-emerald-500 text-sm font-medium">Run build container</button>
+                      <button onClick=${startContainer} disabled=${!cbMock && sel && !sel.container_build}
+                        class="px-3 py-1.5 rounded bg-emerald-600 hover:bg-emerald-500 disabled:opacity-50 text-sm font-medium">Run build container</button>
                       <label class="flex items-center gap-1 text-[11px] text-slate-500"><input type="checkbox" checked=${cbMock} onChange=${e => setCbMock(e.target.checked)} /> mock (UX demo — no docker/Yocto)</label>
                       ${ended && html`<span class="text-[11px] ${cb.state === "done" ? "text-emerald-400" : cb.state === "failed" ? "text-rose-400" : "text-slate-400"}">last run: ${cb.state}${cb.elapsed_s != null ? ` (${cb.elapsed_s}s)` : ""}</span>`}
                     </div>`}
