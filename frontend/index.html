@@ -805,7 +805,7 @@
                   <label class="block text-[11px] uppercase tracking-wide text-slate-500 mb-1">Board</label>
                   <select class="w-full bg-slate-800 border border-slate-700 rounded px-2 py-1 text-sm"
                           value=${board} onChange=${e => setBoard(e.target.value)} disabled=${running}>
-                    ${boards.map(b => html`<option key=${b.id} value=${b.id}>${b.id}${b.image_built ? " — built ✓" : ""}</option>`)}
+                    ${boards.map(b => html`<option key=${b.id} value=${b.id}>${b.id}${b.installed ? " — qemu ✓" : ""}</option>`)}
                   </select>
                   ${sel && html`<div class="text-[11px] text-slate-500 mt-1">
                     qemu: ${sel.source === "stock" ? "stock (upstreamed — no build needed)" : html`<span class="font-mono">${(sel.qemu_repo||"").replace("https://github.com/","")} @ ${sel.qemu_ref}</span>`}
