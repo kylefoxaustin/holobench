@@ -269,7 +269,7 @@ class SetupManager:
             raise SetupError(f"a build is already running ({self._active.board})")
         if board not in _load_sources():
             raise SetupError(f"unknown board '{board}' (not in build-sources.yaml)")
-        if mode not in ("plan", "bsp", "demo"):
+        if mode not in ("plan", "bsp", "demo", "fetch", "container"):
             raise SetupError(f"bad mode '{mode}'")
         if not self.docker_available() and mode != "plan":
             raise SetupError("docker is not available on the server")
@@ -279,9 +279,10 @@ class SetupManager:
             argv.append("--plan")
         elif mode == "demo":
             argv.append("--demo")
-        elif mode == "bsp":
-            # bsp_path only affects the printed run hint, not the build context;
-            # still constrain to an absolute path to avoid surprises.
+        else:
+            # bsp / fetch / container: "Build it" just compiles the board's QEMU
+            # (artifacts come from the chosen source, not from build-me). bsp_path
+            # only affects the printed run hint.
             if bsp_path:
                 argv += ["--bsp", bsp_path]
 

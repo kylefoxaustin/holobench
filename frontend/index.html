@@ -891,38 +891,48 @@
                     You'll watch the build and <b>accept the NXP EULA yourself</b> in the terminal, then can detach while it keeps
                     running. Heavy: multi-hour, tens of GB. Nothing NXP is hosted by Holobench — the build + EULA happen on your machine.
                   </div>
-                  ${(!cb || ["none","done","failed","stopped"].includes(cb.state)) && !cbTerm && html`
+                  ${(() => { const running = cb && cb.state === "running"; const ended = cb && ["done","failed","stopped"].includes(cb.state); return html`
+                  ${!running && !cbTerm && html`
                     <div class="flex items-center gap-3">
                       <button onClick=${startContainer} class="px-3 py-1.5 rounded bg-emerald-600 hover:bg-emerald-500 text-sm font-medium">Run build container</button>
                       <label class="flex items-center gap-1 text-[11px] text-slate-500"><input type="checkbox" checked=${cbMock} onChange=${e => setCbMock(e.target.checked)} /> mock (UX demo — no docker/Yocto)</label>
-                      ${cb && cb.state && cb.state !== "none" && html`<span class="text-[11px] ${cb.state === "done" ? "text-emerald-400" : cb.state === "failed" ? "text-rose-400" : "text-slate-400"}">last run: ${cb.state}${cb.elapsed_s != null ? ` (${cb.elapsed_s}s)` : ""}</span>`}
+                      ${ended && html`<span class="text-[11px] ${cb.state === "done" ? "text-emerald-400" : cb.state === "failed" ? "text-rose-400" : "text-slate-400"}">last run: ${cb.state}${cb.elapsed_s != null ? ` (${cb.elapsed_s}s)` : ""}</span>`}
                     </div>`}
-                  ${(cbTerm || (cb && cb.state === "running")) && html`
+                  ${(cbTerm || running) && html`
                     <div>
                       <div class="flex items-center gap-2 mb-1">
-                        <span class="text-[11px] ${cb && cb.state === "running" ? "text-amber-400" : "text-slate-400"}">container: ${cb ? cb.state : "starting"}${cb && cb.elapsed_s != null ? ` · ${cb.elapsed_s}s` : ""}</span>
+                        <span class="text-[11px] ${running ? "text-amber-400" : cb && cb.state === "done" ? "text-emerald-400" : "text-slate-400"}">container: ${cb ? cb.state : "starting"}${cb && cb.elapsed_s != null ? ` · ${cb.elapsed_s}s` : ""}</span>
                         <div class="flex-1"></div>
-                        ${cbTerm
-                          ? html`<button onClick=${() => setCbTerm(false)} class="px-2 py-0.5 rounded bg-slate-700 hover:bg-slate-600 text-[11px]" title="close terminal; build keeps running">Detach</button>`
-                          : (cb && cb.state === "running" && html`<button onClick=${() => setCbTerm(true)} class="px-2 py-0.5 rounded bg-slate-700 hover:bg-slate-600 text-[11px]">Reattach</button>`)}
-                        <button onClick=${stopContainer} class="px-2 py-0.5 rounded bg-rose-800 hover:bg-rose-700 text-[11px]">Stop build</button>
+                        ${running && cbTerm && html`<button onClick=${() => setCbTerm(false)} class="px-2 py-0.5 rounded bg-slate-700 hover:bg-slate-600 text-[11px]" title="close terminal; build keeps running">Detach</button>`}
+                        ${running && !cbTerm && html`<button onClick=${() => setCbTerm(true)} class="px-2 py-0.5 rounded bg-slate-700 hover:bg-slate-600 text-[11px]">Reattach</button>`}
+                        ${running && html`<button onClick=${stopContainer} class="px-2 py-0.5 rounded bg-rose-800 hover:bg-rose-700 text-[11px]">Stop build</button>`}
+                        ${ended && cbTerm && html`<button onClick=${() => setCbTerm(false)} class="px-2 py-0.5 rounded bg-slate-700 hover:bg-slate-600 text-[11px]">Close</button>`}
                       </div>
                       ${cbTerm
                         ? html`<div class="h-[42vh] rounded border border-slate-800 overflow-hidden bg-[#0b0f17]"><${BuildTerminal} /></div>`
                         : html`<div class="text-[11px] text-slate-500">detached — building in the background; Reattach to watch (and accept the EULA if prompted) or Stop to cancel.</div>`}
                     </div>`}
-                  ${cb && cb.state === "done" && html`<div class="text-[11px] text-emerald-400">✓ container build complete — artifacts in the asset dir. Boot it now ▶</div>`}
+                  ${cb && cb.state === "done" && html`
+                    <div class="flex items-center gap-2 text-[11px] text-emerald-400">
+                      ✓ container build complete — artifacts staged in the asset dir.
+                      ${onBoot && html`<button onClick=${() => onBoot(board)} class="px-2 py-0.5 rounded bg-sky-600 hover:bg-sky-500 text-white">▶ Boot it now</button>`}
+                    </div>`}
+                  `; })()}
                 </div>`}
-              <div class="flex items-center gap-2">
-                <button onClick=${build} disabled=${running || !board}
-                  class="px-3 py-1.5 rounded bg-emerald-600 hover:bg-emerald-500 disabled:opacity-50 text-sm font-medium">
-                  ${running ? "Building…" : mode === "plan" ? "Show plan" : "Build it"}</button>
+              <div class="flex items-center gap-2 border-t border-slate-800 pt-3">
+                <span class="text-[11px] text-slate-500 mr-1">QEMU:</span>
+                ${sel && sel.installed
+                  ? html`<span class="text-[11px] text-emerald-400">✓ built</span>`
+                  : html`<button onClick=${build} disabled=${running || !board}
+                      class="px-3 py-1.5 rounded bg-emerald-600 hover:bg-emerald-500 disabled:opacity-50 text-sm font-medium"
+                      title="compile this board's forked QEMU from source (one-time, ~20-40 min)">
+                      ${running ? "Building…" : mode === "plan" ? "Show plan" : "Build QEMU (from source)"}</button>`}
+                ${mode === "plan" && sel && sel.installed && html`<button onClick=${build} disabled=${running} class="px-2 py-1 rounded bg-slate-700 hover:bg-slate-600 text-xs">show plan</button>`}
                 ${running && html`<button onClick=${cancel} class="px-3 py-1.5 rounded bg-rose-700 hover:bg-rose-600 text-sm">Cancel</button>`}
                 ${active && html`<span class="text-xs ${stCls(active.state)}">${active.board}: ${active.state}${active.returncode != null && active.state !== "running" ? ` (rc ${active.returncode})` : ""}</span>`}
-                ${sel && sel.installed && onBoot && html`
-                  <button onClick=${() => onBoot(board)} class="px-3 py-1.5 rounded bg-sky-600 hover:bg-sky-500 text-sm font-medium" title="boot this board in the app now">▶ Boot it now</button>`}
                 <div class="flex-1"></div>
-                <span class="text-[11px] text-slate-600">first source build ~20–40 min, then cached</span>
+                ${sel && sel.installed && onBoot && html`
+                  <button onClick=${() => onBoot(board)} class="px-3 py-1.5 rounded bg-sky-600 hover:bg-sky-500 text-sm font-medium" title="boot this board with your supplied artifacts">▶ Boot it now</button>`}
               </div>
               ${active && html`
                 <div>
@@ -1111,9 +1121,17 @@
         finally { setBusy(false); }
       };
       const launch = () => launchBoard(selected, { infinite });
-      // Build-wizard "Boot it now": launch the just-built board in THIS app, then close.
+      // Build-wizard "Boot it now": verify the artifacts are actually present (a mock
+      // run produces none), then launch the just-built board in THIS app and close.
       const bootBuilt = async (boardId) => {
-        try { await launchBoard(boardId); setSetupOpen(false); } catch (e) { /* err shown */ }
+        try {
+          const m = await api(`/api/setup/manifest?board=${encodeURIComponent(boardId)}`);
+          if (m && m.missing && m.missing.length) {
+            window.alert(`Can't boot ${boardId} yet — missing in ${m.dir}:\n  ${m.missing.join("\n  ")}\n\n(A mock run stages no real files. Finish the artifact steps — container build, your BSP, or the NXP download+extract — then Boot.)`);
+            return;
+          }
+          await launchBoard(boardId); setSetupOpen(false);
+        } catch (e) { window.alert("Boot failed: " + (e.detail || e.message || e)); }
       };
 
       const focusDefaultTab = (s) => {

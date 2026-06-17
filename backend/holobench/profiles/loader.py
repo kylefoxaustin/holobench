@@ -24,14 +24,20 @@ DEFAULT_PROFILE_DIR = _REPO_ROOT / "profiles"
 DEFAULT_ASSET_ROOT = _REPO_ROOT / "assets"
 
 
+def asset_root() -> Path:
+    """The base dir under which per-board asset dirs live (HOLOBENCH_ASSET_ROOT or
+    the repo's assets/). Unlike default_asset_dir this returns the path even if it
+    doesn't exist yet — used by the wizard to tell the operator WHERE to put files."""
+    root = os.environ.get("HOLOBENCH_ASSET_ROOT")
+    return Path(root) if root else DEFAULT_ASSET_ROOT
+
+
 def default_asset_dir(profile_id: str) -> Path | None:
     """Convention: boot artifacts for a board live in assets/<id>/.
 
     HOLOBENCH_ASSET_ROOT overrides the asset root (used by the container image).
     """
-    root = os.environ.get("HOLOBENCH_ASSET_ROOT")
-    base = Path(root) if root else DEFAULT_ASSET_ROOT
-    d = base / profile_id
+    d = asset_root() / profile_id
     return d if d.is_dir() else None
 
 

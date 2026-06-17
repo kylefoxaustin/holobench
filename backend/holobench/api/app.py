@@ -660,9 +660,10 @@ def setup_manifest(board: str, request: Request, bsp: Optional[str] = None) -> d
     vs missing. The wizard refuses to launch until ok=true."""
     _require_admin(request)
     try:
-        if bsp:
-            return validate_manifest(board, bsp)
-        return {"board": board, "required": required_artifacts(board)}
+        # Default to the server's real asset root so the wizard always shows the
+        # exact target folder (+ present/missing), not just the required list.
+        from ..profiles.loader import asset_root
+        return validate_manifest(board, bsp or str(asset_root()))
     except ProfileError as exc:
         raise HTTPException(status_code=404, detail=str(exc))
 
