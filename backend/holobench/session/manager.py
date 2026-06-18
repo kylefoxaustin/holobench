@@ -140,10 +140,12 @@ class Session:
         # to max_minutes. A value <= 0 means INFINITE — expires_at is None, the
         # reaper never touches it. The reaper tears finite sessions down at expiry.
         self.created_at = time.time()
-        mins = minutes if minutes is not None else profile.reservation.default_minutes
-        self.expires_at: Optional[float] = (
-            None if mins <= 0 else self.created_at + mins * 60
-        )
+        # Reservation TIMERS REMOVED: every session is infinite (expires_at = None),
+        # so there is no countdown and the reaper never tears a board down. The
+        # `minutes` arg and profile.reservation are kept for API/back-compat but no
+        # longer bound a session's lifetime — a reserved board stays up until the
+        # operator stops it. (Per Kyle: no timers on the reservation system.)
+        self.expires_at: Optional[float] = None
 
         # Keep the work dir short: unix socket paths have a ~108 char limit,
         # so /tmp/holobench-<id> beats a deep nested path.

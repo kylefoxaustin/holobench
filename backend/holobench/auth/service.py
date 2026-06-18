@@ -72,7 +72,18 @@ class AuthService:
         user = self.store.authenticate(username, password)
         if user is None:
             return None
-        return issue_token({"sub": user.username, "role": user.role}, self.secret)
+        # Token lifetime: default 7 days so a long (multi-hour) build plus overnight
+        # idle never logs the operator out mid-flow — the old hardcoded 8h TTL did
+        # exactly that. Override with HOLOBENCH_TOKEN_TTL_HOURS (e.g. "0.5" in a
+        # shared/hardened deployment). Followup: sliding renewal so an *active*
+        # session (the UI polls every few seconds) never expires regardless of TTL.
+        try:
+            ttl = max(60, int(float(os.environ.get("HOLOBENCH_TOKEN_TTL_HOURS", "168")) * 3600))
+        except (TypeError, ValueError):
+            ttl = 168 * 3600
+        return issue_token(
+            {"sub": user.username, "role": user.role}, self.secret, ttl_seconds=ttl
+        )
 
     def user_from_token(self, token: Optional[str]) -> Optional[User]:
         if not token:
