@@ -793,7 +793,7 @@
             <div class="flex items-center justify-between px-4 py-3 border-b border-slate-800">
               <div class="flex items-center gap-2">
                 <span class="font-semibold">🧰 Build me a board</span>
-                <span class="text-xs text-slate-500">compiles the GPL forked QEMU from source — no NXP BSP baked (you supply yours)</span>
+                <span class="text-xs text-slate-500">OSS demo, bring-your-own, or build the full NXP BSP + GPL QEMU from source — you accept NXP's EULA; Holobench bakes/hosts no NXP bits</span>
               </div>
               <button onClick=${onClose} class="text-slate-400 hover:text-slate-200 text-lg leading-none">✕</button>
             </div>
@@ -847,6 +847,15 @@
                     You'll watch the build and <b>accept the NXP EULA yourself</b> in the terminal, then can detach while it keeps
                     running. Heavy: multi-hour, tens of GB. Nothing NXP is hosted by Holobench — the build + EULA happen on your machine.
                   </div>
+                  <div class="rounded border border-amber-500/60 bg-amber-500/10 px-3 py-2 text-[12px] text-amber-200">
+                    ⚠ <b>You must read &amp; accept the NXP EULA when prompted.</b> A few minutes in, the terminal shows NXP's
+                    license agreement in a <b>pager</b> — it looks frozen but isn't. <b>Press <span class="font-mono">Space</span>
+                    to page down</b> (or <span class="font-mono">↓</span> / <span class="font-mono">Enter</span> line-by-line) to the bottom,
+                    where it asks <span class="font-mono">Do you accept (y/n)?</span> — then <b>type <span class="font-mono">y</span> and Enter</b>.
+                    Tip: prefer <span class="font-mono">Space</span> over holding <span class="font-mono">Enter</span> — if you overshoot,
+                    each extra Enter just re-asks the y/n prompt (harmless, but looks like it's stuck). Until you answer
+                    <span class="font-mono">y</span>, the build sits idle. Stay attached (or Reattach) until it's cleared, then you can detach.
+                  </div>
                   ${(() => { const running = cb && cb.state === "running"; const ended = cb && ["done","failed","stopped"].includes(cb.state); return html`
                   ${sel && !sel.container_build && (() => {
                     const soc = sel.id.replace(/-evk.*$/, "");
@@ -890,7 +899,10 @@
               ${(() => {
                 const qok = !!(sel && sel.installed);
                 const aok = !!(manifest && manifest.ok);
-                const ready = qok && aok;
+                const cbRunning = !!(cb && cb.state === "running");
+                // Don't invite a boot while a container build is actively (re)writing
+                // these same artifacts — even if older copies are already on disk.
+                const ready = qok && aok && !cbRunning;
                 return html`
                 <div class="border-t border-slate-800 pt-3 space-y-2">
                   <div class="text-[11px] uppercase tracking-wide text-slate-500">Readiness</div>
@@ -918,8 +930,10 @@
                     ${onBoot && html`
                       <button onClick=${() => onBoot(board)} disabled=${!ready}
                         class="px-3 py-1.5 rounded bg-sky-600 hover:bg-sky-500 disabled:opacity-40 text-sm font-medium"
-                        title=${ready ? "boot this board now" : "both QEMU and Artifacts must be ✓"}>▶ Boot it now</button>`}
-                    ${!ready && html`<span class="text-[11px] text-slate-500">both must be ✓ to boot</span>`}
+                        title=${ready ? "boot this board now" : cbRunning ? "a container build is in progress — let it finish or stop it first" : "both QEMU and Artifacts must be ✓"}>▶ Boot it now</button>`}
+                    ${cbRunning
+                      ? html`<span class="text-[11px] text-amber-400">⏳ container build in progress — finish or stop it before booting</span>`
+                      : !ready && html`<span class="text-[11px] text-slate-500">both must be ✓ to boot</span>`}
                   </div>
                 </div>`;
               })()}
@@ -929,9 +943,10 @@
                   <pre class="bg-[#0b0f17] border border-slate-800 rounded p-2 text-[11px] text-slate-300 overflow-auto max-h-[40vh] whitespace-pre-wrap">${(active.log || []).join("\n") || "(no output yet)"}</pre>
                 </div>`}
               <div class="text-[11px] text-slate-500">
-                The image bakes only the OSS app + GPL QEMU. After it builds, run it with your BSP mounted:
-                <code class="block mt-1 text-slate-400">docker run --rm -p 8080:8080 -v /my/bsp:/artifacts -e HOLOBENCH_ASSET_ROOT=/artifacts holobench:${board || "&lt;board&gt;"}</code>
-                with <span class="font-mono">/my/bsp/${board || "&lt;board&gt;"}/{Image,*.dtb,rootfs${board && board.startsWith("imx95") ? ",m33_image_M2.elf" : ""}}</span>. See docs/SETUP.md.
+                <b class="text-slate-400">When both lines above are green</b>, your board is ready. Either hit
+                <span class="text-sky-400">▶ Boot it now</span>, or close this wizard and pick
+                <span class="font-mono">${board || "your board"}</span> from the normal board dropdown → Reserve & Boot.
+                <span class="block mt-1">Packaging it as a Docker service for others? See <span class="font-mono">docs/DEPLOY.md</span>.</span>
               </div>
             </div>
           </div>
@@ -1059,7 +1074,7 @@
     function App() {
       const [profiles, setProfiles] = useState([]);
       const [selected, setSelected] = useState("");
-      const [infinite, setInfinite] = useState(false);
+      // Reservation timers removed — every session is infinite (no countdown / no auto-reap).
       const [session, setSession] = useState(null);
       const [tab, setTab] = useState(null);
       const [busy, setBusy] = useState(false);
@@ -1101,7 +1116,7 @@
         try {
           const s = await api("/api/sessions", {
             method: "POST", headers: { "Content-Type": "application/json" },
-            body: JSON.stringify({ profile_id: boardId, ...(opts.infinite ? { minutes: 0 } : {}) }),
+            body: JSON.stringify({ profile_id: boardId, minutes: 0 }),  // minutes:0 = infinite (timers removed)
           });
           setSession(s);
           focusDefaultTab(s);
@@ -1109,7 +1124,7 @@
         } catch (e) { setErr(e.detail || String(e)); throw e; }
         finally { setBusy(false); }
       };
-      const launch = () => launchBoard(selected, { infinite });
+      const launch = () => launchBoard(selected);
       // Build-wizard "Boot it now": verify the artifacts are actually present (a mock
       // run produces none), then launch the just-built board in THIS app and close.
       const bootBuilt = async (boardId) => {
@@ -1187,9 +1202,6 @@
                 ${profiles.map(p => html`<option key=${p.id} value=${p.id}>${p.display_name} — ${p.machine}</option>`)}
               </select>
               ${sel && html`<${Badge} ok=${sel.assets_ready}>${sel.assets_ready ? "assets ready" : "no assets"}<//>`}
-              <label class="flex items-center gap-1 text-xs text-slate-400 cursor-pointer select-none" title="reserve with no time limit (never auto-reaped)">
-                <input type="checkbox" checked=${infinite} onChange=${e => setInfinite(e.target.checked)} /> ∞ no limit
-              </label>
               <button disabled=${busy || !selected} onClick=${launch}
                 class="px-3 py-1 rounded bg-emerald-600 hover:bg-emerald-500 disabled:opacity-50 text-sm font-medium">
                 ${busy ? "Reserving…" : "Reserve & Boot"}
