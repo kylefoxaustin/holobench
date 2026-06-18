@@ -44,6 +44,27 @@ echo "==> repo init ($MANIFEST_BRANCH / $MANIFEST_XML) + SHALLOW sync (--depth 1
 repo init --depth=1 -u https://github.com/nxp-imx/imx-manifest -b "$MANIFEST_BRANCH" -m "$MANIFEST_XML"
 repo sync -j"$BB_JOBS" --no-clone-bundle --optimized-fetch
 
+# crates.io: route crate fetches through the CDN (durable fix for the 403s).
+# walnascar's bitbake (2.12) crate fetcher builds the .crate URL from the API host
+# crates.io/api/v1/crates, which 403s crawler UAs and rate-limits to 1 req/s -> crate
+# fetches (rutabaga-gfx-ffi, remain, ...) fail under a parallel burst. Upstream bitbake
+# fixed this (commit f3904634, in scarthgap 2.8) by pointing at the CDN static.crates.io,
+# which has neither limit and serves the same .crate files; it was NOT backported to 2.12.
+# Apply that one-line backport directly to the synced crate.py (the build TOOL, not the
+# QEMU model/BSP -> no Prime-Directive issue). static.crates.io/crates/<n>/<v>/download is
+# curl-verified to return 200 with a plain UA. This supersedes the FETCHCMD UA workaround
+# below as the PRIMARY crate path; the UA line is kept as residual defense and can be
+# dropped once this is confirmed on a clean from-scratch build.
+# The sed is IDEMPOTENT (the old string is gone after it runs) and a NO-OP if the line
+# isn't found (e.g. a future bitbake that already carries the fix), so it can never break
+# a build. versionsurl also moves to the CDN but is only used by latest-version checks,
+# not a normal image build, so it doesn't matter here.
+CRATE_PY="$HOME/sources/poky/bitbake/lib/bb/fetch2/crate.py"
+if [ -f "$CRATE_PY" ] && grep -q "host = 'crates.io/api/v1/crates'" "$CRATE_PY"; then
+  sed -i "s#host = 'crates.io/api/v1/crates'#host = 'static.crates.io/crates'#" "$CRATE_PY"
+  echo "==> patched bitbake crate fetcher to use the static.crates.io CDN (avoids crates.io API 403s)"
+fi
+
 echo "==> imx-setup-release (NXP EULA prompt — accept it to continue)"
 # This is the interactive EULA gate; do NOT pre-accept. MACHINE/DISTRO select the build.
 # NXP's setup scripts reference unset vars (e.g. fsl_setup_help) and aren't written
