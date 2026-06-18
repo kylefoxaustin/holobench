@@ -755,6 +755,11 @@
       const [cb, setCb] = useState(null);
       const [cbTerm, setCbTerm] = useState(false);
       const [cbMock, setCbMock] = useState(false);
+      // Advanced settings: resource caps. Blank = the build script's safe default;
+      // "0" = remove that cap (uncapped — warned about in the panel below).
+      const [cbCpus, setCbCpus] = useState("");
+      const [cbMakeJobs, setCbMakeJobs] = useState("");
+      const [cbMemGb, setCbMemGb] = useState("");
       useEffect(() => {
         if (mode !== "container") return;
         const load = () => api("/api/setup/container-build").then(setCb).catch(() => {});
@@ -763,8 +768,13 @@
       const startContainer = async () => {
         setErr("");
         try {
+          // Only send a cap that was actually entered; blank -> omit -> script default.
+          const adv = {};
+          if (cbCpus.trim() !== "") adv.cpus = Number(cbCpus);
+          if (cbMakeJobs.trim() !== "") adv.make_jobs = Number(cbMakeJobs);
+          if (cbMemGb.trim() !== "") adv.mem_gb = Number(cbMemGb);
           await api("/api/setup/container-build", { method: "POST", headers: { "Content-Type": "application/json" },
-            body: JSON.stringify({ board, mock: cbMock }) });
+            body: JSON.stringify({ board, mock: cbMock, ...adv }) });
           setCbTerm(true);
         } catch (e) { setErr(e.detail || `couldn't start container build (${e.status || e})`); }
       };
@@ -869,11 +879,38 @@
                     </div>`;
                   })()}
                   ${!running && !cbTerm && html`
+                    <div class="space-y-2">
                     <div class="flex items-center gap-3">
                       <button onClick=${startContainer} disabled=${!cbMock && sel && !sel.container_build}
                         class="px-3 py-1.5 rounded bg-emerald-600 hover:bg-emerald-500 disabled:opacity-50 text-sm font-medium">Run build container</button>
                       <label class="flex items-center gap-1 text-[11px] text-slate-500"><input type="checkbox" checked=${cbMock} onChange=${e => setCbMock(e.target.checked)} /> mock (UX demo — no docker/Yocto)</label>
                       ${ended && html`<span class="text-[11px] ${cb.state === "done" ? "text-emerald-400" : cb.state === "failed" ? "text-rose-400" : "text-slate-400"}">last run: ${cb.state}${cb.elapsed_s != null ? ` (${cb.elapsed_s}s)` : ""}</span>`}
+                    </div>
+                    <details class="rounded border border-slate-800 bg-slate-950/40 px-3 py-2">
+                      <summary class="text-[11px] text-slate-400 cursor-pointer select-none">⚙ Advanced settings — resource caps</summary>
+                      <div class="mt-2 space-y-2">
+                        <div class="text-[11px] text-slate-500">
+                          The build is <b>capped by default</b> so it can't starve the host: <b>½ your cores</b>,
+                          <b>make -j4</b>, <b>~75% of RAM</b>, plus bitbake pressure-throttling. Leave a field blank to keep its default.
+                        </div>
+                        <div class="grid grid-cols-3 gap-2">
+                          <label class="block text-[11px] text-slate-400">CPU cores
+                            <input type="number" min="0" placeholder="½ cores" value=${cbCpus} onChange=${e => setCbCpus(e.target.value)}
+                              class="mt-0.5 w-full bg-slate-800 border border-slate-700 rounded px-2 py-1 text-xs" /></label>
+                          <label class="block text-[11px] text-slate-400">make -j (per recipe)
+                            <input type="number" min="0" placeholder="4" value=${cbMakeJobs} onChange=${e => setCbMakeJobs(e.target.value)}
+                              class="mt-0.5 w-full bg-slate-800 border border-slate-700 rounded px-2 py-1 text-xs" /></label>
+                          <label class="block text-[11px] text-slate-400">Memory (GB)
+                            <input type="number" min="0" placeholder="~75% RAM" value=${cbMemGb} onChange=${e => setCbMemGb(e.target.value)}
+                              class="mt-0.5 w-full bg-slate-800 border border-slate-700 rounded px-2 py-1 text-xs" /></label>
+                        </div>
+                        <div class="rounded border border-rose-500/60 bg-rose-500/10 px-2 py-1.5 text-[11px] text-rose-300">
+                          ⚠ Enter <b>0</b> in any field to <b>remove that cap</b>. An uncapped build can peg every core and
+                          exhaust memory — it may hang or crash this machine (that's exactly what the caps prevent). Raise the
+                          numbers to build faster; lower them if the host still feels starved.
+                        </div>
+                      </div>
+                    </details>
                     </div>`}
                   ${(cbTerm || running) && html`
                     <div>

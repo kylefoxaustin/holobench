@@ -389,10 +389,19 @@ class SetupManager:
         out.mkdir(parents=True, exist_ok=True)
         return out
 
-    async def start_container_build(self, board: str, *, mock: bool = False):
+    async def start_container_build(
+        self, board: str, *, mock: bool = False,
+        cpus: Optional[int] = None, make_jobs: Optional[int] = None,
+        mem_gb: Optional[int] = None,
+    ):
         """Start the interactive NXP BSP container build for `board`. Returns the
         ContainerBuild (PTY-backed; attach a terminal via the WS). `mock` runs a
-        tiny EULA+build simulation to exercise the UX without docker/Yocto."""
+        tiny EULA+build simulation to exercise the UX without docker/Yocto.
+
+        cpus / make_jobs / mem_gb are optional resource-cap overrides from the
+        wizard's "Advanced settings"; each is None = use the build script's safe
+        default, or 0 = remove that cap (run uncapped). They become HB_* env vars
+        the script reads (see tools/build-nxp-bsp.sh)."""
         from .container_build import ContainerBuild
         src = _load_sources()
         if board not in src:
@@ -407,6 +416,16 @@ class SetupManager:
                 f"{', '.join(have) or '(none yet)'}. (Other boards need their recipe "
                 f"confirmed by the emulator session first.)")
         out = self._asset_out_dir(board)
+        # Resource-cap overrides -> HB_* env for the build script. None -> omit (script
+        # default); an explicit int (incl. 0 = uncapped) -> set it. mem is GB -> "<n>g".
+        cap_env: dict[str, str] = {}
+        if cpus is not None:
+            cap_env["HB_BUILD_JOBS"] = str(cpus)
+        if make_jobs is not None:
+            cap_env["HB_MAKE_JOBS"] = str(make_jobs)
+        if mem_gb is not None:
+            cap_env["HB_BUILD_MEM"] = f"{mem_gb}g" if mem_gb > 0 else "0"
+        env = {**os.environ, **cap_env} if cap_env else None
         if mock:
             script = (
                 'printf "=== NXP i.MX Yocto build (MOCK) ===\\n"; '
@@ -423,7 +442,8 @@ class SetupManager:
             name = f"hb-bsp-{board}"
             argv = ["bash", str(_BUILD_NXP_BSP), board, str(out)]
         cb = ContainerBuild(board, argv, name=name,
-                            stop_argv=(["docker", "stop", name] if name else None))
+                            stop_argv=(["docker", "stop", name] if name else None),
+                            env=env)
         await cb.start()
         self._cbuild = cb
         return cb

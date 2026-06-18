@@ -38,11 +38,13 @@ class ContainerBuild:
     """One interactive PTY-backed build job (e.g. `docker run` the BSP builder)."""
 
     def __init__(self, board: str, argv: list[str], *, name: Optional[str] = None,
-                 stop_argv: Optional[list[str]] = None, scrollback: int = 1 << 20) -> None:
+                 stop_argv: Optional[list[str]] = None, env: Optional[dict[str, str]] = None,
+                 scrollback: int = 1 << 20) -> None:
         self.board = board
         self.argv = argv
         self.name = name                      # docker container name (for stop), if any
         self.stop_argv = stop_argv            # e.g. ["docker", "stop", name]
+        self.env = env                        # full env for the child (None = inherit ours)
         self.state = "created"                # created|running|done|failed|stopped
         self.started_at: Optional[float] = None
         self.ended_at: Optional[float] = None
@@ -95,7 +97,7 @@ class ContainerBuild:
         # programs see a tty. We hold the master end for read (output) + write (stdin).
         self._proc = await asyncio.create_subprocess_exec(
             *self.argv, stdin=slave, stdout=slave, stderr=slave,
-            start_new_session=True,
+            start_new_session=True, env=self.env,  # None -> inherit (default)
         )
         os.close(slave)  # child owns it now
         self.state = "running"

@@ -22,10 +22,31 @@ NAME="hb-bsp-$BOARD"
 # --cpus (the host can never lose more than this many cores no matter what bitbake
 # spawns), AND a job-count cap passed in as BB_JOBS (limits concurrent processes ->
 # bounds peak RAM, which --cpus alone does not). Default: half the host's cores.
-# Override with HB_BUILD_JOBS=<n> to go higher (faster) or lower (gentler).
+#
+# Three knobs, all overridable from the env (the wizard's "Advanced settings" sets
+# these; see README "Bounding a container build"). Each accepts 0 / none to REMOVE
+# that cap (uncapped == the old crash-prone behaviour — warned about in the UI):
+#   HB_BUILD_JOBS  bitbake recipes in parallel + docker --cpus hard ceiling   (cores)
+#   HB_MAKE_JOBS   make -j inside each recipe (PARALLEL_MAKE)                  (cores)
+#   HB_BUILD_MEM   docker --memory hard ceiling, e.g. "48g"                   (RAM)
+# CPU/jobs default to half the cores; make -j defaults to 4 (a low per-recipe value
+# keeps peak compiler count — and thus peak RAM — sane); memory defaults to ~75% of
+# host RAM, leaving headroom so the desktop never gets starved into a swap-thrash.
 NPROC="$(nproc)"
 HB_BUILD_JOBS="${HB_BUILD_JOBS:-$(( NPROC / 2 ))}"
-[ "$HB_BUILD_JOBS" -ge 1 ] 2>/dev/null || HB_BUILD_JOBS=1
+[ "$HB_BUILD_JOBS" -ge 1 ] 2>/dev/null || HB_BUILD_JOBS=0   # non-numeric/blank -> uncapped
+HB_MAKE_JOBS="${HB_MAKE_JOBS:-4}"
+[ "$HB_MAKE_JOBS" -ge 1 ] 2>/dev/null || HB_MAKE_JOBS=0
+MEM_GB="$(free -g 2>/dev/null | awk '/^Mem:/{print $2}')"
+[ -n "$MEM_GB" ] && [ "$MEM_GB" -ge 1 ] 2>/dev/null || MEM_GB=0
+HB_BUILD_MEM="${HB_BUILD_MEM:-$(( MEM_GB * 75 / 100 ))g}"   # ~75% of RAM, e.g. 70g
+
+# Translate the caps into docker flags + the BB_* env the entrypoint reads. A 0/none
+# value drops the corresponding cap entirely (so the build can run uncapped on purpose).
+DOCKER_CAPS=()
+case "$HB_BUILD_JOBS" in 0|none|unlimited) BB_JOBS="$NPROC" ;; *) DOCKER_CAPS+=(--cpus="$HB_BUILD_JOBS"); BB_JOBS="$HB_BUILD_JOBS" ;; esac
+case "$HB_MAKE_JOBS"  in 0|none|unlimited) BB_MAKE="$NPROC" ;; *) BB_MAKE="$HB_MAKE_JOBS" ;; esac
+case "$HB_BUILD_MEM"  in 0|0g|none|unlimited|"") MEM_DESC="uncapped" ;; *) DOCKER_CAPS+=(--memory="$HB_BUILD_MEM"); MEM_DESC="$HB_BUILD_MEM" ;; esac
 
 # Pull the board's NXP build params from build-sources.yaml (nxp_bsp: block).
 eval "$(python3 - "tools/build-sources.yaml" "$BOARD" <<'PY'
@@ -74,12 +95,13 @@ fi
 echo "==> starting interactive NXP Yocto build for $BOARD (accept the EULA when prompted)"
 echo "    MACHINE=$MACHINE DISTRO=$DISTRO  $MANIFEST_BRANCH/$MANIFEST_XML -> $IMAGE_TARGET"
 echo "    cache (downloads + sstate, persists across runs): $CACHE"
-echo "    core budget: $HB_BUILD_JOBS of $NPROC (docker --cpus hard cap + BB_JOBS; set HB_BUILD_JOBS to change)"
+echo "    resource caps: cpu=${HB_BUILD_JOBS} of ${NPROC} cores | make -j${BB_MAKE} | mem=${MEM_DESC} | bitbake pressure-throttled"
+echo "    (override via HB_BUILD_JOBS / HB_MAKE_JOBS / HB_BUILD_MEM or the wizard's Advanced settings; 0=uncapped)"
 exec docker run -it --rm --name "$NAME" \
-  --cpus="$HB_BUILD_JOBS" \
+  "${DOCKER_CAPS[@]}" \
   -v "$OUT:/out" \
   -v "$CACHE:/cache" \
   -e MACHINE -e DISTRO -e MANIFEST_BRANCH -e MANIFEST_XML \
   -e IMAGE_TARGET -e DTB_NAME -e SM_CFG -e SM_M -e SM_TAG \
-  -e BB_JOBS="$HB_BUILD_JOBS" \
+  -e BB_JOBS="$BB_JOBS" -e BB_MAKE="$BB_MAKE" \
   "$IMAGE"

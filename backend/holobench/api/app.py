@@ -35,7 +35,7 @@ from fastapi import (
 )
 from fastapi.responses import FileResponse, JSONResponse
 from fastapi.staticfiles import StaticFiles
-from pydantic import BaseModel
+from pydantic import BaseModel, Field
 
 from ..auth import AuthService
 from ..profiles import ProfileError, list_profiles, load_profile
@@ -215,6 +215,12 @@ class SetupBuildRequest(BaseModel):
 class ContainerBuildRequest(BaseModel):
     board: str
     mock: bool = False            # mock = simulate EULA+build (UX demo, no docker/Yocto)
+    # Optional resource-cap overrides from the wizard's "Advanced settings". None = use
+    # the build script's safe default; 0 = remove that cap (uncapped — can hang/crash
+    # the host). See tools/build-nxp-bsp.sh + README "Bounding a container build".
+    cpus: Optional[int] = Field(default=None, ge=0, le=1024)       # HB_BUILD_JOBS (cores)
+    make_jobs: Optional[int] = Field(default=None, ge=0, le=1024)  # HB_MAKE_JOBS (make -j)
+    mem_gb: Optional[int] = Field(default=None, ge=0, le=100000)   # HB_BUILD_MEM (GB RAM)
 
 
 class SnapshotRequest(BaseModel):
@@ -693,10 +699,14 @@ async def setup_container_build(req: ContainerBuildRequest, request: Request) ->
     the build view; attach the terminal via the WS to see/accept the EULA."""
     user = _require_admin(request)
     try:
-        cb = await app_ref.state.setup.start_container_build(req.board, mock=req.mock)
+        cb = await app_ref.state.setup.start_container_build(
+            req.board, mock=req.mock,
+            cpus=req.cpus, make_jobs=req.make_jobs, mem_gb=req.mem_gb,
+        )
     except SetupError as exc:
         raise HTTPException(status_code=400, detail=str(exc))
-    _audit("container_build", user.username, board=req.board, mock=req.mock)
+    _audit("container_build", user.username, board=req.board, mock=req.mock,
+           cpus=req.cpus, make_jobs=req.make_jobs, mem_gb=req.mem_gb)
     return cb.view()
 
 

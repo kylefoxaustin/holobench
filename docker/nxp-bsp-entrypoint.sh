@@ -21,11 +21,12 @@ set -euo pipefail
 OUT=/out; mkdir -p "$OUT"
 cd "$HOME"
 
-# Core budget (set by tools/build-nxp-bsp.sh). Bounds concurrent jobs so the build
-# can't fork N*N compilers and OOM/thrash the host. Falls back to nproc if unset
-# (e.g. a manual `docker run`), preserving the old behaviour for that path. The host
-# wrapper ALSO passes docker --cpus=$BB_JOBS as a hard kernel-level CPU ceiling.
+# Resource budget (set by tools/build-nxp-bsp.sh; both fall back to nproc for a manual
+# `docker run`, preserving the old behaviour). BB_JOBS = recipes in parallel
+# (BB_NUMBER_THREADS); BB_MAKE = make -j inside each recipe (PARALLEL_MAKE). The host
+# wrapper ALSO passes docker --cpus / --memory as hard kernel-level ceilings.
 BB_JOBS="${BB_JOBS:-$(nproc)}"
+BB_MAKE="${BB_MAKE:-$(nproc)}"
 
 # `repo init` runs `git var GIT_COMMITTER_IDENT` on the manifest and aborts if git
 # has no committer identity. The builder user is fresh (no ~/.gitconfig), so set a
@@ -78,12 +79,22 @@ set -eu
 #
 # (0) BOUND PARALLELISM. Without this bitbake defaults both knobs to nproc, giving up
 #     to nproc*nproc concurrent compilers (32*32 ~= 1024 on a 32-core host) -> CPU
-#     thrash + RAM blowout that destabilises/crashes the host. Cap both to BB_JOBS.
-#     BB_NUMBER_THREADS = recipes run in parallel; PARALLEL_MAKE = make -j inside each.
-#     Worst case is BB_JOBS*BB_JOBS processes, but the host wrapper's docker --cpus
-#     hard-caps actual CPU to BB_JOBS cores, and bounding the counts keeps peak RAM sane.
-echo "BB_NUMBER_THREADS = \"$BB_JOBS\""   >> conf/local.conf
-echo "PARALLEL_MAKE = \"-j $BB_JOBS\""    >> conf/local.conf
+#     thrash + RAM blowout that destabilises/crashes the host. BB_NUMBER_THREADS =
+#     recipes run in parallel (= BB_JOBS); PARALLEL_MAKE = make -j inside each recipe
+#     (= BB_MAKE, default 4 — a low per-recipe value keeps the peak compiler count, and
+#     thus peak RAM, sane). The host wrapper also passes docker --cpus / --memory.
+echo "BB_NUMBER_THREADS = \"$BB_JOBS\""    >> conf/local.conf
+echo "PARALLEL_MAKE = \"-j $BB_MAKE\""     >> conf/local.conf
+#     Pressure regulation: even with the counts bounded, the heavy phases (Qt, image
+#     assembly) can still spike RAM past physical and push the HOST into swap — which
+#     stalls bitbake's own coordinator until it gives up ("Timeout waiting for the
+#     bitbake server", build aborts ~80% in). BB_PRESSURE_MAX_* makes bitbake stop
+#     LAUNCHING new tasks whenever CPU / IO / memory pressure (read from the host's
+#     /proc/pressure) exceeds the threshold, so it adaptively backs off instead of
+#     thrashing. 15000 is the value from the bitbake manual's example.
+echo 'BB_PRESSURE_MAX_MEMORY = "15000"'    >> conf/local.conf
+echo 'BB_PRESSURE_MAX_CPU = "15000"'       >> conf/local.conf
+echo 'BB_PRESSURE_MAX_IO = "15000"'        >> conf/local.conf
 #
 # (1) Persist downloads + sstate across runs (mounted at /cache). A from-scratch
 #     walnascar build pulls thousands of crates/tarballs; persisting DL_DIR means a
