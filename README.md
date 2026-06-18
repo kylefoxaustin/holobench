@@ -177,6 +177,63 @@ Golden distro images live at `assets/<profile-id>/disk.wic` (the BSP `.wic`);
 mechanism. Want it fully self-contained? `docker/build.sh imx95-evk-sd` bakes the
 forked QEMU + M33 firmware + the distro image into one runnable container (below).
 
+## Bounding a container build (resource caps)
+
+The **container build** ("🧰 Build me a board" → *Container build*) runs a full NXP
+Yocto build, which is brutally parallel. Left unbounded, `bitbake` sets **both**
+`BB_NUMBER_THREADS` (recipes in parallel) **and** `PARALLEL_MAKE` (`make -j` inside
+each recipe) to your core count — so on a 32-core host that's up to ~1024 concurrent
+compilers. That saturates every core and exhausts RAM, which can make the desktop
+unresponsive or **crash the machine**; even short of a crash, the memory pressure can
+push the host into swap and stall bitbake's own coordinator until the build aborts
+(`Timeout waiting for the bitbake server`, typically ~80% in).
+
+So the build is **capped by default**. Three knobs, each with a safe default:
+
+| Knob | Env var | Default | What it bounds |
+|------|---------|---------|----------------|
+| CPU cores | `HB_BUILD_JOBS` | **½ of host cores** | `BB_NUMBER_THREADS` **+** a hard `docker --cpus` ceiling |
+| make `-j` | `HB_MAKE_JOBS` | **4** | `PARALLEL_MAKE` — compilers per recipe (peak RAM) |
+| Memory | `HB_BUILD_MEM` | **~75% of RAM** (e.g. `70g`) | a hard `docker --memory` ceiling, leaving the desktop headroom |
+
+On top of those, the build enables bitbake **pressure regulation**
+(`BB_PRESSURE_MAX_MEMORY` / `_CPU` / `_IO = 15000`), so bitbake stops launching new
+tasks whenever host CPU/IO/memory pressure spikes — it backs off adaptively instead
+of thrashing. The CPU and memory caps are real kernel cgroup limits, so the host can
+never lose more than the budgeted cores or RAM no matter what the build spawns.
+
+**Changing the caps.** Easiest: the build screen's **⚙ Advanced settings** panel —
+enter a value to override, leave blank for the default. From a CLI/headless run, set
+the env vars before launching `tools/build-nxp-bsp.sh` (or export them for the
+server). Examples:
+
+```bash
+HB_BUILD_JOBS=24 HB_MAKE_JOBS=4 HB_BUILD_MEM=80g \
+  tools/build-nxp-bsp.sh imx95-evk-sd assets/imx95-evk-sd   # faster, more headroom
+HB_BUILD_JOBS=8 HB_MAKE_JOBS=2 HB_BUILD_MEM=24g  ...        # gentler, for a small box
+```
+
+> **Removing a cap:** set any knob to `0` (in the UI or env) to run that dimension
+> **uncapped**. ⚠ An uncapped build can peg every core and exhaust memory — it may
+> hang or crash the host. That's the exact failure the caps exist to prevent; only
+> uncap if you know the box can take it.
+
+### Troubleshooting
+
+- **Host goes slow / unresponsive / crashes during a build.** The caps should prevent
+  this; if it still happens, the box is too small for the budget. Lower `HB_BUILD_JOBS`
+  and `HB_BUILD_MEM` (e.g. ¼ of cores, 50% of RAM). Note a heavy build *will* push the
+  1-minute load average high (queued, throttled jobs) — that's normal as long as some
+  CPU stays idle and RAM isn't swapping; check `top` (CPU `id`) and `free -h`
+  (`available`).
+- **Build aborts with `Timeout waiting for the bitbake server` around 80–90%.** Memory
+  pressure starved the coordinator. Lower `HB_BUILD_MEM` and/or `HB_MAKE_JOBS` so peak
+  RAM stays well within physical memory; the pressure-regulation defaults also guard
+  against this. The downloads cache persists, so the re-run resumes quickly.
+- **Lingering build container after a failure** (`docker ps -a` shows `hb-bsp-<board>`
+  in `Dead`/`Exited`). Clear it with `docker rm -f hb-bsp-<board>`; the wrapper also
+  force-removes a same-named container on the next run.
+
 ## Multi-user / auth
 
 Holobench runs **open** (no login) until you create a user — then it enforces
