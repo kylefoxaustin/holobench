@@ -110,23 +110,17 @@ if [ -d /cache ]; then
   # would succeed from scratch. Only removes *.tmp (incomplete) — never finished files.
   rm -f /cache/downloads/*.tmp 2>/dev/null || true
 fi
-# (2) Rust crates: the bitbake crate fetcher pulls from crates.io's API endpoint
-#     (https://crates.io/api/v1/crates/<n>/<v>/download). Under a parallel-fetch
-#     burst that endpoint returns HTTP 403 "API data access policy" (NOT a 429, so
-#     retries can't beat it) and fails the build (e.g. rutabaga-gfx-ffi). The CDN
-#     (static.crates.io) has no such policy and serves the same .crate files. Add a
-#     PREMIRROR so every crate is pulled from the CDN FIRST, sidestepping the 403
-#     entirely at full parallelism.
-# crates.io's api/v1 download endpoint serves a crawler User-Agent (wget/curl) an
-# HTTP 403 ("API data-access policy") but redirects a BROWSER UA to the CDN (302 ->
-# static.crates.io) which serves the .crate. The bitbake crate fetcher uses wget,
-# whose default UA gets 403'd on some crates (rutabaga, remain, ...). So set a
-# browser UA on every fetch. CRITICAL: it MUST be space-free — FETCHCMD is
-# whitespace-split by the shell, so a UA with a space/parens makes wget fail to
-# parse its args (exit 2). "Mozilla/5.0" (no space) is verified to return 302.
-# (A PREMIRROR straight to the CDN would also work but bitbake's mirror/sanity URL
-# parser chokes on the pattern — see [[buildme-followups]]; the UA fix is simpler.)
-echo 'FETCHCMD_wget = "/usr/bin/env wget --user-agent=Mozilla/5.0 --tries=8 --timeout=100 --waitretry=20 --retry-connrefused --continue --progress=dot --verbose"' >> conf/local.conf
+# (2) wget retry tuning. Keep wget's DEFAULT User-Agent — do NOT spoof a browser.
+#     History: a "--user-agent=Mozilla/5.0" was once set here to dodge crates.io's
+#     api/v1 403 (it redirects a browser UA to the CDN). But crates are now routed
+#     straight to static.crates.io by the crate.py backport above (no UA games), so
+#     the spoof is no longer needed — and it actively BREAKS SourceForge: with a
+#     browser UA, downloads.sourceforge.net serves its HTML "choose a mirror"
+#     interstitial instead of the file, so bitbake saves ~130KB of HTML as the
+#     tarball and do_fetch fails the checksum (observed: half-2.1.0.zip,
+#     DevIL-1.8.0.zip). wget's default UA gets the real file. So: default UA + just
+#     the resilience flags (more tries / longer waits) for flaky upstreams.
+echo 'FETCHCMD_wget = "/usr/bin/env wget --tries=8 --timeout=100 --waitretry=20 --retry-connrefused --continue --progress=dot --verbose"' >> conf/local.conf
 # (3) Upstream source availability: a build that fetches sed/gawk/kernel/etc. straight
 #     from ftp.gnu.org & friends dies whenever one of those hosts is down (observed:
 #     ftp.gnu.org unreachable mid-build). The Yocto Project keeps an official source
