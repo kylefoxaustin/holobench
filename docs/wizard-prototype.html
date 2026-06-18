@@ -1,0 +1,219 @@
+<!DOCTYPE html>
+<!-- Standalone, zero-backend clickable mock of the "Build it" wizard redesign.
+     Open in a browser (file://). Touches nothing — no server, no docker. Safe to
+     click while a real build runs. Mirrors docs/build-wizard-redesign.md. -->
+<html lang="en">
+<head>
+<meta charset="utf-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1" />
+<title>Build it — wizard prototype</title>
+<script src="https://cdn.tailwindcss.com"></script>
+<style>
+  body { background:#0b0f17; }
+  .badge-ok   { color:#34d399; }
+  .badge-no   { color:#fb7185; }
+  .badge-wait { color:#fbbf24; }
+  select, input { color-scheme: dark; }
+</style>
+</head>
+<body class="text-slate-200 font-sans">
+<div class="max-w-3xl mx-auto p-6">
+  <div class="text-xs text-amber-400/80 mb-3 border border-amber-500/30 rounded px-3 py-1.5">
+    ⚙ Prototype — fully mocked, no backend/docker. Use the “Simulate folder” control to flip outcomes.
+  </div>
+
+  <div class="bg-slate-900 border border-slate-800 rounded-lg shadow-xl">
+    <!-- header -->
+    <div class="flex items-center gap-2 px-4 py-3 border-b border-slate-800">
+      <span class="font-semibold">🧰 Build it</span>
+      <span class="text-xs text-slate-500">OSS demo, bring-your-own, or build the full NXP BSP + GPL QEMU from source — you accept NXP's EULA; Holobench bakes/hosts no NXP bits</span>
+    </div>
+
+    <div class="p-4 space-y-4">
+      <!-- board + dir -->
+      <div class="grid grid-cols-2 gap-4">
+        <label class="block">
+          <span class="text-[11px] uppercase tracking-wide text-slate-500">Board</span>
+          <select id="board" class="mt-1 w-full bg-slate-800 border border-slate-700 rounded px-2 py-1.5 text-sm">
+            <option value="imx95-evk-sd">imx95-evk-sd — imx95-19x19-lpddr5-evk</option>
+            <option value="imx93-evk-sd">imx93-evk-sd — imx93-11x11-lpddr4x-evk</option>
+            <option value="imx91-evk-sd">imx91-evk-sd — imx91-11x11-lpddr4-evk</option>
+          </select>
+        </label>
+        <label class="block">
+          <span class="text-[11px] uppercase tracking-wide text-slate-500">Working directory</span>
+          <div class="mt-1 flex gap-1">
+            <input id="dir" class="flex-1 bg-slate-800 border border-slate-700 rounded px-2 py-1.5 text-sm font-mono" />
+            <button class="px-2 py-1 rounded bg-slate-700 hover:bg-slate-600 text-xs">Browse</button>
+          </div>
+        </label>
+      </div>
+      <div class="text-[11px] text-slate-500 -mt-2">
+        Everything for this board lives here — the emulator I compile <b>and</b> the BSP.
+        Already built a BSP? Point me at its folder; I'll reuse it and just build the emulator.
+      </div>
+
+      <!-- simulate folder state (prototype-only) -->
+      <div class="flex items-center gap-2 text-[11px] text-slate-400 bg-slate-800/40 border border-slate-800 rounded px-3 py-1.5">
+        <span class="uppercase tracking-wide text-slate-500">Simulate folder:</span>
+        <label class="flex items-center gap-1 cursor-pointer"><input type="radio" name="sim" value="empty" checked /> empty</label>
+        <label class="flex items-center gap-1 cursor-pointer"><input type="radio" name="sim" value="bsp" /> has a BSP</label>
+        <label class="flex items-center gap-1 cursor-pointer"><input type="radio" name="sim" value="qemu" /> has QEMU only</label>
+        <label class="flex items-center gap-1 cursor-pointer"><input type="radio" name="sim" value="both" /> has both</label>
+      </div>
+
+      <!-- detection line -->
+      <div id="detect" class="text-[11px] text-slate-400"></div>
+
+      <!-- the two axes -->
+      <div class="border-t border-slate-800 pt-3 space-y-3">
+        <!-- QEMU row -->
+        <div class="flex items-center gap-3 text-sm">
+          <span class="w-16 text-[11px] uppercase tracking-wide text-slate-500">QEMU</span>
+          <span id="qemu-badge" class="w-28"></span>
+          <button id="qemu-btn" class="px-3 py-1 rounded bg-emerald-600 hover:bg-emerald-500 disabled:opacity-40 text-xs font-medium">Build QEMU</button>
+          <span class="text-[11px] text-slate-500">forked qemu-imx95 @ pinned ref (advanced)</span>
+        </div>
+        <!-- BSP row -->
+        <div class="flex items-start gap-3 text-sm">
+          <span class="w-16 text-[11px] uppercase tracking-wide text-slate-500 mt-1.5">BSP</span>
+          <span id="bsp-badge" class="w-28 mt-1.5"></span>
+          <div>
+            <select id="bsp-mode" class="bg-slate-800 border border-slate-700 rounded px-2 py-1 text-xs">
+              <option value="link">Link an existing BSP folder</option>
+              <option value="build">Build from scratch (Yocto)</option>
+              <option value="oss">Go fast — prebuilt OSS bundle</option>
+            </select>
+            <button id="bsp-btn" class="ml-1 px-3 py-1 rounded bg-emerald-600 hover:bg-emerald-500 disabled:opacity-40 text-xs font-medium">Do it</button>
+            <div id="bsp-note" class="text-[11px] text-slate-500 mt-1"></div>
+          </div>
+        </div>
+      </div>
+
+      <!-- progress -->
+      <div id="progress" class="hidden">
+        <div class="text-[11px] uppercase tracking-wide text-slate-500 mb-1">Build log</div>
+        <pre id="log" class="bg-[#0b0f17] border border-slate-800 rounded p-2 text-[11px] text-slate-300 overflow-auto max-h-48 whitespace-pre-wrap"></pre>
+      </div>
+
+      <!-- big action -->
+      <div class="border-t border-slate-800 pt-3 flex items-center gap-3">
+        <button id="buildit" class="px-4 py-2 rounded bg-sky-600 hover:bg-sky-500 disabled:opacity-40 text-sm font-semibold">▶ Build it</button>
+        <span id="status" class="text-[11px] text-slate-400"></span>
+      </div>
+    </div>
+  </div>
+</div>
+
+<script>
+const $ = s => document.querySelector(s);
+const els = {
+  board:$('#board'), dir:$('#dir'), detect:$('#detect'),
+  qemuBadge:$('#qemu-badge'), qemuBtn:$('#qemu-btn'),
+  bspBadge:$('#bsp-badge'), bspMode:$('#bsp-mode'), bspBtn:$('#bsp-btn'), bspNote:$('#bsp-note'),
+  progress:$('#progress'), log:$('#log'), buildit:$('#buildit'), status:$('#status'),
+};
+let qemu=false, bsp=false, busy=false;
+
+const sim = () => document.querySelector('input[name=sim]:checked').value;
+const isImx95 = () => els.board.value.startsWith('imx95');
+const badge = (ok, noText) => ok
+  ? '<span class="badge-ok">✓ ready</span>'
+  : `<span class="badge-no">✗ ${noText}</span>`;
+
+function applySim() {
+  const s = sim();
+  qemu = (s === 'qemu' || s === 'both');
+  bsp  = (s === 'bsp'  || s === 'both');
+  els.log.textContent = ''; els.progress.classList.add('hidden');
+  render();
+}
+
+function logln(t){ els.progress.classList.remove('hidden'); els.log.textContent += t + '\n'; els.log.scrollTop = els.log.scrollHeight; }
+const sleep = ms => new Promise(r=>setTimeout(r,ms));
+
+async function fakeBuild(label, lines, ms){
+  for (const l of lines){ logln(l); await sleep(ms); }
+  logln('>>> '+label+' done');
+}
+
+function render() {
+  // default dir
+  if (!els.dir.dataset.touched) els.dir.value = '~/holobench/boards/' + els.board.value;
+  // badges
+  els.qemuBadge.innerHTML = badge(qemu, 'not built');
+  els.bspBadge.innerHTML  = badge(bsp, 'none');
+  els.qemuBtn.disabled = qemu || busy;
+  els.qemuBtn.textContent = qemu ? 'Built ✓' : 'Build QEMU';
+  // OSS greyed for 95
+  const ossOpt = els.bspMode.querySelector('option[value=oss]');
+  ossOpt.disabled = isImx95();
+  ossOpt.textContent = 'Go fast — prebuilt OSS bundle' + (isImx95() ? ' (91/93 only)' : '');
+  if (isImx95() && els.bspMode.value==='oss') els.bspMode.value='build';
+  // default outcome line
+  const s = sim();
+  const outcome = s==='both' ? 'nothing to build — ready to boot'
+    : s==='bsp'  ? "found a BSP → I'll build QEMU and use it"
+    : s==='qemu' ? "QEMU present → I'll build the BSP"
+    : "empty → I'll build everything (QEMU + BSP)";
+  els.detect.innerHTML = '↓ I looked in <span class="font-mono text-slate-300">'+els.dir.value+'</span>: <b>'+outcome+'</b>';
+  // bsp default mode follows folder
+  if (!els.bspMode.dataset.touched) els.bspMode.value = (s==='bsp')?'link':'build';
+  bspNoteRender();
+  els.bspBtn.disabled = bsp || busy;
+  // big button
+  const ready = qemu && bsp;
+  els.buildit.disabled = busy;
+  els.buildit.textContent = ready ? '▶ Boot it now' : '▶ Build it';
+  els.buildit.className = (ready?'bg-sky-600 hover:bg-sky-500':'bg-sky-600 hover:bg-sky-500')+' px-4 py-2 rounded disabled:opacity-40 text-sm font-semibold';
+  els.status.textContent = busy ? 'working…' : ready ? 'both axes ✓ — boot ready' : '';
+}
+
+function bspNoteRender(){
+  const m = els.bspMode.value;
+  if (m==='build' && !qemu) els.bspNote.innerHTML = '⏳ QEMU isn\'t built yet — I\'ll build it first, then the BSP (queued).';
+  else if (m==='link') els.bspNote.textContent = 'Validate the folder you point at; reuse it as-is.';
+  else if (m==='build') els.bspNote.textContent = 'Yocto build — multi-hour, you accept the NXP EULA in the terminal.';
+  else els.bspNote.textContent = 'Drop in the prebuilt OSS bundle — instant, no compile.';
+}
+
+async function doQemu(){
+  busy=true; render();
+  await fakeBuild('QEMU', ['$ build-me.sh '+els.board.value,'==> cloning forked qemu @ pinned ref','==> configure (aarch64-softmmu)','==> compiling… (32 cores)','==> extract qemu-system-aarch64 -> '+els.dir.value], 350);
+  qemu=true; busy=false; render();
+}
+async function doBsp(){
+  const m = els.bspMode.value;
+  busy=true; render();
+  if (m==='build' && !qemu){ await doQemuInline(); }
+  if (m==='link'){ logln('==> validating '+els.dir.value+' against manifest'); await sleep(400); logln('   present: Image, *.dtb, disk.wic, m33_image_M2.elf'); }
+  else if (m==='build'){ await fakeBuild('BSP', ['==> repo sync (shallow)','==> bitbake imx-image-full (multi-hour, mocked)','==> stage Image / dtb / disk.wic / SM'], 350); }
+  else { await fakeBuild('OSS bundle', ['==> fetch prebuilt OSS bundle','==> stage into '+els.dir.value], 300); }
+  bsp=true; busy=false; render();
+}
+async function doQemuInline(){ logln('(QEMU queued first)'); await fakeBuild('QEMU', ['==> build forked qemu'], 350); qemu=true; }
+
+async function buildIt(){
+  if (qemu && bsp){ els.status.textContent='🚀 booting '+els.board.value+'… (prototype)'; return; }
+  busy=true; render();
+  if (!qemu) await doQemuInline();
+  if (!bsp){ const m=els.bspMode.value;
+    if (m==='link'){ logln('==> validating linked BSP'); await sleep(400); }
+    else if (m==='oss'){ await fakeBuild('OSS bundle',['==> fetch + stage prebuilt OSS'],300); }
+    else { await fakeBuild('BSP',['==> bitbake imx-image-full (mocked)'],350); }
+    bsp=true;
+  }
+  busy=false; render();
+}
+
+els.board.addEventListener('change', ()=>{ els.dir.dataset.touched=''; els.bspMode.dataset.touched=''; applySim(); });
+els.dir.addEventListener('input', ()=>{ els.dir.dataset.touched='1'; render(); });
+els.bspMode.addEventListener('change', ()=>{ els.bspMode.dataset.touched='1'; render(); });
+document.querySelectorAll('input[name=sim]').forEach(r=>r.addEventListener('change', applySim));
+els.qemuBtn.addEventListener('click', doQemu);
+els.bspBtn.addEventListener('click', doBsp);
+els.buildit.addEventListener('click', buildIt);
+applySim();
+</script>
+</body>
+</html>
