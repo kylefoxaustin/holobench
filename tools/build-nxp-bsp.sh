@@ -41,12 +41,30 @@ MEM_GB="$(free -g 2>/dev/null | awk '/^Mem:/{print $2}')"
 [ -n "$MEM_GB" ] && [ "$MEM_GB" -ge 1 ] 2>/dev/null || MEM_GB=0
 HB_BUILD_MEM="${HB_BUILD_MEM:-$(( MEM_GB * 75 / 100 ))g}"   # ~75% of RAM, e.g. 70g
 
+# HB_BUILD_TMPFS — RAM-back the bitbake build dir. Yocto's do_rootfs is fsync/random-IO
+# heavy and collapses on a HDD (measured <2 fsync/s on a spinning disk here; on RAM
+# fsync is ~free), so the rootfs assembly + image build crawl for hours. Mounting the
+# build dir on a tmpfs runs them at memory speed. OFF by default (a cold from-scratch
+# tmp can exceed RAM -> ENOSPC); set HB_BUILD_TMPFS=<size like 52g> to enable. Peak tmp
+# for imx-image-full with WARM sstate is ~30-40G, so size above that with headroom. It
+# counts toward --memory (HB_BUILD_MEM stays above it), and DL_DIR/SSTATE_DIR live on
+# the /cache mount (disk), so only the hot tmp is in RAM.
+HB_BUILD_TMPFS="${HB_BUILD_TMPFS:-0}"
+
 # Translate the caps into docker flags + the BB_* env the entrypoint reads. A 0/none
 # value drops the corresponding cap entirely (so the build can run uncapped on purpose).
 DOCKER_CAPS=()
 case "$HB_BUILD_JOBS" in 0|none|unlimited) BB_JOBS="$NPROC" ;; *) DOCKER_CAPS+=(--cpus="$HB_BUILD_JOBS"); BB_JOBS="$HB_BUILD_JOBS" ;; esac
 case "$HB_MAKE_JOBS"  in 0|none|unlimited) BB_MAKE="$NPROC" ;; *) BB_MAKE="$HB_MAKE_JOBS" ;; esac
 case "$HB_BUILD_MEM"  in 0|0g|none|unlimited|"") MEM_DESC="uncapped" ;; *) DOCKER_CAPS+=(--memory="$HB_BUILD_MEM"); MEM_DESC="$HB_BUILD_MEM" ;; esac
+# tmpfs is mounted at the WHOLE build dir (not build/tmp) so the mountpoint IS the 1777
+# tmpfs — avoids docker creating a root-owned build/ that the unprivileged `builder`
+# user can't write conf/ into. exec is required (the build runs native tools from here);
+# mode=1777 lets builder write; sstate/downloads are elsewhere (/cache), so only tmp lands here.
+case "$HB_BUILD_TMPFS" in
+  0|0g|none|off|"") TMPFS_DESC="off (build dir on disk)" ;;
+  *) DOCKER_CAPS+=(--tmpfs "/home/builder/build:rw,exec,mode=1777,size=$HB_BUILD_TMPFS"); TMPFS_DESC="$HB_BUILD_TMPFS in RAM" ;;
+esac
 
 # Pull the board's NXP build params from build-sources.yaml (nxp_bsp: block).
 eval "$(python3 - "tools/build-sources.yaml" "$BOARD" <<'PY'
@@ -96,7 +114,8 @@ echo "==> starting interactive NXP Yocto build for $BOARD (accept the EULA when 
 echo "    MACHINE=$MACHINE DISTRO=$DISTRO  $MANIFEST_BRANCH/$MANIFEST_XML -> $IMAGE_TARGET"
 echo "    cache (downloads + sstate, persists across runs): $CACHE"
 echo "    resource caps: cpu=${HB_BUILD_JOBS} of ${NPROC} cores | make -j${BB_MAKE} | mem=${MEM_DESC} | bitbake pressure-throttled"
-echo "    (override via HB_BUILD_JOBS / HB_MAKE_JOBS / HB_BUILD_MEM or the wizard's Advanced settings; 0=uncapped)"
+echo "    build dir (tmp): ${TMPFS_DESC}"
+echo "    (override via HB_BUILD_JOBS / HB_MAKE_JOBS / HB_BUILD_MEM / HB_BUILD_TMPFS or the wizard's Advanced settings; 0=uncapped)"
 exec docker run -it --rm --name "$NAME" \
   "${DOCKER_CAPS[@]}" \
   -v "$OUT:/out" \
