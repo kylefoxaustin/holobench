@@ -728,12 +728,21 @@
     function SetupWizard({ onClose, onBoot }) {
       const [data, setData] = useState(null);
       const [err, setErr] = useState("");
-      const [board, setBoard] = useState("");
-      const [mode, setMode] = useState("bsp");   // demo | bsp | container
+      // board + mode persisted too, so a reload restores the same view — especially
+      // container mode, so the build-status poll resumes and the terminal auto-reattaches.
+      const [board, setBoard] = useState(() => { try { return sessionStorage.getItem("hb_setup_board") || ""; } catch { return ""; } });
+      const [mode, setMode] = useState(() => { try { return sessionStorage.getItem("hb_setup_mode") || "bsp"; } catch { return "bsp"; } });   // demo | bsp | container
       const [bsp, setBsp] = useState("");
+      useEffect(() => { try { sessionStorage.setItem("hb_setup_mode", mode); } catch {} }, [mode]);
+      useEffect(() => { try { if (board) sessionStorage.setItem("hb_setup_board", board); } catch {} }, [board]);
       const refresh = useCallback(() => {
-        api("/api/setup").then(d => { setData(d); if (!board && d.boards && d.boards.length) setBoard(d.boards[0].id); })
-          .catch(e => setErr(e.detail || `couldn't read setup (${e.status || e})`));
+        // Reset board to the first available if it's unset OR a stale persisted id that
+        // no longer exists, so a restored selection can't leave the wizard on a bad board.
+        api("/api/setup").then(d => {
+          setData(d);
+          const ids = (d.boards || []).map(b => b.id);
+          if ((!board || !ids.includes(board)) && ids.length) setBoard(ids[0]);
+        }).catch(e => setErr(e.detail || `couldn't read setup (${e.status || e})`));
       }, [board]);
       // Poll faster while a build is running so the log streams.
       useEffect(() => {
@@ -765,6 +774,16 @@
         const load = () => api("/api/setup/container-build").then(setCb).catch(() => {});
         load(); const id = setInterval(load, 2000); return () => clearInterval(id);
       }, [mode]);
+      // After a reload reopened the wizard, auto-reattach the terminal ONCE if a build is
+      // already running — so the live console (and any pending EULA prompt) comes right
+      // back without a manual Reattach. One-shot, so an explicit Detach afterward sticks.
+      const cbAutoAttached = useRef(false);
+      useEffect(() => {
+        if (cb && cb.state === "running" && !cbAutoAttached.current) {
+          cbAutoAttached.current = true;
+          setCbTerm(true);
+        }
+      }, [cb]);
       const startContainer = async () => {
         setErr("");
         try {
@@ -1123,7 +1142,15 @@
       }, []);
       const [adminOpen, setAdminOpen] = useState(false);
       const [labsOpen, setLabsOpen] = useState(false);
-      const [setupOpen, setSetupOpen] = useState(false);
+      // setupOpen persisted to sessionStorage so a tab reload (e.g. Firefox unloading
+      // the tab under memory pressure during a heavy build) REOPENS the wizard instead
+      // of dumping you on the main page with the build's EULA pager silently stuck.
+      const [setupOpen, setSetupOpen] = useState(() => {
+        try { return sessionStorage.getItem("hb_setup_open") === "1"; } catch { return false; }
+      });
+      useEffect(() => {
+        try { setupOpen ? sessionStorage.setItem("hb_setup_open", "1") : sessionStorage.removeItem("hb_setup_open"); } catch {}
+      }, [setupOpen]);
       // undefined = checking, null = needs login, object = authenticated
       const [me, setMe] = useState(undefined);
       // null = unknown; object once /api/public-config resolves. needs_onboarding
