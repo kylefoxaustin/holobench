@@ -153,13 +153,23 @@ echo "==> staging artifacts from $DEPLOY -> $OUT"
 rm -f "$OUT/disk.wic"
 cp --remove-destination -L "$DEPLOY/Image" "$OUT/Image"
 cp --remove-destination -L "$DEPLOY/$DTB_NAME" "$OUT/$DTB_NAME"
-# rootfs SD image (.wic / .wic.zst): take the image-target .wic, decompressed.
-wic="$(ls "$DEPLOY/$IMAGE_TARGET-$MACHINE".wic* 2>/dev/null | head -1 || true)"
-[ -n "$wic" ] || wic="$(ls "$DEPLOY"/*.wic* 2>/dev/null | head -1)"
-case "$wic" in
-  *.zst) zstd -d -f "$wic" -o "$OUT/disk.wic" ;;
-  *)     cp --remove-destination -L "$wic" "$OUT/disk.wic" ;;
-esac
+# rootfs SD image -> disk.wic (decompressed). Pick the ACTUAL image, never a sidecar:
+# a `*.wic*` glob also matches `.wic.bmap` (the block-map XML) and `.wic.json`, and
+# `.bmap` sorts BEFORE `.gz`/`.zst`, so `... | head -1` grabbed the 4KB bmap instead
+# of the image. Match exact suffixes in priority order (plain, then zst/gz/xz) and
+# decompress accordingly. The leading `*` covers the `.rootfs.` infix newer Yocto adds.
+wic_plain="$(ls -1 "$DEPLOY"/*.wic 2>/dev/null | head -1 || true)"
+wic_comp="$(ls -1 "$DEPLOY"/*.wic.zst "$DEPLOY"/*.wic.gz "$DEPLOY"/*.wic.xz 2>/dev/null | head -1 || true)"
+if [ -n "$wic_plain" ]; then
+  cp --remove-destination -L "$wic_plain" "$OUT/disk.wic"
+else
+  case "$wic_comp" in
+    *.zst) zstd -d -f "$wic_comp" -o "$OUT/disk.wic" ;;
+    *.gz)  gzip -dc "$wic_comp" > "$OUT/disk.wic" ;;
+    *.xz)  xz -dc "$wic_comp"  > "$OUT/disk.wic" ;;
+    *) echo "error: no .wic rootfs image found in $DEPLOY (only sidecars?)" >&2; exit 1 ;;
+  esac
+fi
 
 if [ -n "${SM_CFG:-}" ]; then
   echo "==> building SM firmware (imx-sm ${SM_TAG:-default} cfg=$SM_CFG M=${SM_M:-2}) — creds-free"
