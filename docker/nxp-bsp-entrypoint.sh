@@ -36,14 +36,29 @@ git config --global user.name  "Holobench Builder"
 git config --global --add safe.directory '*'   # avoid dubious-ownership stops on mounted trees
 git config --global color.ui false
 
+# retry <attempts> <sleep_s> <cmd...> — re-run a flaky network command instead of
+# aborting the whole (multi-hour) build on one transient blip. `repo init` first
+# downloads the repo tool itself from gerrit.googlesource.com, whose TLS handshake
+# occasionally fails (observed: "gnutls_handshake() failed" -> git exit 128); repo
+# sync can hit the same. Both are idempotent (repo cleans a failed .repo/repo), so a
+# retry is safe. errexit-friendly: the `until` condition failing doesn't abort.
+retry() {
+  local n="$1" s="$2"; shift 2; local i=1
+  until "$@"; do
+    [ "$i" -ge "$n" ] && { echo "==> gave up after $n attempts: $*" >&2; return 1; }
+    echo "==> attempt $i/$n failed (transient?), retrying in ${s}s: $*" >&2
+    sleep "$s"; i=$((i + 1))
+  done
+}
+
 echo "==> repo init ($MANIFEST_BRANCH / $MANIFEST_XML) + SHALLOW sync (--depth 1)"
 # --depth 1: clone only the tip of each Yocto meta-layer, NOT full history. Full
 # clones of poky etc. are 700k+ objects and crawl regardless of bandwidth (git
 # index-pack is the bottleneck, not the network). Shallow is safe here: repo sync
 # only fetches the META-LAYERS; bitbake fetches the actual kernel/u-boot/app
 # sources (SRC_URI) itself during the build, so no git history is needed.
-repo init --depth=1 -u https://github.com/nxp-imx/imx-manifest -b "$MANIFEST_BRANCH" -m "$MANIFEST_XML"
-repo sync -j"$BB_JOBS" --no-clone-bundle --optimized-fetch
+retry 5 15 repo init --depth=1 -u https://github.com/nxp-imx/imx-manifest -b "$MANIFEST_BRANCH" -m "$MANIFEST_XML"
+retry 5 20 repo sync -j"$BB_JOBS" --no-clone-bundle --optimized-fetch
 
 # crates.io: route crate fetches through the CDN (durable fix for the 403s).
 # walnascar's bitbake (2.12) crate fetcher builds the .crate URL from the API host
