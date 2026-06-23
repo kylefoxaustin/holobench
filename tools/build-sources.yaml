@@ -75,6 +75,24 @@ imx93-evk:
 imx91-evk-sd:
   qemu: { repo: "https://github.com/kylefoxaustin/qemu-imx91.git", ref: "91b14c8cbd9b9f578b10d648f952352b58a7b11a", target_list: "aarch64-softmmu" }
   oss_demo: { url: "", sha256: "" }   # pending boot recipe from the 91 emulator session
+  # Container build (artifact source #3): NXP Yocto build params. MACHINE per
+  # docs/wizard-prototype.html (imx91-11x11-lpddr4-evk — note lpddr4, not lpddr4x),
+  # accepted by imx-setup-release (NXP backports the 91 into walnascar; mainline only
+  # has it v6.18+). Same walnascar 6.12.49 manifest; dtb per the profile. Single
+  # Cortex-A55, NO M33 -> sm_cfg empty (no System Manager). imx-image-full DOES build
+  # on the 91: onnxruntime is a CPU runtime and the Ethos-U NPU is an *optional*
+  # execution provider, not a build dep — per-SoC MACHINE_FEATURES light up only what
+  # the 91 has (CPU/ACL; no NPU). (An earlier full build tripped on onnxruntime
+  # do_configure under heavy parallel memory pressure; the recipe configures + builds
+  # fine in isolation, so that was environmental, not a 91 incompatibility.)
+  nxp_bsp:
+    machine: imx91-11x11-lpddr4-evk
+    distro: fsl-imx-xwayland
+    manifest_branch: imx-linux-walnascar
+    manifest_xml: imx-6.12.49-2.2.0.xml
+    image_target: imx-image-full              # 91 supports full (CPU ML; NPU bits gate off)
+    dtb_name: imx91-11x11-evk.dtb
+    sm_cfg: ""                                 # 91: single A55, no M33 -> no SM firmware
 imx91-evk:
   qemu: { repo: "https://github.com/kylefoxaustin/qemu-imx91.git", ref: "91b14c8cbd9b9f578b10d648f952352b58a7b11a", target_list: "aarch64-softmmu" }
   # All-OSS boot bundle from the 91 emulator session, boot-tested on imx91-11x11-evk:
