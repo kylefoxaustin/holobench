@@ -37,7 +37,10 @@ imx95-evk-sd:
     distro: fsl-imx-xwayland                   # weston desktop (matches Attach-LCD)
     manifest_branch: imx-linux-walnascar
     manifest_xml: imx-6.12.49-2.2.0.xml
-    image_target: imx-image-full              # lighter: imx-image-multimedia / imx-image-core
+    image_targets:                            # depth variants the wizard offers (first = default)
+      - imx-image-full                        # + Qt/multimedia + eIQ ML (NPU lights up where present)
+      - imx-image-multimedia                  # + GStreamer/weston graphics, no ML stack
+      - imx-image-core                        # console + base userspace (smallest)
     dtb_name: imx95-19x19-evk.dtb
     sm_cfg: mx95evk
     sm_m: 2                                    # REQUIRED: M=1 busy-polls the debug UART (~90% host core)
@@ -61,7 +64,10 @@ imx93-evk-sd:
     distro: fsl-imx-xwayland                   # weston desktop (matches Attach-LCD)
     manifest_branch: imx-linux-walnascar
     manifest_xml: imx-6.12.49-2.2.0.xml
-    image_target: imx-image-full              # lighter: imx-image-multimedia / imx-image-core
+    image_targets:                            # depth variants the wizard offers (first = default)
+      - imx-image-full                        # + Qt/multimedia + eIQ ML (Ethos-U65 NPU)
+      - imx-image-multimedia                  # + GStreamer/weston graphics, no ML stack
+      - imx-image-core                        # console + base userspace (smallest)
     dtb_name: imx93-11x11-evk.dtb
     sm_cfg: ""                                 # 93: no M33 System Manager firmware (95-only)
 imx93-evk:
@@ -90,7 +96,10 @@ imx91-evk-sd:
     distro: fsl-imx-xwayland
     manifest_branch: imx-linux-walnascar
     manifest_xml: imx-6.12.49-2.2.0.xml
-    image_target: imx-image-full              # 91 supports full (CPU ML; NPU bits gate off)
+    image_targets:                            # depth variants the wizard offers (first = default)
+      - imx-image-full                        # + Qt/multimedia + eIQ ML (CPU-only on 91; NPU bits gate off)
+      - imx-image-multimedia                  # + GStreamer/weston graphics, no ML stack
+      - imx-image-core                        # console + base userspace (smallest)
     dtb_name: imx91-11x11-evk.dtb
     sm_cfg: ""                                 # 91: single A55, no M33 -> no SM firmware
 imx91-evk:

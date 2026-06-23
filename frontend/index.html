@@ -764,6 +764,9 @@
       const [cb, setCb] = useState(null);
       const [cbTerm, setCbTerm] = useState(false);
       const [cbMock, setCbMock] = useState(false);
+      // Image depth variant to build (imx-image-core/multimedia/full). "" = the board's
+      // default (its first declared image_target). Options come from sel.image_targets.
+      const [cbImageTarget, setCbImageTarget] = useState("");
       // Advanced settings: resource caps. Blank = the build script's safe default;
       // "0" = remove that cap (uncapped — warned about in the panel below).
       const [cbCpus, setCbCpus] = useState("");
@@ -792,6 +795,7 @@
           if (cbCpus.trim() !== "") adv.cpus = Number(cbCpus);
           if (cbMakeJobs.trim() !== "") adv.make_jobs = Number(cbMakeJobs);
           if (cbMemGb.trim() !== "") adv.mem_gb = Number(cbMemGb);
+          if (cbImageTarget) adv.image_target = cbImageTarget;
           await api("/api/setup/container-build", { method: "POST", headers: { "Content-Type": "application/json" },
             body: JSON.stringify({ board, mock: cbMock, ...(fetchOnly === true ? { fetch_only: true } : {}), ...adv }) });
           setCbTerm(true);
@@ -910,6 +914,15 @@
                   })()}
                   ${!running && !cbTerm && html`
                     <div class="space-y-2">
+                    ${sel && sel.image_targets && sel.image_targets.length > 0 && html`
+                      <label class="flex items-center gap-2 text-[12px] text-slate-400">
+                        <span>Image depth:</span>
+                        <select value=${cbImageTarget} onChange=${e => setCbImageTarget(e.target.value)}
+                          class="bg-slate-800 border border-slate-700 rounded px-2 py-1 text-xs text-slate-200">
+                          ${sel.image_targets.map((t, i) => html`<option value=${i === 0 ? "" : t}>${t}${i === 0 ? " — default" : ""}</option>`)}
+                        </select>
+                        <span class="text-[11px] text-slate-600">core = console · multimedia = +graphics · full = +ML; more depth → bigger rootfs + longer first build</span>
+                      </label>`}
                     <div class="flex items-center gap-3 flex-wrap">
                       <button onClick=${() => startContainer(false)} disabled=${!cbMock && sel && !sel.container_build}
                         class="px-3 py-1.5 rounded bg-emerald-600 hover:bg-emerald-500 disabled:opacity-50 text-sm font-medium">Run build container</button>

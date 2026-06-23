@@ -67,6 +67,8 @@ case "$HB_BUILD_TMPFS" in
 esac
 
 # Pull the board's NXP build params from build-sources.yaml (nxp_bsp: block).
+# IMAGE_TARGETS = the space-joined list of depth variants the board declares
+# (image_targets:, or the legacy singular image_target: as a 1-element fallback).
 eval "$(python3 - "tools/build-sources.yaml" "$BOARD" <<'PY'
 import sys, yaml, shlex
 e = (yaml.safe_load(open(sys.argv[1])) or {}).get(sys.argv[2], {}) or {}
@@ -74,13 +76,24 @@ b = e.get("nxp_bsp")
 if not b:
     print("echo 'error: no nxp_bsp config for this board in build-sources.yaml (confirm with the emulator session)'; exit 1")
     sys.exit(0)
+targets = b.get("image_targets") or ([b["image_target"]] if b.get("image_target") else [])
 m = {"MACHINE":b.get("machine"),"DISTRO":b.get("distro"),"MANIFEST_BRANCH":b.get("manifest_branch"),
-     "MANIFEST_XML":b.get("manifest_xml"),"IMAGE_TARGET":b.get("image_target"),"DTB_NAME":b.get("dtb_name"),
+     "MANIFEST_XML":b.get("manifest_xml"),"IMAGE_TARGETS":" ".join(targets),"DTB_NAME":b.get("dtb_name"),
      "SM_CFG":b.get("sm_cfg",""),"SM_M":str(b.get("sm_m",2)),"SM_TAG":b.get("sm_tag","")}
 for k,v in m.items():
     print(f"export {k}={shlex.quote(str(v or ''))}")
 PY
 )"
+
+# Select which variant(s) to build: HB_IMAGE_TARGET (the wizard's depth pick) if set,
+# else the FIRST declared variant (the default). Space-separated -> build several in one
+# run (the entrypoint loops + stages each). Every requested target must be declared.
+[ -n "${IMAGE_TARGETS:-}" ] || { echo "error: no image_targets declared for $BOARD"; exit 1; }
+IMAGE_TARGET="${HB_IMAGE_TARGET:-${IMAGE_TARGETS%% *}}"
+for _t in $IMAGE_TARGET; do
+  case " $IMAGE_TARGETS " in *" $_t "*) ;; *) echo "error: image target '$_t' is not one of $BOARD's declared variants ($IMAGE_TARGETS)"; exit 1 ;; esac
+done
+export IMAGE_TARGET
 
 command -v docker >/dev/null || { echo "error: docker not found"; exit 1; }
 echo "==> ensuring builder image $IMAGE (one-time, ~10 min apt; cached after)"
@@ -112,6 +125,7 @@ if docker ps -aq -f "name=^${NAME}$" 2>/dev/null | grep -q .; then
 fi
 echo "==> starting interactive NXP Yocto build for $BOARD (accept the EULA when prompted)"
 echo "    MACHINE=$MACHINE DISTRO=$DISTRO  $MANIFEST_BRANCH/$MANIFEST_XML -> $IMAGE_TARGET"
+echo "    image variant: $IMAGE_TARGET   (available: $IMAGE_TARGETS; override with HB_IMAGE_TARGET / the wizard)"
 echo "    cache (downloads + sstate, persists across runs): $CACHE"
 echo "    resource caps: cpu=${HB_BUILD_JOBS} of ${NPROC} cores | make -j${BB_MAKE} | mem=${MEM_DESC} | bitbake pressure-throttled"
 echo "    build dir (tmp): ${TMPFS_DESC}"

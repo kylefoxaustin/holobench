@@ -227,6 +227,24 @@ bitbake build `tmp` on a tmpfs so `do_rootfs`/image assembly run at memory speed
 cache stays on disk, so size it for the hot `tmp` only (~30–40 G for `imx-image-full`);
 it counts against `HB_BUILD_MEM`.
 
+## Picking the image depth (per-SoC variants)
+
+Each container-capable SoC declares a list of NXP image **variants** in
+`tools/build-sources.yaml` (`nxp_bsp.image_targets`, first = default), and the wizard's
+**"Image depth"** dropdown lets you pick one:
+
+| Variant | Contents | i.MX91 `.wic` | i.MX91 build (warm) |
+|---|---|---:|---:|
+| `imx-image-core` | console + base userspace | ~2.4 G | ~6 min |
+| `imx-image-multimedia` | + GStreamer / Weston graphics | ~4.4 G | ~8 min |
+| `imx-image-full` | + Qt + the eIQ ML stack | ~7.7 G | ~8 min |
+
+The *same* variants build on all three SoCs — the per-SoC difference is which optional
+accelerators light up (`MACHINE_FEATURES`): the 93/95 enable the **Ethos-U65 NPU**, the 91
+runs the ML stack CPU-only. Headless: `HB_IMAGE_TARGET=imx-image-core tools/build-nxp-bsp.sh
+imx91-evk-sd …`, or space-separate several to build them in one run (staged as
+`disk-<variant>.wic`; a single variant stages as `disk.wic`).
+
 ## Bounding a container build (resource caps)
 
 The **container build** ("🧰 Build me a board" → *Container build*) runs a full NXP

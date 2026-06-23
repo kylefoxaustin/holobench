@@ -241,6 +241,10 @@ class SetupManager:
             q = (entry or {}).get("qemu", {})
             stock = (entry or {}).get("stock")
             demo = (entry or {}).get("oss_demo") or {}
+            nb = (entry or {}).get("nxp_bsp") or {}
+            # Container-build depth variants (imx-image-core/multimedia/full); first is
+            # the default. Supports the legacy singular image_target as a 1-element list.
+            img_targets = nb.get("image_targets") or ([nb["image_target"]] if nb.get("image_target") else [])
             out.append({
                 "id": board,
                 "image_built": self._image_built(board),
@@ -254,7 +258,8 @@ class SetupManager:
                 "installed": installed_qemu(board) is not None,
                 # Container build configured (a confirmed nxp_bsp recipe)? Yocto
                 # imx-image-full emits a .wic -> fits the full-distro (-sd) profiles.
-                "container_build": bool((entry or {}).get("nxp_bsp")),
+                "container_build": bool(nb),
+                "image_targets": img_targets,
             })
         return sorted(out, key=lambda b: b["id"])
 
@@ -393,6 +398,7 @@ class SetupManager:
         self, board: str, *, mock: bool = False,
         cpus: Optional[int] = None, make_jobs: Optional[int] = None,
         mem_gb: Optional[int] = None, fetch_only: bool = False,
+        image_target: Optional[str] = None,
     ):
         """Start the interactive NXP BSP container build for `board`. Returns the
         ContainerBuild (PTY-backed; attach a terminal via the WS). `mock` runs a
@@ -432,6 +438,8 @@ class SetupManager:
             cap_env["HB_BUILD_MEM"] = f"{mem_gb}g" if mem_gb > 0 else "0"
         if fetch_only:
             cap_env["HB_FETCH_ONLY"] = "1"
+        if image_target:
+            cap_env["HB_IMAGE_TARGET"] = image_target
         env = {**os.environ, **cap_env} if cap_env else None
         if mock:
             script = (

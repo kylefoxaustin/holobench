@@ -157,7 +157,8 @@ echo 'SOURCE_MIRROR_URL = "https://downloads.yoctoproject.org/mirror/sources/"' 
 # is cheap+idempotent (already-fetched sources are skipped) — keep running until clean.
 if [ "${HB_FETCH_ONLY:-}" = 1 ] || [ "${HB_FETCH_ONLY:-}" = true ]; then
   echo "==> PRE-CACHE MODE (HB_FETCH_ONLY): fetching ALL sources for $IMAGE_TARGET (no build)"
-  bitbake -k --runall=fetch "$IMAGE_TARGET"
+  # shellcheck disable=SC2086 # intentional word-split: IMAGE_TARGET may be several targets
+  bitbake -k --runall=fetch $IMAGE_TARGET
   echo "==> PRE-CACHE COMPLETE — DL_DIR seeded at /cache/downloads."
   echo "    Re-run without HB_FETCH_ONLY to build (sources now local; any non-zero exit"
   echo "    above lists upstreams that failed — re-run pre-cache until it's clean)."
@@ -172,7 +173,11 @@ echo "==> bitbake $IMAGE_TARGET (multi-hour)"
 # NEXT run — death by a thousand re-runs. With -k, ONE run surfaces ALL the broken
 # fetches at once so they can be mirrored/pre-seeded in a single batch. Exit code is
 # still non-zero if anything failed; a fully-clean run still completes normally.
-bitbake -k "$IMAGE_TARGET"
+# IMAGE_TARGET unquoted on purpose: it may be several space-separated image targets
+# (multi-variant build) that bitbake must receive as separate args. Names are safe
+# (no spaces/globs), so word-splitting here is intended.
+# shellcheck disable=SC2086
+bitbake -k $IMAGE_TARGET
 
 DEPLOY="tmp/deploy/images/$MACHINE"
 echo "==> staging artifacts from $DEPLOY -> $OUT"
@@ -182,25 +187,40 @@ echo "==> staging artifacts from $DEPLOY -> $OUT"
 # isn't reachable in the container, or (worse, on a host run) clobbering whatever
 # the link points at. --remove-destination unlinks first, so we always write a
 # fresh regular file INSIDE $OUT and never touch anything outside it.
-rm -f "$OUT/disk.wic"
+# Image + dtb are image-independent (same kernel/dtb for every variant) -> stage once.
 cp --remove-destination -L "$DEPLOY/Image" "$OUT/Image"
 cp --remove-destination -L "$DEPLOY/$DTB_NAME" "$OUT/$DTB_NAME"
-# rootfs SD image -> disk.wic (decompressed). Pick the ACTUAL image, never a sidecar:
-# a `*.wic*` glob also matches `.wic.bmap` (the block-map XML) and `.wic.json`, and
-# `.bmap` sorts BEFORE `.gz`/`.zst`, so `... | head -1` grabbed the 4KB bmap instead
-# of the image. Match exact suffixes in priority order (plain, then zst/gz/xz) and
-# decompress accordingly. The leading `*` covers the `.rootfs.` infix newer Yocto adds.
-wic_plain="$(ls -1 "$DEPLOY"/*.wic 2>/dev/null | head -1 || true)"
-wic_comp="$(ls -1 "$DEPLOY"/*.wic.zst "$DEPLOY"/*.wic.gz "$DEPLOY"/*.wic.xz 2>/dev/null | head -1 || true)"
-if [ -n "$wic_plain" ]; then
-  cp --remove-destination -L "$wic_plain" "$OUT/disk.wic"
+
+# stage_wic <image-target> <dest>: copy that image's rootfs .wic to <dest> (decompressing
+# if needed). Match the per-IMAGE prefix + EXACT suffixes (.wic / .wic.zst|gz|xz) so we never
+# grab a sidecar (`.wic.bmap`/`.wic.json`) — the bug a bare `*.wic*` glob hit. The `-*` covers
+# the `<machine>[.rootfs].<ts>` infix Yocto inserts. Per-image prefix lets us stage several
+# variants from one DEPLOY when more than one image was built.
+stage_wic() {
+  local tgt="$1" dest="$2" plain comp
+  plain="$(ls -1 "$DEPLOY/${tgt}-"*.wic 2>/dev/null | head -1 || true)"
+  comp="$(ls -1 "$DEPLOY/${tgt}-"*.wic.zst "$DEPLOY/${tgt}-"*.wic.gz "$DEPLOY/${tgt}-"*.wic.xz 2>/dev/null | head -1 || true)"
+  rm -f "$dest"
+  if [ -n "$plain" ]; then
+    cp --remove-destination -L "$plain" "$dest"
+  else
+    case "$comp" in
+      *.zst) zstd -d -f "$comp" -o "$dest" ;;
+      *.gz)  gzip -dc "$comp" > "$dest" ;;
+      *.xz)  xz -dc "$comp"  > "$dest" ;;
+      *) echo "error: no .wic rootfs image for '$tgt' in $DEPLOY (only sidecars?)" >&2; return 1 ;;
+    esac
+  fi
+  echo "    staged $tgt -> $(basename "$dest")"
+}
+
+# One variant -> disk.wic (the name the -sd profiles boot). Several -> disk-<variant>.wic
+# each (variant = the target minus the imx-image- prefix), so the operator picks the golden.
+set -- $IMAGE_TARGET
+if [ "$#" -eq 1 ]; then
+  stage_wic "$1" "$OUT/disk.wic"
 else
-  case "$wic_comp" in
-    *.zst) zstd -d -f "$wic_comp" -o "$OUT/disk.wic" ;;
-    *.gz)  gzip -dc "$wic_comp" > "$OUT/disk.wic" ;;
-    *.xz)  xz -dc "$wic_comp"  > "$OUT/disk.wic" ;;
-    *) echo "error: no .wic rootfs image found in $DEPLOY (only sidecars?)" >&2; exit 1 ;;
-  esac
+  for _tgt in "$@"; do stage_wic "$_tgt" "$OUT/disk-${_tgt#imx-image-}.wic"; done
 fi
 
 if [ -n "${SM_CFG:-}" ]; then
