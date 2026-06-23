@@ -49,6 +49,21 @@ imx95-evk:
 imx93-evk-sd:
   qemu: { repo: "https://github.com/kylefoxaustin/qemu-imx93.git", ref: "951fbc893b19b63933c79accfd152e9717a7e1a8", target_list: "aarch64-softmmu" }
   oss_demo: { url: "", sha256: "" }   # pending boot recipe from the 93 emulator session
+  # Container build (artifact source #3): NXP Yocto build params. MACHINE per
+  # docs/wizard-prototype.html (imx93-11x11-lpddr4x-evk); same walnascar 6.12.49
+  # release manifest as the 95 (one manifest covers all i.MX); dtb per the profile.
+  # imx-image-full carries the eIQ/Ethos-U65 NPU runtime (core lacks it — see the
+  # NPU verification). i.MX93 has NO load-bearing M33 System Manager (unlike 95),
+  # so sm_cfg is empty -> the SM firmware build is skipped. Reconfirm on the bus
+  # with the 93 session before a release (Prime Directive §7).
+  nxp_bsp:
+    machine: imx93-11x11-lpddr4x-evk
+    distro: fsl-imx-xwayland                   # weston desktop (matches Attach-LCD)
+    manifest_branch: imx-linux-walnascar
+    manifest_xml: imx-6.12.49-2.2.0.xml
+    image_target: imx-image-full              # lighter: imx-image-multimedia / imx-image-core
+    dtb_name: imx93-11x11-evk.dtb
+    sm_cfg: ""                                 # 93: no M33 System Manager firmware (95-only)
 imx93-evk:
   qemu: { repo: "https://github.com/kylefoxaustin/qemu-imx93.git", ref: "951fbc893b19b63933c79accfd152e9717a7e1a8", target_list: "aarch64-softmmu" }
   # All-OSS boot bundle from the 93 emulator session, boot-tested on imx93-11x11-evk:
