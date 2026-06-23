@@ -116,6 +116,11 @@ echo "    cache (downloads + sstate, persists across runs): $CACHE"
 echo "    resource caps: cpu=${HB_BUILD_JOBS} of ${NPROC} cores | make -j${BB_MAKE} | mem=${MEM_DESC} | bitbake pressure-throttled"
 echo "    build dir (tmp): ${TMPFS_DESC}"
 echo "    (override via HB_BUILD_JOBS / HB_MAKE_JOBS / HB_BUILD_MEM / HB_BUILD_TMPFS or the wizard's Advanced settings; 0=uncapped)"
+# HB_FETCH_ONLY — pre-cache mode: the entrypoint fetches every source into the
+# persistent /cache (DL_DIR) and exits WITHOUT building. Run this first on a fresh
+# machine so the real build never depends on the network for sources (restart-proof,
+# offline-capable). Empty/0 -> normal build. Passed straight through to the container.
+case "${HB_FETCH_ONLY:-}" in 1|true) echo "    mode: PRE-CACHE ONLY (fetch all sources, no build)" ;; esac
 exec docker run -it --rm --name "$NAME" \
   "${DOCKER_CAPS[@]}" \
   -v "$OUT:/out" \
@@ -123,4 +128,5 @@ exec docker run -it --rm --name "$NAME" \
   -e MACHINE -e DISTRO -e MANIFEST_BRANCH -e MANIFEST_XML \
   -e IMAGE_TARGET -e DTB_NAME -e SM_CFG -e SM_M -e SM_TAG \
   -e BB_JOBS="$BB_JOBS" -e BB_MAKE="$BB_MAKE" \
+  -e HB_FETCH_ONLY="${HB_FETCH_ONLY:-}" \
   "$IMAGE"

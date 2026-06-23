@@ -177,6 +177,56 @@ Golden distro images live at `assets/<profile-id>/disk.wic` (the BSP `.wic`);
 mechanism. Want it fully self-contained? `docker/build.sh imx95-evk-sd` bakes the
 forked QEMU + M33 firmware + the distro image into one runnable container (below).
 
+## Build storage & caching (use an SSD)
+
+> **Build on an SSD.** Yocto's `do_rootfs` assembles the rootfs with a storm of
+> small writes and `fsync`s. On a spinning HDD that collapses to a crawl — measured
+> here at **<2 fsync/s**, so `do_rootfs` ran for *hours* and even killing the build
+> was slow. On an SSD (~2,300 fsync/s) the **same step took ~4 min**. Keep all three
+> of these on the SSD: **docker's `data-root`** (the build runs in a container — its
+> layers and the build `tmp` live there), **the source/sstate cache**
+> (`NXP_BSP_CACHE`, default `~/.cache/holobench-nxp-bsp`), and the working tree.
+
+**The cache is a persistent local source mirror.** The container mounts a host cache
+at `/cache` holding `DL_DIR` (downloads) + `SSTATE_DIR` (sstate). It survives the
+`--rm` container, so builds are incremental and reuse whatever's already there:
+
+| Build | Wall time (measured, 32-core host) |
+|---|---|
+| **Cold** — empty cache, everything from source | **~4 h** |
+| **Warm** — populated cache | **~8 min** |
+
+A cold build pulls ~**80 G** of sources (≈2,000 tarballs + ~930 git mirrors + ~1,100
+crates) and produces ~**22 G** of sstate; after that the cache *is* your mirror —
+copy `~/.cache/holobench-nxp-bsp` to another box to seed it, or serve it over HTTP as
+a `PREMIRRORS` / `SSTATE_MIRRORS` endpoint for a build fleet. For anything not local,
+the build already falls back to the official **Yocto source mirror**
+(`downloads.yoctoproject.org`) and the `static.crates.io` CDN — a from-scratch run
+completed with **zero fetch failures**.
+
+**Pre-cache first (recommended on a fresh machine).** Click **📥 Pre-cache sources**
+on the build screen (or set `HB_FETCH_ONLY=1`) to fetch *every* source into the cache
+**without building**. The real build then pulls nothing from the network — it's
+**offline-capable and restart-proof**. Pre-cache is cheap and idempotent (already-fetched
+sources are skipped), and `-k` means one pass surfaces every flaky upstream so you can
+top up until it's clean.
+
+```bash
+HB_FETCH_ONLY=1 tools/build-nxp-bsp.sh imx95-evk-sd assets/imx95-evk-sd  # pre-cache, no build
+tools/build-nxp-bsp.sh imx95-evk-sd assets/imx95-evk-sd                  # build (sources now local)
+```
+
+**Crashes & restarts resume cleanly.** Because the cache lives *outside* the
+disposable container, a killed/crashed/interrupted build picks back up at **per-task
+granularity**: completed tasks are restored from sstate, only an in-flight task
+repeats, and no source is re-downloaded. (That recovery rebuilds the task tree from
+sstate — fast on an SSD, miserable on an HDD; one more reason for the SSD.)
+
+**No SSD but spare RAM?** Set `HB_BUILD_TMPFS=<size>` (e.g. `52g`) to mount the hot
+bitbake build `tmp` on a tmpfs so `do_rootfs`/image assembly run at memory speed. The
+cache stays on disk, so size it for the hot `tmp` only (~30–40 G for `imx-image-full`);
+it counts against `HB_BUILD_MEM`.
+
 ## Bounding a container build (resource caps)
 
 The **container build** ("🧰 Build me a board" → *Container build*) runs a full NXP

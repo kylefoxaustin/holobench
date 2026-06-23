@@ -147,6 +147,23 @@ echo 'FETCHCMD_wget = "/usr/bin/env wget --tries=8 --timeout=100 --waitretry=20 
 echo 'INHERIT += "own-mirrors"' >> conf/local.conf
 echo 'SOURCE_MIRROR_URL = "https://downloads.yoctoproject.org/mirror/sources/"' >> conf/local.conf
 
+# PRE-CACHE MODE (HB_FETCH_ONLY): fetch every source for the image WITHOUT building.
+# This populates the persistent /cache/downloads (DL_DIR) so the subsequent real build
+# never touches the network for sources — the fetch phase becomes fully restart-proof
+# and the build can even run offline. Recommended first step before a from-scratch
+# build (see the UI "pre-cache" note). --runall=fetch runs do_fetch across the WHOLE
+# dependency tree; -k surfaces every broken upstream in ONE pass so they can be
+# re-mirrored/seeded in a single batch instead of one-failure-per-rerun. Re-running it
+# is cheap+idempotent (already-fetched sources are skipped) — keep running until clean.
+if [ "${HB_FETCH_ONLY:-}" = 1 ] || [ "${HB_FETCH_ONLY:-}" = true ]; then
+  echo "==> PRE-CACHE MODE (HB_FETCH_ONLY): fetching ALL sources for $IMAGE_TARGET (no build)"
+  bitbake -k --runall=fetch "$IMAGE_TARGET"
+  echo "==> PRE-CACHE COMPLETE — DL_DIR seeded at /cache/downloads."
+  echo "    Re-run without HB_FETCH_ONLY to build (sources now local; any non-zero exit"
+  echo "    above lists upstreams that failed — re-run pre-cache until it's clean)."
+  exit 0
+fi
+
 echo "==> bitbake $IMAGE_TARGET (multi-hour)"
 # -k / --continue: keep going after a task failure instead of stopping at the FIRST
 # one. The from-scratch fetch hits hundreds of upstream hosts; some 404 on all

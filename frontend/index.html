@@ -784,7 +784,7 @@
           setCbTerm(true);
         }
       }, [cb]);
-      const startContainer = async () => {
+      const startContainer = async (fetchOnly = false) => {
         setErr("");
         try {
           // Only send a cap that was actually entered; blank -> omit -> script default.
@@ -793,7 +793,7 @@
           if (cbMakeJobs.trim() !== "") adv.make_jobs = Number(cbMakeJobs);
           if (cbMemGb.trim() !== "") adv.mem_gb = Number(cbMemGb);
           await api("/api/setup/container-build", { method: "POST", headers: { "Content-Type": "application/json" },
-            body: JSON.stringify({ board, mock: cbMock, ...adv }) });
+            body: JSON.stringify({ board, mock: cbMock, ...(fetchOnly === true ? { fetch_only: true } : {}), ...adv }) });
           setCbTerm(true);
         } catch (e) { setErr(e.detail || `couldn't start container build (${e.status || e})`); }
       };
@@ -885,6 +885,17 @@
                     each extra Enter just re-asks the y/n prompt (harmless, but looks like it's stuck). Until you answer
                     <span class="font-mono">y</span>, the build sits idle. Stay attached (or Reattach) until it's cleared, then you can detach.
                   </div>
+                  <div class="rounded border border-sky-500/60 bg-sky-500/10 px-3 py-2 text-[12px] text-sky-200">
+                    💾 <b>Build on an SSD.</b> Yocto's <span class="font-mono">do_rootfs</span> is fsync-heavy — on a spinning HDD it
+                    crawls for <b>hours</b> (and crash/restart recovery is just as slow); on an SSD the same step takes <b>~4&nbsp;min</b>.
+                    Keep docker storage <b>and</b> the source/sstate cache on the SSD too.
+                    <div class="mt-1">
+                      📥 <b>Pre-cache first.</b> On a fresh machine, run <b>Pre-cache sources</b> below to download everything into the
+                      local cache before building. Then the build pulls <b>no sources from the network</b> — it's offline-capable and
+                      <b>survives stalls, crashes &amp; restarts</b> (it resumes from the cache, never re-downloading). First full build is
+                      <b>~hours</b>; with a warm cache it's <b>~10&nbsp;min</b>.
+                    </div>
+                  </div>
                   ${(() => { const running = cb && cb.state === "running"; const ended = cb && ["done","failed","stopped"].includes(cb.state); return html`
                   ${sel && !sel.container_build && (() => {
                     const soc = sel.id.replace(/-evk.*$/, "");
@@ -899,9 +910,12 @@
                   })()}
                   ${!running && !cbTerm && html`
                     <div class="space-y-2">
-                    <div class="flex items-center gap-3">
-                      <button onClick=${startContainer} disabled=${!cbMock && sel && !sel.container_build}
+                    <div class="flex items-center gap-3 flex-wrap">
+                      <button onClick=${() => startContainer(false)} disabled=${!cbMock && sel && !sel.container_build}
                         class="px-3 py-1.5 rounded bg-emerald-600 hover:bg-emerald-500 disabled:opacity-50 text-sm font-medium">Run build container</button>
+                      <button onClick=${() => startContainer(true)} disabled=${!cbMock && sel && !sel.container_build}
+                        title="Fetch all sources into the local cache without building — recommended first on a fresh machine, then the build runs offline & restart-safe"
+                        class="px-3 py-1.5 rounded bg-sky-700 hover:bg-sky-600 disabled:opacity-50 text-sm font-medium">📥 Pre-cache sources</button>
                       <label class="flex items-center gap-1 text-[11px] text-slate-500"><input type="checkbox" checked=${cbMock} onChange=${e => setCbMock(e.target.checked)} /> mock (UX demo — no docker/Yocto)</label>
                       ${ended && html`<span class="text-[11px] ${cb.state === "done" ? "text-emerald-400" : cb.state === "failed" ? "text-rose-400" : "text-slate-400"}">last run: ${cb.state}${cb.elapsed_s != null ? ` (${cb.elapsed_s}s)` : ""}</span>`}
                     </div>

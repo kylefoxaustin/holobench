@@ -221,6 +221,7 @@ class ContainerBuildRequest(BaseModel):
     cpus: Optional[int] = Field(default=None, ge=0, le=1024)       # HB_BUILD_JOBS (cores)
     make_jobs: Optional[int] = Field(default=None, ge=0, le=1024)  # HB_MAKE_JOBS (make -j)
     mem_gb: Optional[int] = Field(default=None, ge=0, le=100000)   # HB_BUILD_MEM (GB RAM)
+    fetch_only: bool = False      # pre-cache: fetch all sources into the cache, no build (HB_FETCH_ONLY)
 
 
 class SnapshotRequest(BaseModel):
@@ -702,11 +703,13 @@ async def setup_container_build(req: ContainerBuildRequest, request: Request) ->
         cb = await app_ref.state.setup.start_container_build(
             req.board, mock=req.mock,
             cpus=req.cpus, make_jobs=req.make_jobs, mem_gb=req.mem_gb,
+            fetch_only=req.fetch_only,
         )
     except SetupError as exc:
         raise HTTPException(status_code=400, detail=str(exc))
     _audit("container_build", user.username, board=req.board, mock=req.mock,
-           cpus=req.cpus, make_jobs=req.make_jobs, mem_gb=req.mem_gb)
+           cpus=req.cpus, make_jobs=req.make_jobs, mem_gb=req.mem_gb,
+           fetch_only=req.fetch_only)
     return cb.view()
 
 

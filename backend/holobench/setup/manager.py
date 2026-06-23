@@ -392,7 +392,7 @@ class SetupManager:
     async def start_container_build(
         self, board: str, *, mock: bool = False,
         cpus: Optional[int] = None, make_jobs: Optional[int] = None,
-        mem_gb: Optional[int] = None,
+        mem_gb: Optional[int] = None, fetch_only: bool = False,
     ):
         """Start the interactive NXP BSP container build for `board`. Returns the
         ContainerBuild (PTY-backed; attach a terminal via the WS). `mock` runs a
@@ -401,7 +401,12 @@ class SetupManager:
         cpus / make_jobs / mem_gb are optional resource-cap overrides from the
         wizard's "Advanced settings"; each is None = use the build script's safe
         default, or 0 = remove that cap (run uncapped). They become HB_* env vars
-        the script reads (see tools/build-nxp-bsp.sh)."""
+        the script reads (see tools/build-nxp-bsp.sh).
+
+        fetch_only=True runs PRE-CACHE mode: the container fetches every source into
+        the persistent cache (DL_DIR) and exits without building, so the subsequent
+        real build needs no network for sources (restart-proof / offline-capable).
+        Recommended first step on a fresh machine (HB_FETCH_ONLY=1)."""
         from .container_build import ContainerBuild
         src = _load_sources()
         if board not in src:
@@ -425,6 +430,8 @@ class SetupManager:
             cap_env["HB_MAKE_JOBS"] = str(make_jobs)
         if mem_gb is not None:
             cap_env["HB_BUILD_MEM"] = f"{mem_gb}g" if mem_gb > 0 else "0"
+        if fetch_only:
+            cap_env["HB_FETCH_ONLY"] = "1"
         env = {**os.environ, **cap_env} if cap_env else None
         if mock:
             script = (
