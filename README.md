@@ -110,6 +110,7 @@ QEMU i.MX SoC models, through stock interfaces only.
 | 5+ | **Virtual camera** — feed host images through the ISI into the guest's V4L2 capture (`/dev/video0`) | ✅ |
 | 6 | Hardening — auth (token expiry, login throttle, WS-origin, persistent key), **per-session cgroup v2 caps** (memory/pids/cpu), asset-path lockdown, audit log, [deploy guide](docs/DEPLOY.md) | ◐ optional netns/mount-ns next |
 | 6+ | **Accounts & admin** — self-service register / first-run onboarding, user management (add / remove / set-role), and an **admin fleet view**: every running board across all users with per-board CPU (per-core + % of host) / RAM / disk / idle + one-click **kill** | ✅ |
+| 🧰 | **Build me a board** — build the real NXP BSP in a container (you accept the EULA; Holobench hosts/accepts nothing): pick the **image depth** (core / multimedia / full, per SoC), **pre-cache** sources for offline & restart-safe builds, SSD-backed. All 3 SoCs × 3 depths build clean. | ✅ |
 
 Boards: **i.MX 91 / 93 / 95**, each in two flavors — a quick **busybox** profile
 and a **full BSP distro** (`-sd`) profile that boots the real NXP `.wic`. All
@@ -152,10 +153,12 @@ Each SoC ships **two** profiles:
 
 - **`imx9x-evk`** — a tiny busybox initramfs. Boots to a shell in seconds; ideal
   for "does it come up, can I drive QMP" and fast iteration.
-- **`imx9x-evk-sd`** — the **full NXP i.MX Release Distro** (the same `.wic` you'd
+- **`imx9x-evk-sd`** — the **real NXP i.MX Release Distro** (the same `.wic` you'd
   flash to a real EVK): systemd, Weston, OpenSSH, the lot, on an ext4 root over
   SD (91/93) or eMMC (95). This is the "virtual EVK" in the truest sense — the
-  actual board software, in a browser tab, before you have silicon.
+  actual board software, in a browser tab, before you have silicon. (Its depth —
+  console `core`, `+graphics` multimedia, or `+ML` full — is a build-time choice;
+  see *Build a board image yourself*.)
 
 **Factory reset, built in.** The full-distro boards run on a per-session **qcow2
 overlay over a read-only golden `.wic`** — so every session is isolated and
@@ -176,6 +179,19 @@ Golden distro images live at `assets/<profile-id>/disk.wic` (the BSP `.wic`);
 `tools/make-golden-disk.sh` builds a small data disk for the same overlay/reset
 mechanism. Want it fully self-contained? `docker/build.sh imx95-evk-sd` bakes the
 forked QEMU + M33 firmware + the distro image into one runnable container (below).
+
+## Build a board image yourself (the *Build me a board* wizard)
+
+No NXP `.wic`? Build one. The wizard's 🧰 **Build me a board → Container build** runs
+the real NXP i.MX Yocto build in a container on your own machine and emits `Image` +
+`dtb` + `.wic` (+ the i.MX95 M33 firmware), dropped into `assets/<profile-id>/` ready
+for that board's `-sd` profile to boot. You accept the NXP EULA yourself in the
+terminal — Holobench hosts and accepts nothing. (Recipes per board live in
+`tools/build-sources.yaml`, confirmed with each emulator session — never guessed.)
+
+It's a real, multi-hour-from-scratch Yocto build, so the three sections below are what
+make it fast and dependable — **build on an SSD**, **pick the image depth**, and **bound
+the resource caps**:
 
 ## Build storage & caching (use an SSD)
 
