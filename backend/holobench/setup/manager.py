@@ -32,13 +32,45 @@ _BUILD_NXP_BSP = _REPO_ROOT / "tools" / "build-nxp-bsp.sh"
 # Where a wizard-built per-board QEMU binary is extracted so the RUNNING app can
 # launch the board with it (closing the build->boot seam). Gitignored.
 _QEMU_BUILDS = _REPO_ROOT / "qemu-builds"
+# "Build it" redesign: a per-board WORKING DIRECTORY holds BOTH the emulator
+# (qemu-system-aarch64) and the BSP artifacts. Default home, user-overridable.
+_DEFAULT_BOARDS_ROOT = Path(os.path.expanduser("~/holobench/boards"))
 
 
-def installed_qemu(board: str) -> Optional[str]:
+def board_workdir(board: str, dir: Optional[str] = None) -> Path:
+    """Resolve the per-board working directory (holds the QEMU binary AND the BSP).
+    An explicit `dir` wins (~ expanded); else the default ~/holobench/boards/<board>."""
+    return Path(os.path.expanduser(dir)) if dir else _DEFAULT_BOARDS_ROOT / board
+
+
+def _link_into_workdir(board: str, workdir: Path) -> None:
+    """Symlink the legacy per-board roots at the chosen workdir so the UNCHANGED
+    launch resolvers (installed_qemu / asset_root) keep working — zero launch-code
+    change (redesign §4). Idempotent; only (re)points symlinks we own, never a real
+    dir (so we can't clobber an operator's assets/<board>). cp/symlink-clobber lesson:
+    callers stage with `cp --remove-destination`, never `cp -L` through these."""
+    for base in (_QEMU_BUILDS, Path(os.environ.get("HOLOBENCH_ASSET_ROOT")
+                                    or (_REPO_ROOT / "assets"))):
+        link = base / board
+        if link.resolve() == workdir.resolve():
+            continue  # already points here (or IS the workdir)
+        if link.is_symlink() or not link.exists():
+            base.mkdir(parents=True, exist_ok=True)
+            if link.is_symlink():
+                link.unlink()
+            link.symlink_to(workdir)
+
+
+def installed_qemu(board: str, workdir: Optional[str] = None) -> Optional[str]:
     """Path to the QEMU binary the setup wizard built+extracted for this board on
-    this host, or None. Lets the launch path boot a just-built board in-place."""
-    p = _QEMU_BUILDS / board / "qemu-system-aarch64"
-    return str(p) if p.is_file() and os.access(p, os.X_OK) else None
+    this host, or None. Lets the launch path boot a just-built board in-place.
+    Checks the explicit/default workdir first, then the legacy qemu-builds/<board>
+    (which is normally a symlink INTO the workdir — so this resolves either way)."""
+    for p in (board_workdir(board, workdir) / "qemu-system-aarch64",
+              _QEMU_BUILDS / board / "qemu-system-aarch64"):
+        if p.is_file() and os.access(p, os.X_OK):
+            return str(p)
+    return None
 
 
 class SetupError(Exception):
@@ -155,11 +187,13 @@ def nxp_manifest(board: str) -> dict:
     }
 
 
-def validate_manifest(board: str, bsp_root: str) -> dict:
-    """Check the operator's BSP dir against the board manifest. bsp_root is the
-    mount root; per-board files live in bsp_root/<board>/."""
+def validate_manifest(board: str, bsp_root: str, direct: bool = False) -> dict:
+    """Check the operator's BSP dir against the board manifest. By default bsp_root
+    is the mount ROOT and per-board files live in bsp_root/<board>/. With
+    direct=True, bsp_root IS the per-board folder (the "Link an existing BSP folder"
+    + per-board workdir cases) — validate it as-is, no /<board> append."""
     req = required_artifacts(board)
-    board_dir = Path(bsp_root) / board
+    board_dir = Path(os.path.expanduser(bsp_root)) if direct else Path(bsp_root) / board
     present = [n for n in req if (board_dir / n).is_file()]
     missing = [n for n in req if n not in present]
     return {
@@ -182,9 +216,10 @@ def _load_sources() -> dict:
 class _Build:
     """One in-flight (or finished) build job."""
 
-    def __init__(self, board: str, mode: str) -> None:
+    def __init__(self, board: str, mode: str, workdir: Optional[str] = None) -> None:
         self.board = board
         self.mode = mode                       # "plan" | "bsp" | "demo"
+        self.workdir = workdir                 # per-board working dir (redesign); None=default
         self.state = "running"                 # running | done | failed
         self.started_at = time.time()
         self.ended_at: Optional[float] = None
@@ -272,7 +307,8 @@ class SetupManager:
 
     # --- build -------------------------------------------------------------
     async def start(self, board: str, mode: str = "plan",
-                    bsp_path: Optional[str] = None) -> dict:
+                    bsp_path: Optional[str] = None,
+                    workdir: Optional[str] = None) -> dict:
         if self._active and self._active.state == "running":
             raise SetupError(f"a build is already running ({self._active.board})")
         if board not in _load_sources():
@@ -294,7 +330,7 @@ class SetupManager:
             if bsp_path:
                 argv += ["--bsp", bsp_path]
 
-        job = _Build(board, mode)
+        job = _Build(board, mode, workdir)
         self._active = job
         job.task = asyncio.create_task(self._run(job, argv))
         return job.view()
@@ -340,9 +376,12 @@ class SetupManager:
         qemu-builds/<board>/, and (demo mode) fetch the OSS artifacts into the asset
         dir, so the current app can launch the board."""
         board = job.board
-        dest = _QEMU_BUILDS / board
+        dest = board_workdir(board, job.workdir)      # per-board working dir (redesign)
         dest.mkdir(parents=True, exist_ok=True)
-        job.log.append(f"== installing for in-app boot ({board}) ==")
+        # Point the legacy roots at the workdir so the UNCHANGED launch path + the OSS
+        # fetch (which stages via assets/<board>) both resolve into it.
+        _link_into_workdir(board, dest)
+        job.log.append(f"== installing for in-app boot ({board}) -> {dest} ==")
         # docker create + cp the binary out, then rm the temp container.
         try:
             cid_proc = await asyncio.create_subprocess_exec(
@@ -363,7 +402,7 @@ class SetupManager:
                     "docker", "rm", cid,
                     stdout=asyncio.subprocess.DEVNULL,
                     stderr=asyncio.subprocess.DEVNULL)).wait()
-            if rc != 0 or installed_qemu(board) is None:
+            if rc != 0 or installed_qemu(board, job.workdir) is None:
                 job.log.append("WARN extract: qemu binary not extracted")
                 return
             job.log.append(f"extracted qemu -> {dest / 'qemu-system-aarch64'}")
@@ -386,8 +425,36 @@ class SetupManager:
             except ProcessLookupError:
                 pass
 
+    def detect(self, board: str, dir: Optional[str] = None) -> dict:
+        """"Build it" redesign: scan a per-board working dir and report what's already
+        there → drives the two row badges + the auto-selected default outcome.
+        default_outcome: a BSP is present -> "qemu_only" (just build/reuse QEMU);
+        nothing there -> "everything" (build QEMU + BSP). ("link"/OSS are user picks.)"""
+        if board not in _load_sources():
+            raise SetupError(f"unknown board '{board}'")
+        wd = board_workdir(board, dir)
+        bsp = validate_manifest(board, str(wd), direct=True)
+        # Report ONLY what's in THIS workdir — not installed_qemu()'s legacy fallback
+        # (that fallback is for launch back-compat; detect must describe the chosen dir).
+        qb = wd / "qemu-system-aarch64"
+        return {
+            "board": board,
+            "workdir": str(wd),
+            "qemu_built": qb.is_file() and os.access(qb, os.X_OK),
+            "bsp": bsp,
+            "default_outcome": "qemu_only" if bsp["ok"] else "everything",
+        }
+
     # --- container build (interactive, artifact-source #3) -----------------
-    def _asset_out_dir(self, board: str) -> "Path":
+    def _asset_out_dir(self, board: str, workdir: Optional[str] = None) -> "Path":
+        # Redesign: stage the BSP into the per-board workdir and point assets/<board>
+        # at it so the launch path finds it unchanged. No workdir (legacy/current
+        # wizard) -> the old assets/<board> behaviour.
+        if workdir is not None:
+            out = board_workdir(board, workdir)
+            out.mkdir(parents=True, exist_ok=True)
+            _link_into_workdir(board, out)
+            return out
         from ..profiles.loader import DEFAULT_ASSET_ROOT
         root = Path(os.environ.get("HOLOBENCH_ASSET_ROOT") or DEFAULT_ASSET_ROOT)
         out = root / board
@@ -398,7 +465,7 @@ class SetupManager:
         self, board: str, *, mock: bool = False,
         cpus: Optional[int] = None, make_jobs: Optional[int] = None,
         mem_gb: Optional[int] = None, fetch_only: bool = False,
-        image_target: Optional[str] = None,
+        image_target: Optional[str] = None, workdir: Optional[str] = None,
     ):
         """Start the interactive NXP BSP container build for `board`. Returns the
         ContainerBuild (PTY-backed; attach a terminal via the WS). `mock` runs a
@@ -426,7 +493,7 @@ class SetupManager:
                 f".wic (full-distro), so it targets the -sd profile — try: "
                 f"{', '.join(have) or '(none yet)'}. (Other boards need their recipe "
                 f"confirmed by the emulator session first.)")
-        out = self._asset_out_dir(board)
+        out = self._asset_out_dir(board, workdir)
         # Resource-cap overrides -> HB_* env for the build script. None -> omit (script
         # default); an explicit int (incl. 0 = uncapped) -> set it. mem is GB -> "<n>g".
         cap_env: dict[str, str] = {}

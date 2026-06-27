@@ -731,8 +731,10 @@
       // board + mode persisted too, so a reload restores the same view — especially
       // container mode, so the build-status poll resumes and the terminal auto-reattaches.
       const [board, setBoard] = useState(() => { try { return sessionStorage.getItem("hb_setup_board") || ""; } catch { return ""; } });
-      const [mode, setMode] = useState(() => { try { return sessionStorage.getItem("hb_setup_mode") || "bsp"; } catch { return "bsp"; } });   // demo | bsp | container
-      const [bsp, setBsp] = useState("");
+      // BSP method (how to get the rootfs when the workdir doesn't already have one):
+      // "container" = build from scratch (Yocto) · "demo" = go fast (OSS bundle).
+      // ("link" is just pointing the working dir at an existing BSP — no method needed.)
+      const [mode, setMode] = useState(() => { try { const m = sessionStorage.getItem("hb_setup_mode"); return (m === "container" || m === "demo") ? m : "container"; } catch { return "container"; } });
       useEffect(() => { try { sessionStorage.setItem("hb_setup_mode", mode); } catch {} }, [mode]);
       useEffect(() => { try { if (board) sessionStorage.setItem("hb_setup_board", board); } catch {} }, [board]);
       const refresh = useCallback(() => {
@@ -752,13 +754,6 @@
         return () => clearInterval(id);
       }, [refresh, data && data.active && data.active.state]);
 
-      // Per-board artifact manifest (95's advice): validate the operator's BSP dir.
-      const [manifest, setManifest] = useState(null);
-      useEffect(() => {
-        if (!board) return;
-        const q = mode === "bsp" && bsp ? `&bsp=${encodeURIComponent(bsp)}` : "";
-        api(`/api/setup/manifest?board=${encodeURIComponent(board)}${q}`).then(setManifest).catch(() => setManifest(null));
-      }, [board, mode, bsp]);
 
       // Container build (#3): poll status; interactive terminal for the EULA.
       const [cb, setCb] = useState(null);
@@ -772,6 +767,17 @@
       const [cbCpus, setCbCpus] = useState("");
       const [cbMakeJobs, setCbMakeJobs] = useState("");
       const [cbMemGb, setCbMemGb] = useState("");
+      // "Build it" redesign: a per-board WORKING DIRECTORY holding BOTH the QEMU
+      // binary and the BSP. Pre-filled with the default (editable); drives detect.
+      const [workdir, setWorkdir] = useState("");
+      useEffect(() => { if (board) setWorkdir(`~/holobench/boards/${board}`); }, [board]);
+      const [detect, setDetect] = useState(null);
+      useEffect(() => {
+        if (!board || !workdir) { setDetect(null); return; }
+        api(`/api/setup/detect?board=${encodeURIComponent(board)}&dir=${encodeURIComponent(workdir)}`)
+          .then(setDetect).catch(() => setDetect(null));
+        // re-scan after a QEMU/container build finishes (workdir contents changed)
+      }, [board, workdir, data && data.active && data.active.state, cb && cb.state]);
       useEffect(() => {
         if (mode !== "container") return;
         const load = () => api("/api/setup/container-build").then(setCb).catch(() => {});
@@ -796,6 +802,7 @@
           if (cbMakeJobs.trim() !== "") adv.make_jobs = Number(cbMakeJobs);
           if (cbMemGb.trim() !== "") adv.mem_gb = Number(cbMemGb);
           if (cbImageTarget) adv.image_target = cbImageTarget;
+          if (workdir) adv.workdir = workdir;
           await api("/api/setup/container-build", { method: "POST", headers: { "Content-Type": "application/json" },
             body: JSON.stringify({ board, mock: cbMock, ...(fetchOnly === true ? { fetch_only: true } : {}), ...adv }) });
           setCbTerm(true);
@@ -803,21 +810,58 @@
       };
       const stopContainer = async () => { try { await api("/api/setup/container-build/stop", { method: "POST" }); } catch (e) {} };
 
-      const build = async () => {
+      // Compile the board's forked QEMU. `m` selects what build-me.sh ALSO does:
+      // "bsp" = QEMU only (extract+install the binary into the workdir), "demo" =
+      // QEMU + fetch the OSS bundle into the workdir. (Defaults to the BSP method.)
+      const build = async (m) => {
+        if (typeof m !== "string") m = mode;
         setErr("");
         try {
           await api("/api/setup/build", { method: "POST", headers: { "Content-Type": "application/json" },
-            body: JSON.stringify({ board, mode, ...(mode === "bsp" && bsp ? { bsp_path: bsp } : {}) }) });
+            body: JSON.stringify({ board, mode: m, ...(workdir ? { workdir } : {}) }) });
           refresh();
         } catch (e) { setErr(e.detail || `build failed to start (${e.status || e})`); }
       };
       const cancel = async () => { try { await api("/api/setup/cancel", { method: "POST" }); refresh(); } catch (e) {} };
+
+      // "Build it" orchestration (client-side, per the redesign): do whatever's
+      // missing, in order. OSS = one call (QEMU + bundle). Build-from-scratch =
+      // QEMU first if absent, then the container BSP build (auto-queued via the ref
+      // + the watcher below, so the user isn't bounced when QEMU isn't built yet).
+      const pendingBsp = useRef(false);
+      const buildIt = async () => {
+        setErr("");
+        const qok_ = !!(detect && detect.qemu_built);
+        const bspOk_ = !!(detect && detect.bsp && detect.bsp.ok);
+        if (mode === "demo") { await build("demo"); return; }      // OSS: QEMU + bundle
+        if (!qok_) { pendingBsp.current = !bspOk_; await build("bsp"); return; }  // QEMU first
+        if (!bspOk_) { await startContainer(); }                    // QEMU ready -> BSP
+      };
+      // When a queued QEMU build finishes, auto-start the container BSP build.
+      useEffect(() => {
+        const qbuilt = !!(detect && detect.qemu_built);
+        const bspOk_ = !!(detect && detect.bsp && detect.bsp.ok);
+        const buildRunning = !!(data && data.active && data.active.state === "running");
+        if (pendingBsp.current && qbuilt && !buildRunning) {
+          pendingBsp.current = false;
+          if (mode === "container" && !bspOk_) startContainer();
+        }
+      }, [detect, data && data.active && data.active.state]);
 
       const active = data && data.active;
       const running = active && active.state === "running";
       const boards = (data && data.boards) || [];
       const sel = boards.find(b => b.id === board);
       const stCls = (s) => s === "done" ? "text-emerald-400" : s === "failed" ? "text-rose-400" : "text-amber-400";
+
+      // "Build it" redesign — the two axes, from detect (fall back to legacy signals).
+      const qok = detect ? detect.qemu_built : !!(sel && sel.installed);
+      const bspDet = detect && detect.bsp;                 // validate_manifest result on the workdir
+      const bspOk = !!(bspDet && bspDet.ok);
+      const cbRunning = !!(cb && cb.state === "running");
+      const bothOk = qok && bspOk;
+      const ossAvail = !!(sel && sel.oss_demo);            // OSS bundle published for this board?
+      const busy = running || cbRunning;                   // a QEMU or container build is live
 
       return html`
         <div class="fixed inset-0 z-50 flex items-center justify-center bg-black/60 p-4" onClick=${onClose}>
@@ -845,34 +889,50 @@
                   </div>`}
                 </div>
                 <div>
-                  <label class="block text-[11px] uppercase tracking-wide text-slate-500 mb-1">Artifacts</label>
-                  <select class="w-full bg-slate-800 border border-slate-700 rounded px-2 py-1 text-sm"
-                          value=${mode} onChange=${e => setMode(e.target.value)} disabled=${running}>
-                    <option value="demo">1 · OSS demo — run now${sel && !sel.oss_demo ? " (91/93 only)" : ""}</option>
-                    <option value="bsp">2 · I'll load my own BSP</option>
-                    <option value="container">3 · Container build (Yocto, all-in-one)</option>
-                  </select>
-                  ${mode === "bsp" && html`<input placeholder="/path/to/my/bsp" value=${bsp} onChange=${e => setBsp(e.target.value)}
-                     class="mt-1 w-full bg-slate-800 border border-slate-700 rounded px-2 py-1 text-xs font-mono" disabled=${running} />`}
-                  ${mode === "demo" && sel && !sel.oss_demo && html`<div class="text-[11px] text-amber-500 mt-1">No OSS demo bundle for ${sel.id} yet (pending the emulator session's boot recipe; i.MX95 needs the M33 SM). Use “I have my own NXP BSP”.</div>`}
-                  ${mode === "demo" && sel && sel.oss_demo && html`<div class="text-[11px] text-emerald-400 mt-1">An all-OSS bootable bundle is available — no NXP artifacts needed.</div>`}
+                  <label class="block text-[11px] uppercase tracking-wide text-slate-500 mb-1">Working directory <span class="text-slate-600 normal-case">— QEMU + BSP live here</span></label>
+                  <input value=${workdir} onChange=${e => setWorkdir(e.target.value)} disabled=${running}
+                    class="w-full bg-slate-800 border border-slate-700 rounded px-2 py-1 text-xs font-mono" placeholder="~/holobench/boards/<board>" />
+                  <div class="text-[11px] text-slate-600 mt-1">Already have a BSP? Point this at its folder.</div>
                 </div>
               </div>
-              ${manifest && manifest.required && html`
-                <div class="rounded border border-slate-800 bg-slate-950/40 p-2">
-                  <div class="text-[11px] text-slate-500 mb-1">
-                    Required artifacts (you supply these — never from Holobench)${manifest.dir ? html` in <span class="font-mono">${manifest.dir}/</span>` : ""}:
-                  </div>
-                  <div class="flex flex-wrap gap-x-3 gap-y-0.5 text-[11px] font-mono">
-                    ${manifest.required.map(n => {
-                      const known = manifest.present !== undefined;
-                      const ok = known && manifest.present.includes(n);
-                      return html`<span key=${n} class=${!known ? "text-slate-400" : ok ? "text-emerald-400" : "text-rose-400"}>${!known ? "•" : ok ? "✓" : "✗"} ${n}</span>`;
-                    })}
-                  </div>
-                  ${manifest.missing && manifest.missing.length > 0 && html`<div class="text-[11px] text-rose-400 mt-1">missing ${manifest.missing.length} file(s) — needed to boot this board</div>`}
-                  ${manifest.ok && html`<div class="text-[11px] text-emerald-400 mt-1">✓ all artifacts present — ready to run</div>`}
-                </div>`}
+              ${detect && html`<div class="text-[11px] text-slate-500 -mt-2">
+                Looked in <span class="font-mono">${detect.workdir}</span>:
+                <span class=${detect.qemu_built ? "text-emerald-400" : "text-slate-500"}>${detect.qemu_built ? "✓" : "✗"} QEMU</span>
+                · <span class=${detect.bsp.ok ? "text-emerald-400" : "text-slate-500"}>${detect.bsp.ok ? "✓" : "✗"} BSP</span>
+                <span class="text-slate-600">${detect.default_outcome === "everything" ? " → I'd build everything" : " → BSP present; I'd build QEMU only"}</span>
+              </div>`}
+              <div class="rounded border border-slate-800 bg-slate-950/40 divide-y divide-slate-800">
+                <div class="flex items-center gap-3 p-2 flex-wrap">
+                  <span class="w-12 text-[11px] uppercase tracking-wide text-slate-500">QEMU</span>
+                  ${qok
+                    ? html`<span class="text-emerald-400 text-sm">✓ built</span>`
+                    : html`<span class="text-rose-400 text-sm">✗ not built</span>
+                        <button onClick=${() => build("bsp")} disabled=${busy || !board}
+                          class="px-2.5 py-1 rounded bg-slate-700 hover:bg-slate-600 disabled:opacity-50 text-xs"
+                          title="compile this board's forked QEMU from source into the working dir (one-time, ~20-40 min)">
+                          ${running ? "Building…" : "Build QEMU"}</button>`}
+                  ${sel && html`<span class="flex-1 text-right text-[11px] text-slate-600 truncate">${sel.source === "stock" ? "stock (upstreamed — no build)" : html`<span class="font-mono">${(sel.qemu_repo||"").replace("https://github.com/","")} @ ${(sel.qemu_ref||"").slice(0,10)}</span>`}</span>`}
+                </div>
+                <div class="flex items-center gap-3 p-2 flex-wrap">
+                  <span class="w-12 text-[11px] uppercase tracking-wide text-slate-500">BSP</span>
+                  ${bspOk
+                    ? html`<span class="text-emerald-400 text-sm">✓ present</span>`
+                    : html`<span class="text-rose-400 text-sm">✗ none</span>
+                        <label class="flex items-center gap-1 text-[11px] text-slate-400">get it by
+                          <select value=${mode} onChange=${e => setMode(e.target.value)} disabled=${busy}
+                            class="bg-slate-800 border border-slate-700 rounded px-2 py-1 text-xs">
+                            <option value="container">building from scratch (Yocto)</option>
+                            <option value="demo">going fast — OSS bundle${ossAvail ? "" : " (91/93 only)"}</option>
+                          </select>
+                        </label>`}
+                  ${!bspOk && bspDet && bspDet.missing && bspDet.missing.length > 0 && html`<span class="flex-1 text-right text-[11px] text-slate-600 truncate">missing ${bspDet.missing.length}: ${bspDet.missing.slice(0,3).join(", ")}${bspDet.missing.length>3?"…":""}</span>`}
+                </div>
+              </div>
+              ${mode === "demo" && html`<div class="text-[11px] ${ossAvail ? "text-emerald-400" : "text-amber-500"}">
+                ${ossAvail
+                  ? html`✓ An all-OSS bootable bundle is available for ${sel && sel.id} — no NXP artifacts needed. “Build it” fetches it into the working dir.`
+                  : html`⚠ No OSS bundle for ${sel && sel.id} yet (i.MX95 needs the M33 SM; 91/93 pending their boot recipe). Use “build from scratch”, or point the working dir at your own BSP.`}
+              </div>`}
               ${mode === "container" && html`
                 <div class="rounded border border-slate-800 bg-slate-950/40 p-3 space-y-2">
                   <div class="text-[11px] text-slate-500">
@@ -979,47 +1039,20 @@
                     </div>`}
                   `; })()}
                 </div>`}
-              ${(() => {
-                const qok = !!(sel && sel.installed);
-                const aok = !!(manifest && manifest.ok);
-                const cbRunning = !!(cb && cb.state === "running");
-                // Don't invite a boot while a container build is actively (re)writing
-                // these same artifacts — even if older copies are already on disk.
-                const ready = qok && aok && !cbRunning;
-                return html`
-                <div class="border-t border-slate-800 pt-3 space-y-2">
-                  <div class="text-[11px] uppercase tracking-wide text-slate-500">Readiness</div>
-                  <div class="flex items-center gap-3 text-sm">
-                    <span class="w-20 text-[11px] uppercase tracking-wide text-slate-500">QEMU</span>
-                    ${qok
-                      ? html`<span class="text-emerald-400">✓ built</span>`
-                      : html`<span class="text-rose-400">✗ need build</span>
-                          <button onClick=${build} disabled=${running || !board}
-                            class="px-3 py-1 rounded bg-emerald-600 hover:bg-emerald-500 disabled:opacity-50 text-xs font-medium"
-                            title="compile this board's forked QEMU from source (one-time, ~20-40 min)">
-                            ${running ? "Building…" : "Build QEMU (from source)"}</button>`}
-                    ${running && html`<button onClick=${cancel} class="px-2 py-1 rounded bg-rose-700 hover:bg-rose-600 text-xs">Cancel</button>`}
-                    ${active && html`<span class="text-xs ${stCls(active.state)}">${active.board}: ${active.state}${active.returncode != null && active.state !== "running" ? ` (rc ${active.returncode})` : ""}</span>`}
-                  </div>
-                  <div class="flex items-center gap-3 text-sm">
-                    <span class="w-20 text-[11px] uppercase tracking-wide text-slate-500">Artifacts</span>
-                    ${!manifest ? html`<span class="text-slate-500 text-xs">checking…</span>`
-                      : aok
-                        ? html`<span class="text-emerald-400">✓ all present</span>`
-                        : html`<span class="text-rose-400">✗ need ${manifest.missing.length} file${manifest.missing.length === 1 ? "" : "s"}</span>
-                               <span class="text-[11px] text-slate-500 truncate">via the option above → ${manifest.dir}</span>`}
-                  </div>
-                  <div class="flex items-center gap-2 pt-1">
-                    ${onBoot && html`
-                      <button onClick=${() => onBoot(board)} disabled=${!ready}
-                        class="px-3 py-1.5 rounded bg-sky-600 hover:bg-sky-500 disabled:opacity-40 text-sm font-medium"
-                        title=${ready ? "boot this board now" : cbRunning ? "a container build is in progress — let it finish or stop it first" : "both QEMU and Artifacts must be ✓"}>▶ Boot it now</button>`}
-                    ${cbRunning
-                      ? html`<span class="text-[11px] text-amber-400">⏳ container build in progress — finish or stop it before booting</span>`
-                      : !ready && html`<span class="text-[11px] text-slate-500">both must be ✓ to boot</span>`}
-                  </div>
-                </div>`;
-              })()}
+              <div class="border-t border-slate-800 pt-3 flex items-center gap-3 flex-wrap">
+                ${onBoot && bothOk && !cbRunning
+                  ? html`<button onClick=${() => onBoot(board)}
+                      class="px-4 py-2 rounded bg-sky-600 hover:bg-sky-500 text-sm font-medium" title="both QEMU and the BSP are ready — boot this board">▶ Boot it now</button>`
+                  : html`<button onClick=${buildIt} disabled=${busy || !board || (mode === "demo" && !ossAvail)}
+                      class="px-4 py-2 rounded bg-emerald-600 hover:bg-emerald-500 disabled:opacity-50 text-sm font-medium"
+                      title="build whatever's missing — QEMU first if needed, then the BSP — then boot">
+                      ${busy ? "Building…" : "▶ Build it"}</button>`}
+                ${running && html`<button onClick=${cancel} class="px-2 py-1 rounded bg-rose-700 hover:bg-rose-600 text-xs">Cancel QEMU</button>`}
+                ${active && html`<span class="text-xs ${stCls(active.state)}">${active.board}: ${active.state}${active.returncode != null && active.state !== "running" ? ` (rc ${active.returncode})` : ""}</span>`}
+                ${pendingBsp.current && html`<span class="text-[11px] text-amber-400">↻ BSP build will start once QEMU finishes</span>`}
+                ${cbRunning && html`<span class="text-[11px] text-amber-400">⏳ BSP build in progress</span>`}
+                ${!bothOk && !busy && !pendingBsp.current && html`<span class="text-[11px] text-slate-500">needs ${[!qok && "QEMU", !bspOk && "BSP"].filter(Boolean).join(" + ")}</span>`}
+              </div>
               ${active && html`
                 <div>
                   <div class="text-[11px] uppercase tracking-wide text-slate-500 mb-1">Build log</div>

@@ -210,6 +210,7 @@ class SetupBuildRequest(BaseModel):
     board: str
     mode: str = "plan"            # "plan" | "bsp" | "demo"
     bsp_path: Optional[str] = None
+    workdir: Optional[str] = None  # "Build it" redesign: per-board working dir (QEMU lands here)
 
 
 class ContainerBuildRequest(BaseModel):
@@ -223,6 +224,7 @@ class ContainerBuildRequest(BaseModel):
     mem_gb: Optional[int] = Field(default=None, ge=0, le=100000)   # HB_BUILD_MEM (GB RAM)
     fetch_only: bool = False      # pre-cache: fetch all sources into the cache, no build (HB_FETCH_ONLY)
     image_target: Optional[str] = None   # which depth variant to build (HB_IMAGE_TARGET); None = board default
+    workdir: Optional[str] = None         # "Build it" redesign: stage the BSP into this per-board working dir
 
 
 class SnapshotRequest(BaseModel):
@@ -654,7 +656,8 @@ async def setup_build(req: SetupBuildRequest, request: Request) -> dict:
     distributable image). Admin-only — it runs server-side and uses Docker."""
     user = _require_admin(request)
     try:
-        view = await app_ref.state.setup.start(req.board, req.mode, req.bsp_path)
+        view = await app_ref.state.setup.start(req.board, req.mode, req.bsp_path,
+                                               workdir=req.workdir)
     except SetupError as exc:
         raise HTTPException(status_code=400, detail=str(exc))
     _audit("setup_build", user.username, board=req.board, mode=req.mode)
@@ -662,18 +665,32 @@ async def setup_build(req: SetupBuildRequest, request: Request) -> dict:
 
 
 @app.get("/api/setup/manifest")
-def setup_manifest(board: str, request: Request, bsp: Optional[str] = None) -> dict:
+def setup_manifest(board: str, request: Request, bsp: Optional[str] = None,
+                   direct: bool = False) -> dict:
     """The per-board artifact manifest (derived from the profile). If `bsp` (the
     operator's mount root) is given, validate it: which required files are present
-    vs missing. The wizard refuses to launch until ok=true."""
+    vs missing. The wizard refuses to launch until ok=true. `direct=true` treats
+    `bsp` as the per-board folder itself (the redesign's "Link an existing BSP")."""
     _require_admin(request)
     try:
         # Default to the server's real asset root so the wizard always shows the
         # exact target folder (+ present/missing), not just the required list.
         from ..profiles.loader import asset_root
-        return validate_manifest(board, bsp or str(asset_root()))
+        return validate_manifest(board, bsp or str(asset_root()), direct=direct)
     except ProfileError as exc:
         raise HTTPException(status_code=404, detail=str(exc))
+
+
+@app.get("/api/setup/detect")
+def setup_detect(board: str, request: Request, dir: Optional[str] = None) -> dict:
+    """"Build it" redesign: scan a per-board working dir and report what's already
+    there — qemu_built + bsp validation + the auto-selected default outcome — to
+    drive the wizard's two row badges and the default action."""
+    _require_admin(request)
+    try:
+        return app_ref.state.setup.detect(board, dir)
+    except (SetupError, ProfileError) as exc:
+        raise HTTPException(status_code=400, detail=str(exc))
 
 
 @app.get("/api/setup/nxp-manifest")
@@ -705,6 +722,7 @@ async def setup_container_build(req: ContainerBuildRequest, request: Request) ->
             req.board, mock=req.mock,
             cpus=req.cpus, make_jobs=req.make_jobs, mem_gb=req.mem_gb,
             fetch_only=req.fetch_only, image_target=req.image_target,
+            workdir=req.workdir,
         )
     except SetupError as exc:
         raise HTTPException(status_code=400, detail=str(exc))

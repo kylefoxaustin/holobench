@@ -1,8 +1,11 @@
 # Build wizard redesign — "Build it" (two axes, one button)
 
-Status: **approved design, not yet built** (2026-06-17). Build it once the live
-i.MX95 container build finishes — no rush; this is UI + a small backend change,
-it doesn't touch the running build's code path.
+Status: **BUILT** (2026-06-27). Implemented per this spec; the one deviation is
+"Link an existing BSP folder" — instead of a separate action, the **working
+directory itself is the link** (point it at your BSP folder → detect sees it →
+"build QEMU only"), which honors §2's mental model without a new endpoint.
+Verified in the running app: detect badges, link-as-workdir, OSS gating, Boot
+gating. Original approved design (2026-06-17) preserved below.
 
 ## 1. Why
 
