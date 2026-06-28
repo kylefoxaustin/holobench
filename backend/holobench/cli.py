@@ -122,6 +122,21 @@ async def _launch(args: argparse.Namespace) -> int:
 
         if args.hold:
             clog = session.console_log()
+            # Tap the console socket so --hold actually CAPTURES the boot. QEMU's
+            # serial chardev is a listening socket with no reader by default, so its
+            # output is dropped (the app's WS bridge is what normally taps it) — the
+            # CLI has to run its own SerialTap or the log stays empty.
+            tap = None
+            dp = profile.default_serial
+            if clog and dp:
+                from .bridges.console import SerialTap
+                sock = session.work_dir / f"{dp.chardev}.sock"
+                tap = SerialTap(sock, clog)
+                try:
+                    await tap.start(connect_timeout=10.0)
+                except Exception as exc:  # never fail the launch over the tap
+                    print(f"(console tap unavailable: {exc})", file=sys.stderr)
+                    tap = None
             if clog:
                 print(f"console:   {clog}")
             print(f"holding for {args.hold}s (Ctrl-C to stop early) ...")
@@ -129,6 +144,8 @@ async def _launch(args: argparse.Namespace) -> int:
                 await asyncio.sleep(args.hold)
             except asyncio.CancelledError:
                 pass
+            if tap is not None:
+                await tap.stop()
             if clog and clog.exists() and not args.quiet_console:
                 tail = clog.read_text(errors="replace").splitlines()[-args.console_lines:]
                 print(f"--- console tail ({len(tail)} lines) ---")
