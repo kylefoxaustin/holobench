@@ -83,21 +83,23 @@ allocates and hands to both nodes — analogous to one mcast group per eth segme
   (short path, under the lab's runtime dir — minds the ~108-char `sun_path` limit
   the session code already guards). Single host today (both QEMUs on one machine);
   TCP loopback is the trivial swap if nodes ever span hosts.
-- **Roles (who binds vs connects):** the **host node** (the `host:` board, e.g.
-  i.MX93) owns the chardev as the **listener** —
-  `-chardev socket,id=hb-usb-<link>,path=<sock>,server=on,wait=off` feeding its
-  **stock** `-device usb-redir,chardev=hb-usb-<link>` (i.MX side stays stock — no
-  model coupling, Prime Directive intact). The **device node** (the `device:`
-  board, e.g. MCXN947) **connects as client** —
-  `-chardev socket,id=hb-usb-<link>,path=<sock>` (server off) wired into its
-  device-mode usbredir exporter.
-- **Rationale for host=listener:** the host is the long-lived stock-Linux board; a
-  bare-metal/RTOS device end can restart and **reconnect** to a stable listener
-  (`reconnect=<s>` on the client chardev) — and it matches 93's proposal (93
-  listens, MCX dials in).
-- **Launch order:** coordinator brings the **host (listener) up first**
-  (`wait=off`, so it never blocks), then the **device (client)**. One device per
-  link to start (point-to-point); a `usb-hub` on the host fans out later.
+- **Roles (who binds vs connects) — follows the usbredir convention:** the
+  **device node** (the `device:` board, e.g. MCXN947) is the **exporter = listener**
+  (the `usbredirserver` role) — `-chardev
+  socket,id=hb-usb-<link>,path=<sock>,server=on,wait=off` into its device-mode
+  usbredir exporter. The **host node** (the `host:` board, e.g. i.MX93) is the
+  **importer = client** — its **stock** `-device usb-redir,chardev=hb-usb-<link>`
+  over `-chardev socket,id=hb-usb-<link>,path=<sock>,reconnect=2` (i.MX side stays
+  stock — no model coupling, Prime Directive intact).
+- **Why device=listener:** it's the standard usbredir role split (the exporter
+  listens; QEMU's importer `-device usb-redir` connects), and MCX's device end is
+  already built that way. `reconnect=<s>` on the host's client chardev makes order
+  and restarts forgiving on either end (the host retries until the device's socket
+  is up, and re-attaches if the device bounces).
+- **Launch order:** coordinator brings the **device (listener) up first**
+  (`wait=off`), then the **host (client)** — though `reconnect` means strict order
+  isn't required. One device per link to start (point-to-point); a `usb-hub` on the
+  host fans out later.
 - **Lab spec stays as-is:** `links: [{ type: usb, host: <node>, device: <node> }]`
   (already in `gateway-lab.yaml`). The coordinator allocates the socket + emits the
   two chardev strings; nothing new in the YAML.
