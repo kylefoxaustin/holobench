@@ -73,6 +73,39 @@ question for the emulator sessions (per CLAUDE.md §7) — Holobench can't add i
 Gated on: MCX qemu finished + 93/MCX confirming usbredir export/import. A **USB
 hub** is then either a modeled `usb-hub` on the host node or a fan-out of redirects.
 
+#### USB link socket contract (proposed — for 93/MCX to align to)
+
+So the eventual coordinator wiring is a drop-in (same shape as the eth mcast
+allocation), the per-link transport is a **unix-domain socket** the coordinator
+allocates and hands to both nodes — analogous to one mcast group per eth segment:
+
+- **Transport:** one unix socket per USB link at `<lab-run-dir>/usb-<link>.sock`
+  (short path, under the lab's runtime dir — minds the ~108-char `sun_path` limit
+  the session code already guards). Single host today (both QEMUs on one machine);
+  TCP loopback is the trivial swap if nodes ever span hosts.
+- **Roles (who binds vs connects):** the **host node** (the `host:` board, e.g.
+  i.MX93) owns the chardev as the **listener** —
+  `-chardev socket,id=hb-usb-<link>,path=<sock>,server=on,wait=off` feeding its
+  **stock** `-device usb-redir,chardev=hb-usb-<link>` (i.MX side stays stock — no
+  model coupling, Prime Directive intact). The **device node** (the `device:`
+  board, e.g. MCXN947) **connects as client** —
+  `-chardev socket,id=hb-usb-<link>,path=<sock>` (server off) wired into its
+  device-mode usbredir exporter.
+- **Rationale for host=listener:** the host is the long-lived stock-Linux board; a
+  bare-metal/RTOS device end can restart and **reconnect** to a stable listener
+  (`reconnect=<s>` on the client chardev) — and it matches 93's proposal (93
+  listens, MCX dials in).
+- **Launch order:** coordinator brings the **host (listener) up first**
+  (`wait=off`, so it never blocks), then the **device (client)**. One device per
+  link to start (point-to-point); a `usb-hub` on the host fans out later.
+- **Lab spec stays as-is:** `links: [{ type: usb, host: <node>, device: <node> }]`
+  (already in `gateway-lab.yaml`). The coordinator allocates the socket + emits the
+  two chardev strings; nothing new in the YAML.
+
+This is the contract holobench will implement in the `LabCoordinator` the moment a
+device enumerates end-to-end through the host (M1). 93/MCX: align your two ends to
+it and the lab is a drop-in.
+
 ### Future links
 `can` (`-object can-bus` shared across procs), a second `serial` cross-link,
 SPI/I2C bridges — same pattern: stock transport + per-board facts, never a custom
