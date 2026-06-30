@@ -48,6 +48,52 @@ Every emulator repo, under `docs/validation/`:
 | **C** | **Registration / stub** — present so the OS enumerates it and does not fault; minimal or no functional behaviour. |
 | **N/A** | **Not present on this SoC** — documented so the absence is never mistaken for a gap. |
 
+The tier is the **depth** axis. A second, orthogonal axis — **class** — is the
+**honesty** axis (the silent-fail-prevention discipline the audits converged on).
+Both are human judgment in `test-matrix.yaml`; with the CI-filled facts they form
+the canonical row.
+
+## Class — the honesty axis (collated from 91 / 93 / 95, 2026-06-29)
+
+Every modelled block is exactly one class. **The mission bar is zero `SILENT-WRONG`.**
+
+| Class | Meaning | Example |
+|---|---|---|
+| **COMPUTES** | Submits work, returns the correct result, checked vs a golden/oracle. Trust it. | eDMA, DPU 2D blit, JPEG(libjpeg), zlib/crypto |
+| **COMPUTES — operator-driven** | Content is **operator-injected** (analog/sensor inputs); correct by construction. Default = a documented deterministic pattern, **never a hidden constant.** | i.MX93 ADC (`qom-set adc-ch<N>`), ISI frames |
+| **FLAG-AT-OPERATOR** | Un-modellable compute (proprietary fw). Model acks completion for fidelity but exposes a **non-gating** honest "did-not-compute" status the operator enables + the guest reads. Output uncomputed — **flagged, never trusted-silently.** | Ethos-U65 / Neutron NPU honest-fault rail |
+| **HONEST-FAULT** | Can't do the work and **errors visibly** (probe reject, status bit, bus error) instead of garbage. | Mali GPU (kbase rejects probe), JPEG cfg-err |
+| **REGISTER-ONLY** | Present so the OS enumerates + doesn't fault; no functional behaviour (honest absence of compute). | VPU stub windows, registration-tier blocks |
+| **ABSENT** | Not on this SoC (the N/A rule below). | 91: no NPU/M33/2nd-A55; mcx: no Linux |
+| ❌ **SILENT-WRONG** | **FORBIDDEN** — silently emits wrong/zero data. The bug class this standard exists to eliminate; a release carries **zero**. | (none may remain) |
+
+All classes except `SILENT-WRONG` are *honest*; only `SILENT-WRONG` is a defect.
+Tier (depth) and class (honesty) are inter-derivable but not identical — a block
+can be `COMPUTES` at tier A, `COMPUTES — operator-driven` at tier A, etc.
+
+## The canonical column set (collated)
+
+One row per block — reconciling **91's** split, **93's** tier, **95's** class:
+
+| Column | Source | Meaning |
+|---|---|---|
+| **Block** | yaml | the IP block |
+| **Present** | yaml *(fact)* | on this SoC? `yes` / `N/A` |
+| **Driver-binds** | yaml *(fact)* | stock OS driver probes + operates it? `yes`/`no`/`N/A` |
+| **Tier** | yaml *(human)* | depth A/B/C/N-A — optional view, derivable from present+driver-binds+class |
+| **Class** | yaml *(human)* | the honesty class above — **CI never infers this** |
+| **Tested-by** | yaml *(fact)* | the harness backing the row |
+| **Result** | **CI** | pass/fail from the actual run, or `attested` for non-meson harnesses |
+| **Evidence / caveats** | yaml *(human)* | specifics + any carried caveat |
+
+**Current shapes all map (all valid, all convertible):**
+- **91** — fuses present+driver-binds+depth into one Tier → split into the three
+  columns; its class enum already matches.
+- **93** — `Block | Tier | Status | Evidence | Notes` → add `Present`,
+  `Driver-binds`, `Class` (its `fidelity-audit.md` already classes each block).
+- **95** — `Block | Class | Evidence` → add `Present`, `Driver-binds`, `Tested-by`,
+  `Result`; its class enum is the reference for the table above.
+
 ### The N/A rule (a silent-fail guard itself)
 
 An IP block that does not exist on a chip is **`N/A — ABSENT`**, *never* a negative
@@ -60,11 +106,11 @@ gap that isn't real.
 The matrix is **CI-generated** (no hand-sorting). But:
 
 - **Pass/fail + evidence** come from the **actual test run** (the harness log).
-- **Fidelity tier and caveats are HUMAN judgment** — CI cannot infer tier A vs B
-  from a green test. CI **reads tier + caveats from `test-matrix.yaml`** and
-  *assembles* the matrix; it must **never invent a tier**. Mis-tiering (claiming a
-  data-path "A" for a block that only has driver bring-up "B") would itself be a
-  silent fail.
+- **Tier, CLASS, and caveats are HUMAN judgment** — CI cannot infer tier A-vs-B, or
+  class COMPUTES-vs-SILENT-WRONG, from a green test. CI **reads tier + class +
+  caveats from `test-matrix.yaml`** and *assembles* the matrix; it **never invents a
+  tier or class**. Mis-classing a `SILENT-WRONG` block as `COMPUTES` would itself be
+  the exact silent fail this standard exists to catch.
 - Rows with backing tests get their Status **stamped** from the log; the generator
   flags any test that has gone MISSING (a renamed/removed test = drift). Non-meson
   harnesses (soak / media / torture / functional-boot / usbredir) are **attested**,
@@ -74,12 +120,15 @@ The matrix is **CI-generated** (no hand-sorting). But:
 
 1. **Header**: a "GENERATED — do not hand-edit" banner; machine + branch; the
    mission-bar line; a pointer to `fidelity-audit.md`.
-2. **Fidelity tiers** table (above).
+2. **Fidelity tiers** + **class** tables (above).
 3. **Test harnesses** table: `Harness | Location | Scope | Result` — one row per
    harness (unit / qtest / functional-boot / media-conformance / torture / soak /
    inter-QEMU links).
-4. **Per-IP-block matrix**, grouped by subsystem: `Block | Tier | Status | Evidence
-   | Notes`. Status is CI-stamped or attested; absent blocks are `N/A — ABSENT`.
+4. **Per-IP-block matrix**, grouped by subsystem, the **canonical column set**:
+   `Block | Present | Driver-binds | Tier | Class | Tested-by | Result |
+   Evidence/caveats`. Result is CI-stamped or attested; absent blocks are
+   `Present = N/A` (the N/A rule). A repo may keep its single Tier OR the
+   present+driver-binds split — both map; class is required either way.
 
 ## Not an upstream-submission artifact
 
