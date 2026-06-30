@@ -9,8 +9,12 @@ switch) and points each member board's modeled NIC at it via a stock
 every member a unique MAC. No machine-model changes, no custom devices — exactly
 the mechanism proven in the v3.0-α PoC (two i.MX91s pinging over one mcast group).
 
-USB links are parsed and modeled but refused at launch until the board models
-confirm usbredir host/device support (docs/TOPOLOGIES.md §USB escalation).
+USB links are wired the same way: each profile's `usb:` block carries that
+board's usbredir role (host = stock `-device usb-redir` importer; device =
+usbredir exporter/listener), the coordinator owns one unix socket per link, and
+the host-side backend reconnects so launch order is forgiving. It stays gated
+behind HOLOBENCH_USB_LABS=1 until end-to-end enumeration is confirmed green
+(docs/TOPOLOGIES.md §USB).
 """
 from __future__ import annotations
 
@@ -20,8 +24,28 @@ from pathlib import Path
 from typing import Optional
 
 from ..profiles.loader import default_asset_dir, load_profile
-from ..session.manager import SessionError, SessionManager
+from ..session.manager import DEFAULT_BASE_DIR, SessionError, SessionManager
 from .models import Lab, LabError
+
+# USB inter-board links are PRESTAGED: the per-board usbredir roles live in each
+# profile's `usb:` block (host = the stock `-device usb-redir` importer/client;
+# device = the usbredir exporter/listener), the coordinator owns one short unix
+# socket per link, and the args are the real transport confirmed on the bus by
+# the 93<->MCX M4 runs — not guesses. It stays gated behind HOLOBENCH_USB_LABS
+# until end-to-end enumeration (SET_CONFIG) is green. See docs/TOPOLOGIES.md §USB.
+_USB_LABS_ENABLED = os.environ.get("HOLOBENCH_USB_LABS", "").lower() in ("1", "true", "yes")
+
+
+def _usb_args(role, cid: str, sock: str) -> list[str]:
+    """Raw QEMU args for one usbredir role: a `-chardev`, plus the importer's
+    `-device usb-redir` (host end) or the exporter's `-global` (device end),
+    with `{id}`/`{path}` filled from the allocated chardev id + link socket."""
+    args = ["-chardev", role.chardev.format(id=cid, path=sock)]
+    if role.device:
+        args += ["-device", role.device.format(id=cid, path=sock)]
+    if role.glob:
+        args += ["-global", role.glob.format(id=cid, path=sock)]
+    return args
 
 # Multicast fabric: one group address per live segment (isolated L2 domains), a
 # shared port. 230.0.0.0/24 is an administratively-scoped, unrouted group block —
@@ -58,6 +82,7 @@ class RunningLab:
         self.node_errors: dict[str, str] = {}     # node name -> launch error
         # node name -> list of "segment@group:port" it joined (for status/UI edges)
         self.node_links: dict[str, list[str]] = {}
+        self.usb_socks: list[str] = []            # per-usb-link sockets (for teardown)
 
     @property
     def id(self) -> str:
@@ -122,11 +147,13 @@ class LabCoordinator:
                      minutes: Optional[int] = None) -> RunningLab:
         if lab.id in self._labs:
             raise LabError(f"lab '{lab.id}' is already running")
-        if lab.has_usb_links():
+        if lab.has_usb_links() and not _USB_LABS_ENABLED:
             raise LabError(
-                "this lab declares USB links, which aren't launchable yet — usbredir "
-                "host/device support must be confirmed by the board models first "
-                "(see docs/TOPOLOGIES.md §USB). Ethernet links are fully supported."
+                "this lab declares USB links. The usbredir wiring is PRESTAGED (per-board "
+                "roles read from each profile's usb: block, one unix socket per link, args "
+                "built from the confirmed 93<->MCX transport) but stays gated until "
+                "end-to-end enumeration is green — set HOLOBENCH_USB_LABS=1 to launch it. "
+                "Ethernet links are fully supported. See docs/TOPOLOGIES.md §USB."
             )
 
         self._lab_counter += 1
@@ -170,6 +197,39 @@ class LabCoordinator:
                     running.node_links.setdefault(member, []).append(
                         f"{link.segment}@{group}:{_MCAST_PORT}")
 
+            # 2b) Build each node's usb_override (one usbredir link at a time).
+            # The DEVICE end is the exporter/listener, the HOST end is the stock
+            # `-device usb-redir` client (reconnect makes launch order forgiving).
+            # One short unix socket per link, owned by the coordinator under the
+            # session base dir so both QEMU procs can reach it.
+            sock_dir = self.manager.base_dir or DEFAULT_BASE_DIR
+            node_usb: dict[str, list[str]] = {n.name: [] for n in lab.nodes}
+            usb_i = 0
+            for link in lab.links:
+                if link.type != "usb":
+                    continue
+                hp = node_profiles.get(link.host)
+                dp = node_profiles.get(link.device)
+                hrole = getattr(getattr(hp, "usb", None), "host", None) if hp else None
+                drole = getattr(getattr(dp, "usb", None), "device", None) if dp else None
+                if not hrole or not drole:
+                    missing = link.host if not hrole else link.device
+                    need = "usb.host" if not hrole else "usb.device"
+                    running.node_errors[missing] = (
+                        f"usb link {link.host}->{link.device}: '{missing}' profile lacks "
+                        f"a {need} role (confirm with the emulator session, §7)")
+                    continue
+                sock = str(sock_dir / f"usb-{lab.id}-{usb_i}.sock")
+                cid = f"hbusb{usb_i}"
+                node_usb[link.device] += _usb_args(drole, cid, sock)   # exporter listens
+                node_usb[link.host] += _usb_args(hrole, cid, sock)     # importer connects
+                running.usb_socks.append(sock)
+                running.node_links.setdefault(link.host, []).append(
+                    f"usb->{link.device}@{sock}")
+                running.node_links.setdefault(link.device, []).append(
+                    f"usb<-{link.host}@{sock}")
+                usb_i += 1
+
             # 3) Launch each node as a Session with its fabric NICs.
             any_ok = False
             for node in lab.nodes:
@@ -181,7 +241,7 @@ class LabCoordinator:
                     nics = node_nics[node.name] or None
                     session = await self.manager.launch(
                         profile, asset_dir=asset_dir, owner=owner, minutes=minutes,
-                        nic_override=nics,
+                        nic_override=nics, usb_override=(node_usb[node.name] or None),
                     )
                     session.lab_id = lab.id
                     session.lab_node = node.name
@@ -216,6 +276,11 @@ class LabCoordinator:
                 pass
         for group in seg_group.values():
             self._free_group(group)
+        for sock in getattr(running, "usb_socks", []):
+            try:
+                Path(sock).unlink()
+            except OSError:
+                pass
 
     async def stop(self, lab_id: str) -> None:
         running = self.get(lab_id)

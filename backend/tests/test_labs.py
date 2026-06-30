@@ -59,9 +59,10 @@ def test_mac_is_unique_and_qemu_oui():
 # --- coordinator (fake manager) -------------------------------------------
 
 class _FakeSession:
-    def __init__(self, sid, nic_override):
+    def __init__(self, sid, nic_override, usb_override):
         self.id = sid
         self.nic_override = nic_override
+        self.usb_override = usb_override
         self.lab_id = None
         self.lab_node = None
 
@@ -73,13 +74,14 @@ class _FakeManager:
         self.destroyed = []
         self._n = 0
         self._fail = set(fail)  # profile ids that should raise
+        self.base_dir = None    # coordinator reads this for usb-socket placement
 
     async def launch(self, profile, *, asset_dir=None, owner=None, minutes=None,
-                     nic_override=None):
+                     nic_override=None, usb_override=None):
         if profile.id in self._fail:
             raise RuntimeError(f"boom:{profile.id}")
         self._n += 1
-        s = _FakeSession(f"{profile.id}-{self._n}", nic_override)
+        s = _FakeSession(f"{profile.id}-{self._n}", nic_override, usb_override)
         self.launches.append(s)
         return s
 
@@ -151,6 +153,56 @@ def test_usb_lab_is_gated():
     with pytest.raises(LabError, match="USB"):
         asyncio.run(coord.launch(load_lab("gateway-lab")))
     assert mgr.launches == []          # nothing launched
+
+
+def test_usb_lab_wires_host_and_device_when_ungated(monkeypatch):
+    # With the env opt-in on, the gateway-lab launches and each end gets its
+    # usbredir role from the profile: the i.MX93 host gets `-device usb-redir`
+    # (client/importer), the MCXN947 device gets the exporter `-global`, both
+    # bound to the SAME per-link unix socket the coordinator owns.
+    import holobench.labs.coordinator as C
+    monkeypatch.setattr(C, "_USB_LABS_ENABLED", True)
+    mgr = _FakeManager()
+    coord = C.LabCoordinator(mgr)
+    running = asyncio.run(coord.launch(load_lab("gateway-lab")))
+    assert running.state == LabState.RUNNING
+    by_node = {s.lab_node: s for s in mgr.launches}
+
+    gw = by_node["gw"].usb_override        # i.MX93 host
+    sensor = by_node["sensor"].usb_override  # MCXN947 device
+    # Host = stock usb-redir client over a reconnecting socket chardev.
+    assert "-chardev" in gw and "-device" in gw
+    assert any("usb-redir" in a for a in gw)
+    assert any("reconnect-ms=2000" in a for a in gw)
+    # Device = the exporter: a listening socket chardev + a `-global`, no -device.
+    assert "-chardev" in sensor and "-global" in sensor and "-device" not in sensor
+    assert any("server=on" in a for a in sensor)
+    # Both ends point at the SAME socket path (the link's shared unix socket).
+    host_sock = gw[gw.index("-chardev") + 1].split("path=")[1].split(",")[0]
+    dev_sock = sensor[sensor.index("-chardev") + 1].split("path=")[1].split(",")[0]
+    assert host_sock == dev_sock
+    assert running.usb_socks == [host_sock]
+    # Same chardev id on both ends (so the wiring is coherent).
+    assert "id=hbusb0" in gw[gw.index("-chardev") + 1]
+    assert "id=hbusb0" in sensor[sensor.index("-chardev") + 1]
+
+
+def test_usb_lab_errors_when_a_profile_lacks_a_role(monkeypatch):
+    # Ungated, but the device node's profile has no usb.device role -> that node
+    # is flagged in node_errors (honest fault), not silently mis-wired.
+    import holobench.labs.coordinator as C
+    monkeypatch.setattr(C, "_USB_LABS_ENABLED", True)
+    mgr = _FakeManager()
+    coord = C.LabCoordinator(mgr)
+    lab = Lab.model_validate({
+        "id": "usb-noroles", "display_name": "usb no roles",
+        "nodes": [{"name": "h", "profile": "imx93-evk-sd"},
+                  {"name": "d", "profile": "imx91-evk"}],  # imx91 has no usb.device
+        "links": [{"type": "usb", "host": "h", "device": "d"}],
+    })
+    running = asyncio.run(coord.launch(lab))
+    assert "d" in running.node_errors
+    assert "usb.device" in running.node_errors["d"]
 
 
 def test_partial_lab_when_one_node_fails():

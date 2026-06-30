@@ -52,6 +52,11 @@ class SessionRuntime:
     # backend specs (e.g. "socket,mcast=230.0.0.10:1234"), so a board joins a
     # multi-board L2 segment instead of slirp. None = use the profile's user NICs.
     nic_override: Optional[list[str]] = None
+    # v3.0 fabric (USB): raw extra QEMU args wiring this board into a usbredir
+    # inter-board link — a stock `-chardev socket` + the importer `-device usb-redir`
+    # (host role) or the exporter `-global <usbdev>.chardev=` (device role). Built by
+    # the lab coordinator from the profile's `usb:` block. None = no inter-board USB.
+    usb_override: Optional[list[str]] = None
     # Per-board QEMU binary built on this host by the setup wizard ("build me a
     # board"). When set it wins over $HOLOBENCH_QEMU / the profile path, so the
     # running app boots a board with the QEMU it just built — closing the
@@ -221,6 +226,12 @@ def build_command(profile: Profile, rt: SessionRuntime) -> list[str]:
             if i == 0 and tftp.enabled and rt.share_dir is not None:
                 opts += f",tftp={rt.share_dir}"
             argv += ["-nic", opts]
+
+    # v3.0 fabric (USB): stock usbredir inter-board link args (a `-chardev socket`
+    # + `-device usb-redir` on the host, or `-global <usbdev>.chardev=` on the
+    # device). Appended verbatim; the coordinator built them from the usb: profile.
+    if rt.usb_override:
+        argv += rt.usb_override
 
     # Image-swap: per-session qcow2 overlay over the golden disk. Guest writes hit
     # the overlay; the golden is never touched; "reinstall" = fresh overlay.

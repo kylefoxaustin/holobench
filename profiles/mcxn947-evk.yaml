@@ -75,6 +75,16 @@ leds:
 
 net: { user_nics: 0, fabric_nic_model: mcxn-enet }   # ENET-QoS for v3.0 eth labs
 
+# v3.0 USB fabric: MCXN947 is the USB *device* (exporter). Its modeled USB-device
+# controller binds vendor 1FC9:0094 and exports it over a usbredir unix socket
+# (the exporter/listener end, per the §USB contract). The i.MX93 host connects as
+# the usb-redir client. Confirmed from MCX's M4 bring-up on the bus. {id}/{path}
+# are filled by the LabCoordinator per usb link. Gated behind HOLOBENCH_USB_LABS.
+usb:
+  device:
+    chardev: "socket,id={id},path={path},server=on,wait=off"
+    glob:    "mcxn-usbdev.chardev={id}"
+
 file_injection:
   nine_p: { enabled: false, mount_tag: holobench }
   tftp:   { enabled: false }

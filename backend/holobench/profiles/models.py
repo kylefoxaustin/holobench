@@ -144,6 +144,30 @@ class NetSpec(_Strict):
     fabric_nic_model: Optional[str] = None
 
 
+# --- USB inter-board link (v3.0 fabric) ------------------------------------
+
+class UsbRole(_Strict):
+    """How a board wires ONE usbredir role into a lab's USB link, as raw QEMU arg
+    templates (stock interfaces only — Prime Directive). `{id}` (chardev id) and
+    `{path}` (the shared unix socket) are filled by the lab coordinator per link.
+
+    - `host` role (importer): a stock `-device usb-redir` + a CLIENT `-chardev`.
+    - `device` role (exporter): the board's device-mode `-global ...chardev=` + a
+      SERVER `-chardev` (the usbredirserver/exporter listens, per the convention)."""
+    chardev: str                       # -chardev <this>   (e.g. "socket,id={id},path={path},server=off,reconnect-ms=2000")
+    device: Optional[str] = None       # -device  <this>   (host/importer, e.g. "usb-redir,chardev={id}")
+    glob: Optional[str] = None         # -global  <this>   (device/exporter, e.g. "mcxn-usbdev.chardev={id}")
+
+
+class UsbCapability(_Strict):
+    """A board's usbredir inter-board-link capability (docs/TOPOLOGIES.md §USB).
+    Declare `host` (it can import a redirected device), `device` (it can export its
+    device-mode endpoint), or both. Absent = this board can't be a USB-link endpoint.
+    Facts are confirmed by the emulator sessions (§7), never guessed here."""
+    host: Optional[UsbRole] = None
+    device: Optional[UsbRole] = None
+
+
 # --- File injection --------------------------------------------------------
 
 
@@ -276,6 +300,7 @@ class Profile(_Strict):
     serial: list[SerialPort] = Field(default_factory=list)
     display: DisplaySpec = Field(default_factory=DisplaySpec)
     net: NetSpec = Field(default_factory=NetSpec)
+    usb: Optional[UsbCapability] = None        # v3.0 fabric: usbredir inter-board link role(s)
     file_injection: FileInjection = Field(default_factory=FileInjection)
     camera: CameraSpec = Field(default_factory=CameraSpec)
     leds: list[LedSpec] = Field(default_factory=list)

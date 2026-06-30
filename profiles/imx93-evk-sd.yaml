@@ -57,6 +57,16 @@ display:
 
 net: { user_nics: 1, fabric_nic_model: imx.enet }   # FEC (not the eQOS stub) for v3.0 eth labs
 
+# v3.0 USB fabric: i.MX93 is the USB *host*. Stock `-device usb-redir` importer
+# over a unix-socket chardev that reconnects, so the device end (MCXN947) can be
+# launched first/after without a race. Pure upstream interfaces (Prime Directive).
+# Confirmed transport from the 93<->MCX M4 bring-up on the bus. {id}/{path} are
+# filled by the LabCoordinator per usb link. Gated behind HOLOBENCH_USB_LABS.
+usb:
+  host:
+    chardev: "socket,id={id},path={path},server=off,reconnect-ms=2000"
+    device:  "usb-redir,chardev={id}"
+
 file_injection:
   nine_p: { enabled: true, mount_tag: holobench, device: virtio-9p-device }
   tftp:   { enabled: true }
