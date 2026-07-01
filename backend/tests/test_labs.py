@@ -174,17 +174,18 @@ def test_usb_lab_wires_host_and_device_when_ungated(monkeypatch):
     assert "-chardev" in gw and "-device" in gw
     assert any("usb-redir" in a for a in gw)
     assert any("reconnect-ms=2000" in a for a in gw)
-    # Device = the exporter: a listening socket chardev + a `-global`, no -device.
-    assert "-chardev" in sensor and "-global" in sensor and "-device" not in sensor
+    # Device = the exporter: JUST a listening socket chardev (the model auto-binds
+    # its HS usbredir core to the well-known id) — no -device, no -global.
+    assert "-chardev" in sensor and "-global" not in sensor and "-device" not in sensor
     assert any("server=on" in a for a in sensor)
     # Both ends point at the SAME socket path (the link's shared unix socket).
     host_sock = gw[gw.index("-chardev") + 1].split("path=")[1].split(",")[0]
     dev_sock = sensor[sensor.index("-chardev") + 1].split("path=")[1].split(",")[0]
     assert host_sock == dev_sock
     assert running.usb_socks == [host_sock]
-    # Same chardev id on both ends (so the wiring is coherent).
+    # Host id is coordinator-allocated; device id is the well-known HS-core binding.
     assert "id=hbusb0" in gw[gw.index("-chardev") + 1]
-    assert "id=hbusb0" in sensor[sensor.index("-chardev") + 1]
+    assert "id=mcxn-usbhs" in sensor[sensor.index("-chardev") + 1]
 
 
 def test_usb_lab_errors_when_a_profile_lacks_a_role(monkeypatch):
