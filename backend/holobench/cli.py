@@ -172,6 +172,137 @@ def cmd_launch(args: argparse.Namespace) -> int:
         return 130
 
 
+def cmd_console(args: argparse.Namespace) -> int:
+    """Launch a board with host-terminal access — each UART as a PTY (attach
+    PuTTY -serial / screen / minicom) plus an SSH port-forward, the way a
+    developer consoles into a real EVK. Reuses the normal board command line
+    (all standard QEMU interfaces); only swaps the serial backend to PTYs and
+    adds a stock SSH-forward NIC. Holds until Ctrl-C, then tears down."""
+    import re
+    import shutil
+    import subprocess
+    import time
+
+    try:
+        p = load_profile(args.id)
+    except ProfileError as exc:
+        _print_err(str(exc))
+        return 1
+
+    asset_dir = _resolve_assets(p.id, args.assets)
+    work = Path("/tmp/holobench") / f"{p.id}-console"
+    shutil.rmtree(work, ignore_errors=True)
+    work.mkdir(parents=True, exist_ok=True)
+
+    fi = p.file_injection
+    share_dir = None
+    if fi.nine_p.enabled or fi.tftp.enabled:
+        share_dir = work / "share"
+        share_dir.mkdir(exist_ok=True)
+
+    # COW overlay over the golden disk (the golden is never touched) for disk boards.
+    disk_overlay = None
+    art = p.boot.artifacts
+    if fi.image_swap.enabled and art.disk:
+        golden = Path(art.disk)
+        if not golden.is_absolute() and asset_dir is not None:
+            golden = asset_dir / art.disk
+        if not golden.exists():
+            _print_err(f"golden disk not found: {golden}")
+            return 1
+        disk_overlay = work / "console-overlay.qcow2"
+        try:
+            subprocess.run(
+                ["qemu-img", "create", "-f", "qcow2", "-b", str(golden),
+                 "-F", "raw", str(disk_overlay)],
+                check=True, capture_output=True, text=True,
+            )
+        except (OSError, subprocess.CalledProcessError) as exc:
+            _print_err(f"could not create disk overlay: {exc}")
+            return 1
+
+    ssh_port = None if args.no_ssh else args.ssh_port
+    rt = SessionRuntime(
+        work_dir=work,
+        qmp_socket=work / "qmp.sock",
+        serial_sockets={},
+        asset_dir=asset_dir,
+        share_dir=share_dir,
+        disk_overlay=disk_overlay,
+        external_console=True,
+        ssh_forward_port=ssh_port,
+    )
+    try:
+        argv = build_command(p, rt)
+    except Exception as exc:  # noqa: BLE001 - surface any command-build failure
+        _print_err(str(exc))
+        return 1
+
+    log_path = work / "qemu.log"
+    print(f"launching {p.display_name} for external console access ...", flush=True)
+    with open(log_path, "wb") as log:
+        proc = subprocess.Popen(argv, stdout=log, stderr=subprocess.STDOUT)
+
+    # Map each declared UART's chardev label -> the /dev/pts QEMU assigned it.
+    want = [port.chardev for port in p.serial]
+    pts: dict[str, str] = {}
+    rx = re.compile(r"char device redirected to (\S+) \(label (\S+)\)")
+    deadline = time.time() + 15
+    while time.time() < deadline and len(pts) < len(want):
+        if proc.poll() is not None:
+            _print_err(f"QEMU exited early (rc={proc.returncode}); see {log_path}")
+            return 1
+        try:
+            text = log_path.read_text(errors="ignore")
+        except OSError:
+            text = ""
+        for dev, label in rx.findall(text):
+            if label in want:
+                pts[label] = dev
+        if len(pts) < len(want):
+            time.sleep(0.3)
+
+    by_id = {port.chardev: port for port in p.serial}
+    print()
+    print(f"=== {p.display_name} — console access  (session dir: {work}) ===")
+    for label in want:
+        dev = pts.get(label, "<pty not reported — see qemu.log>")
+        port = by_id[label]
+        role = port.name + (f"  [{port.role}]" if port.role else "")
+        star = "  (default console)" if port.default else ""
+        print(f"  serial  {role}{star}")
+        print(f"          PuTTY : putty -serial {dev} -sercfg 115200,8,n,1,N")
+        print(f"          screen: screen {dev} 115200")
+        print(f"          log   : {work / (label + '.log')}  (full boot, even before you attach)")
+    if ssh_port:
+        print(f"  ssh     host port {ssh_port} -> guest :22")
+        print(f"          PuTTY : putty -ssh -P {ssh_port} root@127.0.0.1")
+        print(f"          ssh   : ssh -p {ssh_port} root@127.0.0.1")
+        print("          (one-time in guest if fresh image: passwd root; ssh-keygen -A;")
+        print("           systemctl start sshd.socket)")
+    print()
+    print("Ctrl-C to shut down and clean up." if args.seconds <= 0
+          else f"Auto-stops after {args.seconds:g}s (or Ctrl-C).")
+    sys.stdout.flush()  # the block must reach the user before we block on wait()
+
+    try:
+        proc.wait(timeout=args.seconds if args.seconds > 0 else None)
+    except subprocess.TimeoutExpired:
+        pass
+    except KeyboardInterrupt:
+        print("\nshutting down ...")
+    finally:
+        if proc.poll() is None:
+            proc.terminate()
+            try:
+                proc.wait(timeout=5)
+            except subprocess.TimeoutExpired:
+                proc.kill()
+        if disk_overlay is not None:
+            disk_overlay.unlink(missing_ok=True)
+    return 0
+
+
 # --- session-scoped verbs (act on a running session by id, no daemon) -------
 
 
@@ -364,6 +495,17 @@ def build_parser() -> argparse.ArgumentParser:
     p.add_argument("--quiet-console", action="store_true", help="do not print console tail")
     p.add_argument("--keep", action="store_true", help="do not quit/cleanup at the end")
     p.set_defaults(func=cmd_launch)
+
+    p = sub.add_parser("console",
+                       help="launch a board with host-terminal access (PuTTY/screen serial + SSH)")
+    p.add_argument("id")
+    p.add_argument("--assets", help="asset dir for boot artifacts")
+    p.add_argument("--ssh-port", type=int, default=2222,
+                   help="host port forwarded to guest :22 (default 2222)")
+    p.add_argument("--no-ssh", action="store_true", help="omit the SSH port-forward NIC")
+    p.add_argument("--seconds", type=float, default=0.0,
+                   help="auto-stop after N seconds (0 = hold until Ctrl-C)")
+    p.set_defaults(func=cmd_console)
 
     p = sub.add_parser("labs", help="list available multi-board labs (v3.0 topologies)")
     p.set_defaults(func=cmd_labs)

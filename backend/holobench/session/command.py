@@ -62,6 +62,15 @@ class SessionRuntime:
     # running app boots a board with the QEMU it just built — closing the
     # build->boot seam. None = normal resolution.
     qemu_binary: Optional[str] = None
+    # External-console mode: expose each declared UART as a labeled host PTY
+    # (`-chardev pty`) instead of the browser bridge's unix socket, so a plain
+    # terminal (PuTTY -serial, screen, minicom) attaches directly — the way a dev
+    # consoles into a real EVK. QEMU prints the assigned /dev/pts/N per label.
+    external_console: bool = False
+    # When set, add a stock user-net NIC with a host->guest :22 forward on this
+    # port (SSH access), on a virtio-net-device so it works on any board with a
+    # virtio-mmio bus regardless of whether the SoC's own ENET binds a netdev.
+    ssh_forward_port: Optional[int] = None
 
 
 class CommandError(Exception):
@@ -178,8 +187,22 @@ def build_command(profile: Profile, rt: SessionRuntime) -> list[str]:
         f"unix:{rt.qmp_socket},server=on,wait=off",
     ]
 
-    # Serial consoles: one unix-socket chardev per declared UART, in order.
+    # Serial consoles: one chardev per declared UART, in order. Normally a unix
+    # socket the browser console bridge connects to; in external-console mode a
+    # labeled PTY instead, so a plain terminal (PuTTY -serial, screen, minicom)
+    # attaches to the /dev/pts/N QEMU reports for that label.
     for port in profile.serial:
+        if rt.external_console:
+            # logfile= captures the full stream to disk even while no terminal is
+            # attached — QEMU's pty backend DROPS output when the slave has no
+            # reader, so without this the early boot is lost before the user runs
+            # PuTTY. PuTTY/screen still attach live to the /dev/pts for this label.
+            logf = rt.work_dir / f"{port.chardev}.log"
+            argv += [
+                "-chardev", f"pty,id={port.chardev},logfile={logf}",
+                "-serial", f"chardev:{port.chardev}",
+            ]
+            continue
         sock = rt.serial_sockets.get(port.chardev)
         if sock is None:
             raise CommandError(
@@ -226,6 +249,16 @@ def build_command(profile: Profile, rt: SessionRuntime) -> list[str]:
             if i == 0 and tftp.enabled and rt.share_dir is not None:
                 opts += f",tftp={rt.share_dir}"
             argv += ["-nic", opts]
+
+    # External-console SSH: a stock user-net NIC with a host->guest :22 forward on
+    # a virtio-net-device. Independent of the board's own modeled ENET (which may
+    # not bind a Linux netdev) — it rides the virtio-mmio bus every board here has,
+    # so `ssh -p <port> root@127.0.0.1` works. All upstream QEMU (Prime Directive).
+    if rt.ssh_forward_port:
+        argv += [
+            "-netdev", f"user,id=hbssh,hostfwd=tcp::{rt.ssh_forward_port}-:22",
+            "-device", "virtio-net-device,netdev=hbssh",
+        ]
 
     # v3.0 fabric (USB): stock usbredir inter-board link args (a `-chardev socket`
     # + `-device usb-redir` on the host, or `-global <usbdev>.chardev=` on the

@@ -179,7 +179,7 @@ def test_imx95_attach_lcd_swaps_dtb(tmp_path):
         rt = SessionRuntime(
             work_dir=tmp_path,
             qmp_socket=tmp_path / "qmp.sock",
-            serial_sockets={"console0": tmp_path / "console0.sock"},
+            serial_sockets={s.chardev: tmp_path / f"{s.chardev}.sock" for s in p.serial},
             asset_dir=Path("/assets"),
             lcd_attached=lcd,
         )
@@ -191,6 +191,51 @@ def test_imx95_attach_lcd_swaps_dtb(tmp_path):
     assert dtb_for(False).endswith(p.boot.artifacts.dtb)
     assert dtb_for(True).endswith(p.display.attach_dtb)
     assert dtb_for(True) != dtb_for(False)
+
+
+def test_external_console_uses_pty_serials(tmp_path):
+    # `holobench console` mode: each declared UART becomes a labeled PTY (so a
+    # plain terminal / PuTTY -serial attaches) instead of the browser bridge's
+    # unix socket — and no serial socket needs allocating.
+    p = load_profile("imx95-evk-sd")
+    rt = SessionRuntime(
+        work_dir=tmp_path,
+        qmp_socket=tmp_path / "qmp.sock",
+        serial_sockets={},                 # none needed in external-console mode
+        asset_dir=Path("/assets"),
+        disk_overlay=tmp_path / "o.qcow2",
+        external_console=True,
+    )
+    argv = build_command(p, rt)
+    joined = " ".join(argv)
+    # both LPUARTs are PTYs, in order (console0 = serial0 = A-core, smconsole = serial1 = SM),
+    # each with a logfile= so early boot is captured before a terminal attaches.
+    c0 = next(a for a in argv if a.startswith("pty,id=console0"))
+    c1 = next(a for a in argv if a.startswith("pty,id=smconsole"))
+    assert "logfile=" in c0 and "console0.log" in c0
+    assert "logfile=" in c1 and "smconsole.log" in c1
+    assert "chardev:console0" in argv and "chardev:smconsole" in argv
+    assert argv.index(c0) < argv.index(c1)
+    assert "socket,id=console0" not in joined  # not the browser-bridge socket path
+
+
+def test_ssh_forward_adds_stock_virtio_nic(tmp_path):
+    # ssh_forward_port adds a stock user-net NIC + virtio-net-device (board-agnostic
+    # host->guest :22 forward), on top of the profile's normal NICs.
+    p = load_profile("imx95-evk-sd")
+    rt = SessionRuntime(
+        work_dir=tmp_path,
+        qmp_socket=tmp_path / "qmp.sock",
+        serial_sockets={s.chardev: tmp_path / f"{s.chardev}.sock" for s in p.serial},
+        asset_dir=Path("/assets"),
+        ssh_forward_port=2222,
+    )
+    argv = build_command(p, rt)
+    assert "user,id=hbssh,hostfwd=tcp::2222-:22" in argv
+    assert "virtio-net-device,netdev=hbssh" in argv
+    # off by default
+    rt.ssh_forward_port = None
+    assert "virtio-net-device,netdev=hbssh" not in build_command(p, rt)
 
 
 def test_image_swap_drive_attachment(tmp_path):

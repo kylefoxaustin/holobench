@@ -22,7 +22,8 @@ qemu:
   memory:  "4G"
   audio:   none
   # LOAD-BEARING M33 System Manager firmware (serves SCMI; A55 won't boot without
-  # it) + null-padded 2nd LPUART.
+  # it). The SM's own debug UART is serial_hd(1) — declared as the `smconsole`
+  # serial below (was null-padded here; now a real, attachable second console).
   # M=2 build: the SM monitor only wakes on a console keystroke and otherwise idles
   # via WFI, instead of the stock M=1 firmware's debug-monitor busy-poll. Combined
   # with the emulator's Cortex-M WFI fix (upstream 6fd2fcdc61b + 95's power_state
@@ -37,8 +38,6 @@ qemu:
     # supplies their own m33_image_M2.elf in the mounted assets volume. See
     # docs/DEPLOY.md. (Local dev: drop/symlink it into assets/imx95-evk-sd/.)
     - "loader,file={asset_dir}/m33_image_M2.elf,cpu-num=6"
-    - "-serial"
-    - "null"
 
 boot:
   mode: direct-kernel
@@ -57,6 +56,11 @@ boot:
 
 serial:
   - { name: "A-core console", chardev: console0, role: a-core, default: true }
+  # M33 System Manager debug console = serial_hd(1), confirmed by 95emulator
+  # (2026-07-02): an SCMI -ETIMEDOUT at boot usually means the M33 SM crashed —
+  # read THIS UART for reason=cm33_exc. Quiet under the M=2 idle firmware (wakes
+  # on a keystroke) but it speaks on SM faults, so it's a real second console.
+  - { name: "M33 System Manager", chardev: smconsole, role: m-core, default: false }
 
 # The stock imx95-19x19-evk is FAITHFUL: the DPU is enabled but no panel is
 # attached (just like a bare EVK), so DRM reports "Cannot find any crtc or sizes"
