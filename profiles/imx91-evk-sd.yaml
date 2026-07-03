@@ -59,6 +59,17 @@ display:
 
 net: { user_nics: 2 }
 
+# v3.0 USB fabric: i.MX91 as a USB *host* (same role as i.MX93 — shared ChipIdea
+# EHCI host). Stock `-device usb-redir` importer over a reconnecting socket chardev,
+# so the device end can come up first/after without a race. The imx91 binary carries
+# the ChipIdea PSPD fix (bf8262fec5) + the char-socket yank fix (4-SoC green), so it
+# enumerates a HS gadget at HS. 91 confirmed its host side data-proven for CDC-serial
+# (run-usb-cdc.sh, 3c45b1f15d). Used by gateway-lab-91 against mcxn947-usb-device.
+usb:
+  host:
+    chardev: "socket,id={id},path={path},server=off,reconnect-ms=2000"
+    device:  "usb-redir,chardev={id}"
+
 file_injection:
   nine_p: { enabled: true, mount_tag: holobench, device: virtio-9p-device }
   tftp:   { enabled: true }

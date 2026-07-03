@@ -1,0 +1,16 @@
+# SPDX-License-Identifier: GPL-2.0-or-later
+# Gateway lab, i.MX91 host variant — proves the USB CDC-ACM link is HOST-AGNOSTIC.
+# Same MCXN947 CDC device (mcxn947-usb-device) as gateway-lab, but the USB host is
+# an i.MX91 (single Cortex-A55) instead of the i.MX93. Both i.MX9 hosts share the
+# ChipIdea EHCI + carry the PSPD/yank fixes, so the i.MX91 host enumerates the
+# gadget at HIGH speed and binds /dev/ttyACM0 the same way. 91's host side is
+# data-proven for CDC-serial (91emulator run-usb-cdc.sh, 3c45b1f15d).
+# See docs/TOPOLOGIES.md §USB.
+id:           gateway-lab-91
+display_name: "Gateway lab (i.MX91 host) — i.MX91 + MCXN947 CDC-ACM over USB"
+description:  "i.MX91 gateway; an MCXN947 CDC-ACM device on USB — the host enumerates it as /dev/ttyACM0. Host-agnostic variant of gateway-lab."
+nodes:
+  - { name: gw,     profile: imx91-evk-sd }
+  - { name: sensor, profile: mcxn947-usb-device }
+links:
+  - { type: usb, host: gw, device: sensor }
