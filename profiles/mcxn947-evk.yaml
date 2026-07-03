@@ -81,7 +81,8 @@ net: { user_nics: 0, fabric_nic_model: mcxn-enet }   # ENET-QoS for v3.0 eth lab
 # needed; holobench just supplies the listening -chardev (100% stock). The i.MX93
 # host connects as the usb-redir client. Enumerates the vendor gadget (1FC9:0094)
 # at HIGH speed end-to-end — confirmed M4-green on the bus (2026-06-30). {path} is
-# the coordinator's per-link socket. Gated behind HOLOBENCH_USB_LABS.
+# the coordinator's per-link socket. (The CDC-ACM gateway-lab device uses the
+# mcxn947-usb-device profile; this vendor-gadget role stays for the M4 bring-up.)
 # NOTE: the HS gadget firmware lives in the mcx repo (tests/mcxn-usb-link); the
 # default mcxn947-evk boot artifact is NOT that gadget — see the launch caveat.
 usb:

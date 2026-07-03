@@ -1,15 +1,14 @@
 # SPDX-License-Identifier: GPL-2.0-or-later
-# GATED (not launchable yet): an i.MX93 gateway with an MCXN947 sensor node on
-# USB. USB links use usbredir, which depends on the board models exposing USB
-# host/device (gadget) roles — a board-capability question for the emulator
-# sessions (docs/TOPOLOGIES.md §USB). The coordinator refuses to launch a lab with
-# USB links until that's confirmed; this file documents the intended topology so
-# it's ready the moment the models support it.
+# i.MX93 gateway + an MCXN947 CDC-ACM device over a usbredir USB link. The MCX
+# node boots the CDC gadget (mcxn947-usb-device); the i.MX93 host enumerates it as
+# /dev/ttyACM0 at HIGH speed. Validated end-to-end THROUGH THE COORDINATOR
+# (2026-07-02): 93's ChipIdea PSPD fix + mcx's coherent-HS + re-enumerable CDC
+# gadget. Launchable like the eth labs; see docs/TOPOLOGIES.md §USB.
 id:           gateway-lab
-display_name: "Gateway lab — i.MX93 + MCXN947 over USB (gated)"
-description:  "i.MX93 gateway with an MCXN947 sensor node on USB. Gated on model usbredir support."
+display_name: "Gateway lab — i.MX93 + MCXN947 CDC-ACM over USB"
+description:  "i.MX93 gateway; an MCXN947 CDC-ACM device on USB — the host enumerates it as /dev/ttyACM0."
 nodes:
   - { name: gw,     profile: imx93-evk-sd }
-  - { name: sensor, profile: mcxn947-evk }
+  - { name: sensor, profile: mcxn947-usb-device }
 links:
   - { type: usb, host: gw, device: sensor }

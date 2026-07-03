@@ -12,9 +12,9 @@ the mechanism proven in the v3.0-α PoC (two i.MX91s pinging over one mcast grou
 USB links are wired the same way: each profile's `usb:` block carries that
 board's usbredir role (host = stock `-device usb-redir` importer; device =
 usbredir exporter/listener), the coordinator owns one unix socket per link, and
-the host-side backend reconnects so launch order is forgiving. It stays gated
-behind HOLOBENCH_USB_LABS=1 until end-to-end enumeration is confirmed green
-(docs/TOPOLOGIES.md §USB).
+the host-side backend reconnects so launch order is forgiving. Validated
+end-to-end (2026-07-02): the gateway-lab i.MX93 host enumerates the MCXN947 CDC
+gadget at HIGH speed and binds /dev/ttyACM0 (docs/TOPOLOGIES.md §USB).
 """
 from __future__ import annotations
 
@@ -27,13 +27,13 @@ from ..profiles.loader import default_asset_dir, load_profile
 from ..session.manager import DEFAULT_BASE_DIR, SessionError, SessionManager
 from .models import Lab, LabError
 
-# USB inter-board links are PRESTAGED: the per-board usbredir roles live in each
-# profile's `usb:` block (host = the stock `-device usb-redir` importer/client;
-# device = the usbredir exporter/listener), the coordinator owns one short unix
-# socket per link, and the args are the real transport confirmed on the bus by
-# the 93<->MCX M4 runs — not guesses. It stays gated behind HOLOBENCH_USB_LABS
-# until end-to-end enumeration (SET_CONFIG) is green. See docs/TOPOLOGIES.md §USB.
-_USB_LABS_ENABLED = os.environ.get("HOLOBENCH_USB_LABS", "").lower() in ("1", "true", "yes")
+# USB inter-board links: the per-board usbredir roles live in each profile's `usb:`
+# block (host = the stock `-device usb-redir` importer/client; device = the usbredir
+# exporter/listener), the coordinator owns one short unix socket per link, and the
+# args are the real transport confirmed on the bus by the 93<->MCX runs. VALIDATED
+# end-to-end through this coordinator (2026-07-02): the gateway-lab i.MX93 host
+# enumerates the MCXN947 CDC gadget at HIGH speed and binds /dev/ttyACM0. Launchable
+# like eth labs (no longer env-gated). See docs/TOPOLOGIES.md §USB.
 
 
 def _usb_args(role, cid: str, sock: str) -> list[str]:
@@ -147,14 +147,6 @@ class LabCoordinator:
                      minutes: Optional[int] = None) -> RunningLab:
         if lab.id in self._labs:
             raise LabError(f"lab '{lab.id}' is already running")
-        if lab.has_usb_links() and not _USB_LABS_ENABLED:
-            raise LabError(
-                "this lab declares USB links. The usbredir wiring is PRESTAGED (per-board "
-                "roles read from each profile's usb: block, one unix socket per link, args "
-                "built from the confirmed 93<->MCX transport) but stays gated until "
-                "end-to-end enumeration is green — set HOLOBENCH_USB_LABS=1 to launch it. "
-                "Ethernet links are fully supported. See docs/TOPOLOGIES.md §USB."
-            )
 
         self._lab_counter += 1
         running = RunningLab(lab, self._lab_counter)

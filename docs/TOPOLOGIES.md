@@ -70,8 +70,11 @@ transport: one board exports a USB **device/gadget**, another imports it as a
 **Dependency / escalation:** the board models must support the USB **host and
 device (gadget) roles** and a **redirectable endpoint**. This is a board-capability
 question for the emulator sessions (per CLAUDE.md §7) — Holobench can't add it.
-Gated on: MCX qemu finished + 93/MCX confirming usbredir export/import. A **USB
-hub** is then either a modeled `usb-hub` on the host node or a fan-out of redirects.
+**DELIVERED 2026-07-02**: the `gateway-lab` launches an i.MX93 host + an MCXN947
+CDC-ACM device (`mcxn947-usb-device`) over one usbredir socket; the host enumerates
+the gadget at HIGH speed and binds `/dev/ttyACM0` — validated through the
+coordinator. A **USB hub** is then either a modeled `usb-hub` on the host node or a
+fan-out of redirects.
 
 #### USB link socket contract (proposed — for 93/MCX to align to)
 
@@ -154,7 +157,7 @@ device.
    console; segment edges listed). CLI: `holobench labs` / `lab show` / `lab
    launch`. Verified end-to-end: the `eth-pair` lab boots two real i.MX91 boards
    on one mcast group with unique MACs (same wiring as the proven α PoC). Shipped
-   labs: `eth-pair`, `lan-trio`, `gateway-lab` (gated). Next: USB links.
+   labs: `eth-pair`, `lan-trio`, `gateway-lab` (USB, validated). Next: USB hub / fan-out.
 3. **v3.0 — USB links:** after MCX qemu + emulator usbredir confirmation; 93↔MCX
    over USB, then USB hubs.
 

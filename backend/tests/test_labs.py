@@ -147,23 +147,13 @@ def test_mixed_lab_sets_per_node_nic_model():
     assert mcx.split("mac=")[1].split(",")[0] != gw.split("mac=")[1].split(",")[0]
 
 
-def test_usb_lab_is_gated():
+def test_usb_lab_wires_host_and_device():
+    # The gateway-lab launches (USB validated end-to-end -> no env gate) and each
+    # end gets its usbredir role from the profile: the i.MX93 host gets `-device
+    # usb-redir` (client/importer), the MCXN947 device gets a listening exporter
+    # chardev, both bound to the SAME per-link unix socket the coordinator owns.
     mgr = _FakeManager()
     coord = LabCoordinator(mgr)
-    with pytest.raises(LabError, match="USB"):
-        asyncio.run(coord.launch(load_lab("gateway-lab")))
-    assert mgr.launches == []          # nothing launched
-
-
-def test_usb_lab_wires_host_and_device_when_ungated(monkeypatch):
-    # With the env opt-in on, the gateway-lab launches and each end gets its
-    # usbredir role from the profile: the i.MX93 host gets `-device usb-redir`
-    # (client/importer), the MCXN947 device gets the exporter `-global`, both
-    # bound to the SAME per-link unix socket the coordinator owns.
-    import holobench.labs.coordinator as C
-    monkeypatch.setattr(C, "_USB_LABS_ENABLED", True)
-    mgr = _FakeManager()
-    coord = C.LabCoordinator(mgr)
     running = asyncio.run(coord.launch(load_lab("gateway-lab")))
     assert running.state == LabState.RUNNING
     by_node = {s.lab_node: s for s in mgr.launches}
@@ -188,13 +178,11 @@ def test_usb_lab_wires_host_and_device_when_ungated(monkeypatch):
     assert "id=mcxn-usbhs" in sensor[sensor.index("-chardev") + 1]
 
 
-def test_usb_lab_errors_when_a_profile_lacks_a_role(monkeypatch):
-    # Ungated, but the device node's profile has no usb.device role -> that node
-    # is flagged in node_errors (honest fault), not silently mis-wired.
-    import holobench.labs.coordinator as C
-    monkeypatch.setattr(C, "_USB_LABS_ENABLED", True)
+def test_usb_lab_errors_when_a_profile_lacks_a_role():
+    # The device node's profile has no usb.device role -> that node is flagged in
+    # node_errors (honest fault), not silently mis-wired.
     mgr = _FakeManager()
-    coord = C.LabCoordinator(mgr)
+    coord = LabCoordinator(mgr)
     lab = Lab.model_validate({
         "id": "usb-noroles", "display_name": "usb no roles",
         "nodes": [{"name": "h", "profile": "imx93-evk-sd"},
@@ -240,13 +228,10 @@ def test_api_catalog_and_gated_launch():
     out = A.get_labs(req)
     ids = {e["id"]: e for e in out["catalog"]}
     assert "eth-pair" in ids and ids["eth-pair"]["launchable"] is True
-    assert ids["gateway-lab"]["launchable"] is False
-    assert "usbredir" in (ids["gateway-lab"]["gated_reason"] or "")
-
-    # Launching the gated USB lab is a 400, not a 500.
-    with pytest.raises(A.HTTPException) as ei:
-        asyncio.run(A.launch_lab(A.LaunchLabRequest(lab_id="gateway-lab"), req))
-    assert ei.value.status_code == 400
+    # USB labs are launchable now that the link is validated end-to-end.
+    assert ids["gateway-lab"]["launchable"] is True
+    assert ids["gateway-lab"]["gated_reason"] is None
+    assert ids["gateway-lab"]["usb_links"] == 1
 
     # Unknown lab -> 404.
     with pytest.raises(A.HTTPException) as ei:

@@ -582,10 +582,11 @@ def _lab_catalog_entry(lab_id: str) -> Optional[dict]:
         ],
         "node_count": len(lab.nodes),
         "eth_segments": len(eth),
-        # USB links aren't launchable yet (gated on model usbredir support).
-        "launchable": not usb,
-        "gated_reason": ("declares USB links (usbredir support not yet confirmed "
-                         "by the board models)") if usb else None,
+        "usb_links": len(usb),
+        # Both eth and USB links are launchable — USB validated end-to-end through
+        # the coordinator (i.MX93 host enumerates the MCXN947 CDC gadget, /dev/ttyACM0).
+        "launchable": True,
+        "gated_reason": None,
     }
 
 

@@ -61,7 +61,8 @@ net: { user_nics: 1, fabric_nic_model: imx.enet }   # FEC (not the eQOS stub) fo
 # over a unix-socket chardev that reconnects, so the device end (MCXN947) can be
 # launched first/after without a race. Pure upstream interfaces (Prime Directive).
 # Confirmed transport from the 93<->MCX M4 bring-up on the bus. {id}/{path} are
-# filled by the LabCoordinator per usb link. Gated behind HOLOBENCH_USB_LABS.
+# filled by the LabCoordinator per usb link. Validated end-to-end 2026-07-02
+# (this host enumerates the MCXN947 CDC gadget at HS, binds /dev/ttyACM0).
 usb:
   host:
     chardev: "socket,id={id},path={path},server=off,reconnect-ms=2000"

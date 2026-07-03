@@ -34,16 +34,16 @@ class LabLink(_Strict):
     one multicast group, giving an L2 broadcast domain across separate QEMU procs.
     A two-member segment is just a point-to-point cable. PROVEN, stock QEMU.
 
-    type="usb": gated — usbredir transport between a `host` node and a `device`
-    node, pending model usbredir support (see docs/TOPOLOGIES.md §USB). Parsed and
-    validated here so labs can declare it, but the coordinator refuses to launch a
-    lab with USB links until the capability is confirmed.
+    type="usb": usbredir transport between a `host` node (stock `-device usb-redir`
+    importer) and a `device` node (usbredir exporter/listener); see
+    docs/TOPOLOGIES.md §USB. VALIDATED end-to-end (2026-07-02): the gateway-lab
+    i.MX93 host enumerates the MCXN947 CDC gadget at HIGH speed, binds /dev/ttyACM0.
     """
     type: str
     # eth segment:
     segment: Optional[str] = None
     members: list[str] = []
-    # usb (gated):
+    # usb:
     host: Optional[str] = None
     device: Optional[str] = None
 

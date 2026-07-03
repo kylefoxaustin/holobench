@@ -1,0 +1,84 @@
+# Holobench board profile — MCXN947 as a USB CDC-ACM DEVICE (gateway-lab sensor node).
+#
+# The USB-device variant of mcxn947-evk (which see for the SoC facts). Same binary
+# and machine (frdm-mcxn947); the ONLY deltas are the boot firmware and two CDC-
+# specific QEMU args, exactly as reported by the mcxn947qemu session (source of
+# truth, bus 2026-07-02) for the imx93<->MCX USB-serial link:
+#
+#   qemu-system-arm -M frdm-mcxn947 -serial null \
+#     -chardev socket,id=mcxn-usbhs,path=<sock>,server=on,wait=off \
+#     -global mcxn-usbdev.gadget-profile=cdc \
+#     -kernel tests/mcxn-usb-cdc/cdc.elf -no-reboot
+#
+# The gadget is the re-enumerable CDC-ACM firmware (mcx 69aff70a18): it presents a
+# 2-interface CDC device (Comm/ACM + CDC-Data) that the i.MX93 host's stock Linux
+# enumerates as /dev/ttyACM0 at HIGH speed. Data-proven both hosts (imx91+imx93),
+# first-write race closed gadget-side; the device server is REUSE-safe (one server
+# re-enumerates every client via usb_redir_reset on connect).
+#
+# CDC-specific vs the vendor gadget (both live in the mcx model, selected by the
+# -global): the vendor gadget needs none of this; CDC needs the gadget-profile=cdc
+# selector AND the cdc.elf firmware. Chardev id = mcxn-usbhs (CDC runs on the HS/
+# ChipIdea core; mcxn-usbfs is the FS/KHCI *vendor* gadget only).
+
+id:           mcxn947-usb-device
+display_name: "NXP MCXN947 (USB CDC-ACM device)"
+soc:          "NXP MCXN947"
+description:  "MCXN947 booting the CDC-ACM usbredir gadget (cdc.elf) — the USB-device end of a board-to-board link; the host enumerates it as /dev/ttyACM0."
+
+qemu:
+  binary:  /home/kyle/Documents/GitHub/mcxn947qemu/build/qemu-system-arm
+  machine: frdm-mcxn947
+  memory:  null                 # SoC owns flash+SRAM; default_ram_size=0 -> omit -m
+  audio:   none
+  # CDC-specific bits (mcx's launch line). The -global selects the CDC-ACM gadget
+  # profile in the SoC's usbredir device model (default would be the vendor gadget);
+  # -no-reboot mirrors the known-good standalone launch.
+  extra_args:
+    - "-global"
+    - "mcxn-usbdev.gadget-profile=cdc"
+    - "-no-reboot"
+
+boot:
+  mode: firmware-elf
+  artifacts:
+    firmware: /home/kyle/Documents/GitHub/mcxn947qemu/tests/mcxn-usb-cdc/cdc.elf
+    kernel:   null
+    dtb:      null
+    initrd:   null
+    rootfs:   null
+    disk:     null
+  append: null
+  command_template: null
+
+serial:
+  - { name: "LPUART4 console", chardev: console0, role: mcu-console, default: true }
+
+display: { enabled: false, device: null, vnc: false }
+
+net: { user_nics: 0, fabric_nic_model: mcxn-enet }
+
+# USB device (exporter): the model binds its HS usbredir core to the well-known
+# chardev id `mcxn-usbhs`; holobench supplies only the listening -chardev (stock).
+# The gadget itself is selected by the -global above. The i.MX93 host connects as
+# the usb-redir client. {path} = the coordinator's per-link socket.
+usb:
+  device:
+    chardev: "socket,id=mcxn-usbhs,path={path},server=on,wait=off"
+
+file_injection:
+  nine_p: { enabled: false, mount_tag: holobench }
+  tftp:   { enabled: false }
+  nfs:    { enabled: false }
+  image_swap: { enabled: false, target_drive: null }
+
+power: { warm_reset: true, cold_cycle: true, pause: true, reinstall: false }
+
+introspection:
+  qmp_events: true
+  memory_map: true
+  device_tree: true
+  gdbstub: { enabled: true }
+  snapshots: false
+
+reservation: { default_minutes: 30, max_minutes: 120 }
