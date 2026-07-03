@@ -1,0 +1,16 @@
+# SPDX-License-Identifier: GPL-2.0-or-later
+# CAN board-to-board link — two i.MX91 boards bridged over their FlexCAN (can0) by
+# the fleet-shared generic can-host-chardev backend over a socket chardev (no host
+# vcan/SocketCAN, no root). The holobench version of 91emulator's proven run-can.sh
+# (FlexCAN -> can-bus -> can-host-chardev -> socket -> peer, byte-exact). The stock
+# EVK DT already enables flexcan2=can0, so no overlay dtb; the coordinator wires
+# `-machine ...,canbus0=cb,canbus1=cb` + `-object can-bus`/`-object can-host-chardev`
+# (a=server, b=client). The fifth and final interconnect transport. See docs/TOPOLOGIES.md §CAN.
+id:           can-link-91
+display_name: "CAN link — two i.MX91 over FlexCAN"
+description:  "Two i.MX91 boards bridged over FlexCAN (can0) via can-host-chardev + a socket chardev — board-to-board CAN, byte-exact."
+nodes:
+  - { name: boardA, profile: imx91-evk-sd }
+  - { name: boardB, profile: imx91-evk-sd }
+links:
+  - { type: can, a: boardA, b: boardB }

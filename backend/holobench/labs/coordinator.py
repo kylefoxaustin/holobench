@@ -65,6 +65,18 @@ def _spi_args(role, cid: str, sock: str, *, server: bool) -> list[str]:
     spec += ",server=on,wait=off" if server else ",server=off,reconnect-ms=1000"
     return ["-chardev", spec, "-device", role.device.format(id=cid, path=sock)]
 
+
+def _can_args(role, cid: str, sock: str, *, server: bool) -> list[str]:
+    """Raw QEMU args for one end of a CAN board-to-board link: `-object can-bus` +
+    a `-chardev socket` (listener when `server`, else a reconnecting connector) +
+    `-object can-host-chardev` (the fleet-shared generic CAN transport). Machine
+    props (can-bus wiring) ride separately on -machine via role.machine_extra."""
+    spec = role.chardev.format(id=cid, path=sock)
+    spec += ",server=on,wait=off" if server else ",server=off,reconnect-ms=1000"
+    return ["-object", role.bus.format(id=cid, path=sock),
+            "-chardev", spec,
+            "-object", role.host.format(id=cid, path=sock)]
+
 # Multicast fabric: one group address per live segment (isolated L2 domains), a
 # shared port. 230.0.0.0/24 is an administratively-scoped, unrouted group block —
 # traffic stays on the host. Overridable for odd host network policies.
@@ -304,6 +316,39 @@ class LabCoordinator:
                 running.node_links.setdefault(link.b, []).append(f"spi<->{link.a}@{sock}")
                 spi_i += 1
 
+            # 2e) Build each node's can_link_override (board-to-board CAN bridge).
+            # Symmetric: 'a' listens (socket server), 'b' connects (reconnecting
+            # client); both get `-object can-bus` + `-object can-host-chardev`, and
+            # any machine props (can-bus wiring) go on -machine via machine_extra.
+            node_can: dict[str, list[str]] = {n.name: [] for n in lab.nodes}
+            node_machine: dict[str, str] = {}
+            can_i = 0
+            for link in lab.links:
+                if link.type != "can":
+                    continue
+                ap = node_profiles.get(link.a)
+                bp = node_profiles.get(link.b)
+                arole = getattr(getattr(ap, "can", None), "link", None) if ap else None
+                brole = getattr(getattr(bp, "can", None), "link", None) if bp else None
+                if not arole or not brole:
+                    missing = link.a if not arole else link.b
+                    running.node_errors[missing] = (
+                        f"can link {link.a}<->{link.b}: '{missing}' profile lacks a "
+                        f"can.link role (confirm with the emulator session, §7)")
+                    continue
+                sock = str(sock_dir / f"can-{lab.id}-{can_i}.sock")
+                cid = f"hbcan{can_i}"
+                node_can[link.a] += _can_args(arole, cid, sock, server=True)   # a listens
+                node_can[link.b] += _can_args(brole, cid, sock, server=False)  # b connects
+                if arole.machine_extra:
+                    node_machine[link.a] = arole.machine_extra
+                if brole.machine_extra:
+                    node_machine[link.b] = brole.machine_extra
+                running.usb_socks.append(sock)   # socket-cleanup list (unlinked on teardown)
+                running.node_links.setdefault(link.a, []).append(f"can<->{link.b}@{sock}")
+                running.node_links.setdefault(link.b, []).append(f"can<->{link.a}@{sock}")
+                can_i += 1
+
             # 3) Launch each node as a Session with its fabric NICs.
             any_ok = False
             for node in lab.nodes:
@@ -318,6 +363,8 @@ class LabCoordinator:
                         nic_override=nics, usb_override=(node_usb[node.name] or None),
                         uart_link_override=(node_uart[node.name] or None),
                         spi_link_override=(node_spi[node.name] or None),
+                        can_link_override=(node_can[node.name] or None),
+                        machine_extra=node_machine.get(node.name),
                         dtb_override=node_dtb.get(node.name),
                     )
                     session.lab_id = lab.id

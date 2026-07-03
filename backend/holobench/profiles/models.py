@@ -212,6 +212,31 @@ class SpiCapability(_Strict):
     link: Optional[SpiLink] = None
 
 
+class CanLink(_Strict):
+    """How a board wires its FlexCAN into a board-to-board CAN bridge
+    (docs/TOPOLOGIES.md §CAN). Uses the fleet-shared generic `can-host-chardev`
+    backend (bridges an emulated `can-bus` to a chardev — no host vcan/SocketCAN,
+    no root). Stock objects only. The coordinator emits, in order, `-object <bus>`,
+    a `-chardev socket` (server on one end, reconnecting client on the other), and
+    `-object <host>`; `machine_extra` (if set) is appended to `-machine` to wire the
+    board's can-buses to the bridged bus. Facts confirmed by the emulator (§7).
+
+    `bus`/`host` are `-object` templates; `chardev` the `-chardev socket` template;
+    `{id}` (chardev id) is filled by the coordinator. `machine_extra` is optional —
+    some boards auto-link a command-line can-bus by name (no machine prop needed)."""
+    bus: str                           # -object <this>  (e.g. "can-bus,id=cb")
+    host: str                          # -object <this>  (e.g. "can-host-chardev,id=canh,canbus=cb,chardev={id}")
+    chardev: str                       # -chardev <this> (e.g. "socket,id={id},path={path}")
+    machine_extra: Optional[str] = None  # appended to -machine (e.g. "canbus0=cb,canbus1=cb")
+    dev: Optional[str] = None          # informational: the guest node (e.g. can0)
+
+
+class CanCapability(_Strict):
+    """A board's CAN inter-board-link capability. `link` = the FlexCAN this board
+    can bridge to a peer. Absent = this board can't be a CAN-link endpoint."""
+    link: Optional[CanLink] = None
+
+
 # --- File injection --------------------------------------------------------
 
 
@@ -347,6 +372,7 @@ class Profile(_Strict):
     usb: Optional[UsbCapability] = None        # v3.0 fabric: usbredir inter-board link role(s)
     uart: Optional[UartCapability] = None      # v3.0 fabric: UART board-to-board link role
     spi: Optional[SpiCapability] = None        # v3.0 fabric: SPI board-to-board link role
+    can: Optional[CanCapability] = None        # v3.0 fabric: CAN board-to-board link role
     file_injection: FileInjection = Field(default_factory=FileInjection)
     camera: CameraSpec = Field(default_factory=CameraSpec)
     leds: list[LedSpec] = Field(default_factory=list)

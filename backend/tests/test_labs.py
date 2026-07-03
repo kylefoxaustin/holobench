@@ -78,13 +78,16 @@ class _FakeManager:
 
     async def launch(self, profile, *, asset_dir=None, owner=None, minutes=None,
                      nic_override=None, usb_override=None, uart_link_override=None,
-                     spi_link_override=None, dtb_override=None):
+                     spi_link_override=None, can_link_override=None,
+                     machine_extra=None, dtb_override=None):
         if profile.id in self._fail:
             raise RuntimeError(f"boom:{profile.id}")
         self._n += 1
         s = _FakeSession(f"{profile.id}-{self._n}", nic_override, usb_override)
         s.uart_link_override = uart_link_override
         s.spi_link_override = spi_link_override
+        s.can_link_override = can_link_override
+        s.machine_extra = machine_extra
         s.dtb_override = dtb_override
         self.launches.append(s)
         return s
@@ -226,6 +229,29 @@ def test_spi_lab_wires_symmetric_socket_bridge():
     assert a_sock == b_sock
     assert by_node["boardA"].dtb_override == "imx91-11x11-evk-spilink.dtb"
     assert by_node["boardB"].dtb_override == "imx91-11x11-evk-spilink.dtb"
+
+
+def test_can_lab_wires_symmetric_socket_bridge():
+    # The can-link-91 lab bridges two i.MX91 over FlexCAN: one end socket server,
+    # the other reconnecting client, both with -object can-bus + -object
+    # can-host-chardev, and both get the canbus machine props (machine_extra).
+    mgr = _FakeManager()
+    coord = LabCoordinator(mgr)
+    running = asyncio.run(coord.launch(load_lab("can-link-91")))
+    assert running.state == LabState.RUNNING
+    by_node = {s.lab_node: s for s in mgr.launches}
+    a = by_node["boardA"].can_link_override
+    b = by_node["boardB"].can_link_override
+    assert any("can-bus,id=cb" in x for x in a)
+    assert any("can-host-chardev" in x for x in a)
+    assert any("server=on" in x for x in a)                          # boardA listens
+    assert any("server=off" in x and "reconnect-ms" in x for x in b)  # boardB client
+    a_sock = a[a.index("-chardev") + 1].split("path=")[1].split(",")[0]
+    b_sock = b[b.index("-chardev") + 1].split("path=")[1].split(",")[0]
+    assert a_sock == b_sock
+    # both get the canbus machine props (wired onto -machine in build_command)
+    assert by_node["boardA"].machine_extra == "canbus0=cb,canbus1=cb"
+    assert by_node["boardB"].machine_extra == "canbus0=cb,canbus1=cb"
 
 
 def test_usb_lab_errors_when_a_profile_lacks_a_role():

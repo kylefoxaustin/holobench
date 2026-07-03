@@ -97,6 +97,20 @@ spi:
     attach_dtb: imx91-11x11-evk-spilink.dtb
     dev:        "/dev/spidev0.0"
 
+# v3.0 CAN fabric: i.MX91's FlexCAN (flexcan2 = can0). Uses the fleet-shared generic
+# can-host-chardev backend (bridges an emulated can-bus to a socket chardev — no
+# host vcan/SocketCAN, no root). The stock EVK DT already enables flexcan2=can0, so
+# NO overlay dtb is needed. machine_extra wires both machine can-buses to `cb` so
+# whichever node the guest enumerates as can0 is on the bridged bus. Mirrors
+# 91emulator run-can.sh (byte-exact CAN frame between two i.MX91 guests).
+can:
+  link:
+    bus:           "can-bus,id=cb"
+    chardev:       "socket,id={id},path={path}"    # coordinator adds server=on/off,reconnect-ms=1000
+    host:          "can-host-chardev,id=canh,canbus=cb,chardev={id}"
+    machine_extra: "canbus0=cb,canbus1=cb"
+    dev:           "can0"
+
 file_injection:
   nine_p: { enabled: true, mount_tag: holobench, device: virtio-9p-device }
   tftp:   { enabled: true }

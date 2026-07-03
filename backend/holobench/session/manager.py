@@ -129,6 +129,8 @@ class Session:
         usb_override: Optional[list[str]] = None,
         uart_link_override: Optional[list[str]] = None,
         spi_link_override: Optional[list[str]] = None,
+        can_link_override: Optional[list[str]] = None,
+        machine_extra: Optional[str] = None,
         dtb_override: Optional[str] = None,
         qemu_binary: Optional[str] = None,
     ) -> None:
@@ -205,6 +207,8 @@ class Session:
             usb_override=usb_override,
             uart_link_override=uart_link_override,
             spi_link_override=spi_link_override,
+            can_link_override=can_link_override,
+            machine_extra=machine_extra,
             dtb_override=dtb_override,
             qemu_binary=qemu_binary,
         )
@@ -681,6 +685,8 @@ class SessionManager:
         usb_override: Optional[list[str]] = None,
         uart_link_override: Optional[list[str]] = None,
         spi_link_override: Optional[list[str]] = None,
+        can_link_override: Optional[list[str]] = None,
+        machine_extra: Optional[str] = None,
         dtb_override: Optional[str] = None,
         qemu_binary: Optional[str] = None,
     ) -> Session:
@@ -691,7 +697,8 @@ class SessionManager:
                 profile, base_dir=self.base_dir, asset_dir=asset_dir, owner=owner,
                 minutes=minutes, lcd_attached=lcd_attached, nic_override=nic_override,
                 usb_override=usb_override, uart_link_override=uart_link_override,
-                spi_link_override=spi_link_override, dtb_override=dtb_override,
+                spi_link_override=spi_link_override, can_link_override=can_link_override,
+                machine_extra=machine_extra, dtb_override=dtb_override,
                 qemu_binary=qemu_binary,
             )
             await session.launch()

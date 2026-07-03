@@ -46,16 +46,16 @@ class LabLink(_Strict):
     # usb:
     host: Optional[str] = None
     device: Optional[str] = None
-    # uart / spi (symmetric point-to-point bridge between two nodes 'a' and 'b'):
+    # uart / spi / can (symmetric point-to-point bridge between two nodes 'a','b'):
     a: Optional[str] = None
     b: Optional[str] = None
 
     @field_validator("type")
     @classmethod
     def _known_type(cls, v: str) -> str:
-        if v not in ("eth", "usb", "uart", "spi"):
+        if v not in ("eth", "usb", "uart", "spi", "can"):
             raise ValueError(
-                f"unknown link type '{v}' (expected 'eth', 'usb', 'uart', or 'spi')")
+                f"unknown link type '{v}' (expected 'eth', 'usb', 'uart', 'spi', or 'can')")
         return v
 
     @model_validator(mode="after")
@@ -74,7 +74,7 @@ class LabLink(_Strict):
                 raise ValueError("usb link needs both 'host' and 'device'")
             if self.host == self.device:
                 raise ValueError("usb link host and device must differ")
-        elif self.type in ("uart", "spi"):
+        elif self.type in ("uart", "spi", "can"):
             if not (self.a and self.b):
                 raise ValueError(f"{self.type} link needs both 'a' and 'b'")
             if self.a == self.b:

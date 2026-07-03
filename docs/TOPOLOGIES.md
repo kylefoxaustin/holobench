@@ -139,10 +139,22 @@ i.MX91 the link controller is **LPSPI1** (`spi@44360000`, `/dev/spidev0.0`), and
 a spidev child). **Validated** through the coordinator (`spi-link-91`): both i.MX91
 bind `fsl_lpspi` (PIO) + expose `/dev/spidev0.0` over the live socket bridge.
 
+### CAN — ✅ stock transport, DELIVERED 2026-07-03 (the fifth + final)
+A board-to-board CAN bridge over the fleet-shared generic `can-host-chardev`
+backend (bridges an emulated `can-bus` to a chardev — **no host vcan/SocketCAN,
+no root**). Each end gets `-object can-bus` + `-chardev socket` (one server / one
+reconnecting client) + `-object can-host-chardev`, and the machine's can-buses are
+wired to the bridged bus via a `-machine ...,canbus0=cb,canbus1=cb` property
+(`machine_extra`). Lab: `{ type: can, a: <node>, b: <node> }`. Per-board facts in
+the profile's `can.link` block; for i.MX91 the FlexCAN is `can0` and the **stock
+EVK DT already enables it — no overlay dtb**. **Validated** through the coordinator
+(`can-link-91`): a frame `0x321 [5] 48 41 42 43 44` crossed FlexCAN → can-bus →
+can-host-chardev → socket → FlexCAN **byte-exact** between two i.MX91 guests.
+
 ### Future links
-`can` (`-object can-bus` / FlexCAN, the last transport on the fleet roadmap),
-I2C bridges — same pattern: stock transport + per-board facts, never a custom
-device.
+`i2c` bridges and further multi-node fabrics — same pattern: stock transport +
+per-board facts, never a custom device. **All five wired transports (eth, USB,
+UART, SPI, CAN) are now delivered.**
 
 ## Architecture
 

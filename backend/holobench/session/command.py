@@ -82,6 +82,15 @@ class SessionRuntime:
     # (the model's inter-QEMU SSI bridge peripheral). Appended verbatim; built by the
     # lab coordinator from the profile's `spi:` block. None = no inter-board SPI.
     spi_link_override: Optional[list[str]] = None
+    # v3.0 fabric (CAN): raw extra QEMU args wiring this board's FlexCAN into a
+    # board-to-board CAN bridge — a stock `-object can-bus` + `-chardev socket` +
+    # `-object can-host-chardev` (the fleet-shared generic CAN transport, no host
+    # vcan/SocketCAN). Appended verbatim; built by the coordinator from the can:
+    # block. None = no inter-board CAN.
+    can_link_override: Optional[list[str]] = None
+    # Extra `-machine` properties a fabric link needs (e.g. CAN's canbus0=cb,
+    # canbus1=cb wiring the machine's can-buses to the bridged bus). None = normal.
+    machine_extra: Optional[str] = None
     # Boot a specific dtb instead of the profile default (e.g. the LPUART2-enabled
     # dtb a UART link needs, or the LPSPI+spidev dtb an SPI link needs). Wins over
     # the LCD/camera dtb selection. None = normal.
@@ -187,7 +196,10 @@ def build_command(profile: Profile, rt: SessionRuntime) -> list[str]:
     binary = rt.qemu_binary or os.environ.get("HOLOBENCH_QEMU") or os.path.expandvars(q.binary)
     argv: list[str] = [binary]
 
-    argv += ["-machine", q.machine]
+    # A fabric link may need machine properties (e.g. a CAN link wires the machine's
+    # can-buses to a named bus: `-machine <type>,canbus0=cb,canbus1=cb`).
+    machine = q.machine + (f",{rt.machine_extra}" if rt.machine_extra else "")
+    argv += ["-machine", machine]
     if q.memory:  # null -> omit -m (SoC owns its RAM; e.g. Cortex-M MCUs)
         argv += ["-m", q.memory]
     if q.smp is not None:
@@ -294,6 +306,12 @@ def build_command(profile: Profile, rt: SessionRuntime) -> list[str]:
     # profile block.
     if rt.spi_link_override:
         argv += rt.spi_link_override
+
+    # v3.0 fabric (CAN): stock `-object can-bus` + `-chardev socket` + `-object
+    # can-host-chardev` inter-board CAN bridge args, appended verbatim (the machine
+    # props ride on -machine via machine_extra). Built from the can: profile block.
+    if rt.can_link_override:
+        argv += rt.can_link_override
 
     # Image-swap: per-session qcow2 overlay over the golden disk. Guest writes hit
     # the overlay; the golden is never touched; "reinstall" = fresh overlay.
