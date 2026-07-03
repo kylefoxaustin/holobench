@@ -77,11 +77,14 @@ class _FakeManager:
         self.base_dir = None    # coordinator reads this for usb-socket placement
 
     async def launch(self, profile, *, asset_dir=None, owner=None, minutes=None,
-                     nic_override=None, usb_override=None):
+                     nic_override=None, usb_override=None, uart_link_override=None,
+                     dtb_override=None):
         if profile.id in self._fail:
             raise RuntimeError(f"boom:{profile.id}")
         self._n += 1
         s = _FakeSession(f"{profile.id}-{self._n}", nic_override, usb_override)
+        s.uart_link_override = uart_link_override
+        s.dtb_override = dtb_override
         self.launches.append(s)
         return s
 
@@ -176,6 +179,30 @@ def test_usb_lab_wires_host_and_device():
     # Host id is coordinator-allocated; device id is the well-known HS-core binding.
     assert "id=hbusb0" in gw[gw.index("-chardev") + 1]
     assert "id=mcxn-usbhs" in sensor[sensor.index("-chardev") + 1]
+
+
+def test_uart_lab_wires_symmetric_socket_bridge():
+    # The uart-link-91 lab bridges two i.MX91 over LPUART2: one end is the socket
+    # server, the other the client, both on the SAME socket + chardev id, and both
+    # boot the LPUART2-enabled dtb. The link UART is an extra -serial (serial_hd(1)).
+    mgr = _FakeManager()
+    coord = LabCoordinator(mgr)
+    running = asyncio.run(coord.launch(load_lab("uart-link-91")))
+    assert running.state == LabState.RUNNING
+    by_node = {s.lab_node: s for s in mgr.launches}
+    a = by_node["boardA"].uart_link_override
+    b = by_node["boardB"].uart_link_override
+    assert "-chardev" in a and "-serial" in a and "chardev:hbuart0" in a
+    assert any("server=on" in x for x in a)     # boardA listens
+    assert any(("server=off" in x) for x in b)  # boardB connects
+    # same socket path both ends
+    a_sock = a[a.index("-chardev") + 1].split("path=")[1].split(",")[0]
+    b_sock = b[b.index("-chardev") + 1].split("path=")[1].split(",")[0]
+    assert a_sock == b_sock
+    assert running.usb_socks == [a_sock]
+    # both boot the LPUART2-enabled dtb
+    assert by_node["boardA"].dtb_override == "imx91-11x11-evk-uartlink.dtb"
+    assert by_node["boardB"].dtb_override == "imx91-11x11-evk-uartlink.dtb"
 
 
 def test_usb_lab_errors_when_a_profile_lacks_a_role():

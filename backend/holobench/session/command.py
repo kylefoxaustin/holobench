@@ -71,6 +71,15 @@ class SessionRuntime:
     # port (SSH access), on a virtio-net-device so it works on any board with a
     # virtio-mmio bus regardless of whether the SoC's own ENET binds a netdev.
     ssh_forward_port: Optional[int] = None
+    # v3.0 fabric (UART): raw extra QEMU args wiring this board's spare link-UART
+    # into a board-to-board serial bridge — a stock `-chardev socket` (server on
+    # one end, client on the other) + `-serial chardev:<id>`, appended right after
+    # the declared consoles so the link UART is the next serial_hd(). Built by the
+    # lab coordinator from the profile's `uart:` block. None = no inter-board UART.
+    uart_link_override: Optional[list[str]] = None
+    # Boot a specific dtb instead of the profile default (e.g. the LPUART2-enabled
+    # dtb a UART link needs). Wins over the LCD/camera dtb selection. None = normal.
+    dtb_override: Optional[str] = None
 
 
 class CommandError(Exception):
@@ -122,7 +131,9 @@ def _boot_args(profile: Profile, rt: SessionRuntime) -> list[str]:
     # that's a future combine — for now attaching the LCD boots without the sensor.)
     cam = profile.camera
     disp = profile.display
-    if disp.attach_dtb and rt.lcd_attached:
+    if rt.dtb_override:                    # a fabric link needs a specific dtb (e.g. LPUART2 enabled)
+        dtb_name = rt.dtb_override
+    elif disp.attach_dtb and rt.lcd_attached:
         dtb_name = disp.attach_dtb
     elif cam.enabled and cam.dtb and rt.camera_frames_dir is not None:
         dtb_name = cam.dtb
@@ -215,6 +226,12 @@ def build_command(profile: Profile, rt: SessionRuntime) -> list[str]:
             "-serial",
             f"chardev:{port.chardev}",
         ]
+
+    # v3.0 fabric (UART): the board's spare link-UART, appended right after the
+    # declared consoles so it lands on the next serial_hd() index — a stock
+    # `-chardev socket` + `-serial chardev:<id>` bridging it to the peer board.
+    if rt.uart_link_override:
+        argv += rt.uart_link_override
 
     # Display: VNC for the LCD panel, otherwise headless.
     if profile.display.enabled and profile.display.vnc and rt.vnc:

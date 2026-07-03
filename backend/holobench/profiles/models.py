@@ -168,6 +168,27 @@ class UsbCapability(_Strict):
     device: Optional[UsbRole] = None
 
 
+class UartLink(_Strict):
+    """How a board wires its spare UART into a board-to-board serial bridge
+    (docs/TOPOLOGIES.md §UART). Symmetric: both ends use the same link UART; the
+    coordinator makes one end the socket server and the other the client. Stock
+    interfaces only (a `-chardev socket` + `-serial chardev:`) — no model change.
+
+    `chardev` is the base `-chardev` template with `{id}`/`{path}` filled by the
+    coordinator; it appends `,server=on,wait=off` (listener) or `,server=off`
+    (connector). `attach_dtb` boots a dtb that ENABLES the link UART (many EVK
+    dtbs leave the spare UART disabled). Facts confirmed by the emulator (§7)."""
+    chardev: str                       # e.g. "socket,id={id},path={path}"
+    attach_dtb: Optional[str] = None   # dtb that enables the link UART (else base dtb)
+    dev: Optional[str] = None          # informational: the guest device node (e.g. /dev/ttyLP1)
+
+
+class UartCapability(_Strict):
+    """A board's UART inter-board-link capability. `link` = the spare UART this
+    board can bridge to a peer. Absent = this board can't be a UART-link endpoint."""
+    link: Optional[UartLink] = None
+
+
 # --- File injection --------------------------------------------------------
 
 
@@ -301,6 +322,7 @@ class Profile(_Strict):
     display: DisplaySpec = Field(default_factory=DisplaySpec)
     net: NetSpec = Field(default_factory=NetSpec)
     usb: Optional[UsbCapability] = None        # v3.0 fabric: usbredir inter-board link role(s)
+    uart: Optional[UartCapability] = None      # v3.0 fabric: UART board-to-board link role
     file_injection: FileInjection = Field(default_factory=FileInjection)
     camera: CameraSpec = Field(default_factory=CameraSpec)
     leds: list[LedSpec] = Field(default_factory=list)

@@ -47,6 +47,15 @@ def _usb_args(role, cid: str, sock: str) -> list[str]:
         args += ["-global", role.glob.format(id=cid, path=sock)]
     return args
 
+
+def _uart_args(role, cid: str, sock: str, *, server: bool) -> list[str]:
+    """Raw QEMU args for one end of a UART board-to-board link: a `-chardev socket`
+    (the listener when `server`, else the connector) + `-serial chardev:<id>`. The
+    link UART lands on the next serial_hd() after the board's declared consoles."""
+    spec = role.chardev.format(id=cid, path=sock)
+    spec += ",server=on,wait=off" if server else ",server=off"
+    return ["-chardev", spec, "-serial", f"chardev:{cid}"]
+
 # Multicast fabric: one group address per live segment (isolated L2 domains), a
 # shared port. 230.0.0.0/24 is an administratively-scoped, unrouted group block —
 # traffic stays on the host. Overridable for odd host network policies.
@@ -222,6 +231,38 @@ class LabCoordinator:
                     f"usb<-{link.host}@{sock}")
                 usb_i += 1
 
+            # 2c) Build each node's uart_link_override (board-to-board serial bridge).
+            # Symmetric: endpoint 'a' listens (socket server), 'b' connects (client);
+            # both boot the link's attach_dtb (which enables the spare link UART).
+            node_uart: dict[str, list[str]] = {n.name: [] for n in lab.nodes}
+            node_dtb: dict[str, str] = {}
+            uart_i = 0
+            for link in lab.links:
+                if link.type != "uart":
+                    continue
+                ap = node_profiles.get(link.a)
+                bp = node_profiles.get(link.b)
+                arole = getattr(getattr(ap, "uart", None), "link", None) if ap else None
+                brole = getattr(getattr(bp, "uart", None), "link", None) if bp else None
+                if not arole or not brole:
+                    missing = link.a if not arole else link.b
+                    running.node_errors[missing] = (
+                        f"uart link {link.a}<->{link.b}: '{missing}' profile lacks a "
+                        f"uart.link role (confirm with the emulator session, §7)")
+                    continue
+                sock = str(sock_dir / f"uart-{lab.id}-{uart_i}.sock")
+                cid = f"hbuart{uart_i}"
+                node_uart[link.a] += _uart_args(arole, cid, sock, server=True)   # a listens
+                node_uart[link.b] += _uart_args(brole, cid, sock, server=False)  # b connects
+                if arole.attach_dtb:
+                    node_dtb[link.a] = arole.attach_dtb
+                if brole.attach_dtb:
+                    node_dtb[link.b] = brole.attach_dtb
+                running.usb_socks.append(sock)   # socket-cleanup list (unlinked on teardown)
+                running.node_links.setdefault(link.a, []).append(f"uart<->{link.b}@{sock}")
+                running.node_links.setdefault(link.b, []).append(f"uart<->{link.a}@{sock}")
+                uart_i += 1
+
             # 3) Launch each node as a Session with its fabric NICs.
             any_ok = False
             for node in lab.nodes:
@@ -234,6 +275,8 @@ class LabCoordinator:
                     session = await self.manager.launch(
                         profile, asset_dir=asset_dir, owner=owner, minutes=minutes,
                         nic_override=nics, usb_override=(node_usb[node.name] or None),
+                        uart_link_override=(node_uart[node.name] or None),
+                        dtb_override=node_dtb.get(node.name),
                     )
                     session.lab_id = lab.id
                     session.lab_node = node.name

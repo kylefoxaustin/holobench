@@ -1,0 +1,15 @@
+# SPDX-License-Identifier: GPL-2.0-or-later
+# UART board-to-board link — two i.MX91 boards bridged over their spare LPUART2
+# (/dev/ttyLP1) by a stock socket chardev (one end server, one end client). The
+# holobench version of 91emulator's proven run-uart.sh (LPUART2<->socket<->LPUART2,
+# byte-exact between two i.MX91 guests). Each node boots the LPUART2-enabled dtb
+# (imx91-11x11-evk-uartlink.dtb); the coordinator allocates the socket + wires
+# serial_hd(1) on each end. See docs/TOPOLOGIES.md §UART.
+id:           uart-link-91
+display_name: "UART link — two i.MX91 over LPUART2"
+description:  "Two i.MX91 boards bridged over LPUART2 (/dev/ttyLP1) via a socket chardev — board-to-board serial, byte-exact."
+nodes:
+  - { name: boardA, profile: imx91-evk-sd }
+  - { name: boardB, profile: imx91-evk-sd }
+links:
+  - { type: uart, a: boardA, b: boardB }

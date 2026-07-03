@@ -111,10 +111,25 @@ This is the contract holobench will implement in the `LabCoordinator` the moment
 device enumerates end-to-end through the host (M1). 93/MCX: align your two ends to
 it and the lab is a drop-in.
 
+### UART — ✅ stock QEMU, DELIVERED 2026-07-03
+A board-to-board serial bridge: each board's **spare link UART** wired to a stock
+`-chardev socket` (one end `server=on`, the other `server=off`) + `-serial
+chardev:<id>`, landing on the next `serial_hd()` after the declared consoles.
+Symmetric point-to-point. Lab: `{ type: uart, a: <node>, b: <node> }`.
+
+Per-board facts live in the profile's `uart.link` block (chardev template + the
+guest device + an `attach_dtb` that ENABLES the link UART, since many EVK dtbs
+leave the spare UART disabled). For i.MX91 the link UART is **LPUART2**
+(`serial@44390000`, `/dev/ttyLP1`, `serial_hd(1)`); `tools/make-uart-dtb.sh`
+generates `imx91-11x11-evk-uartlink.dtb` (flips `serial@44390000` disabled→okay,
+no model change). **Validated** through the coordinator (`uart-link-91`): a payload
+crossed boardA → LPUART2 → socket → LPUART2 → boardB **byte-exact** between two
+i.MX91 guests — the coordinator-launched version of 91emulator's `run-uart.sh`.
+
 ### Future links
-`can` (`-object can-bus` shared across procs), a second `serial` cross-link,
-SPI/I2C bridges — same pattern: stock transport + per-board facts, never a custom
-device.
+`can` (`-object can-bus` shared across procs), **SPI** (LPSPI cross-instance
+bridge — 91 building the model side), I2C bridges — same pattern: stock transport
++ per-board facts, never a custom device.
 
 ## Architecture
 
