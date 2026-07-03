@@ -363,11 +363,13 @@ def cmd_labs(_args: argparse.Namespace) -> int:
     for lid in ids:
         try:
             lab = load_lab(lid)
-            usb = " [USB: gated]" if lab.has_usb_links() else ""
-            segs = sum(1 for l in lab.links if l.type == "eth")
-            print(f"{lid:14}  {lab.display_name:42}  {len(lab.nodes)} nodes, {segs} eth seg{usb}")
+            # link types present, in a stable order (eth/usb/uart/spi/can)
+            order = ["eth", "usb", "uart", "spi", "can"]
+            kinds = sorted({l.type for l in lab.links}, key=lambda t: order.index(t) if t in order else 99)
+            links = f"  [{'+'.join(kinds)}]" if kinds else ""
+            print(f"{lid:16}  {lab.display_name:46}  {len(lab.nodes)} nodes{links}")
         except LabError as exc:
-            print(f"{lid:14}  <invalid: {exc}>")
+            print(f"{lid:16}  <invalid: {exc}>")
     return 0
 
 

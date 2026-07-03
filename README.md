@@ -111,6 +111,7 @@ QEMU i.MX SoC models, through stock interfaces only.
 | 6 | Hardening — auth (token expiry, login throttle, WS-origin, persistent key), **per-session cgroup v2 caps** (memory/pids/cpu), asset-path lockdown, audit log, [deploy guide](docs/DEPLOY.md) | ◐ optional netns/mount-ns next |
 | 6+ | **Accounts & admin** — self-service register / first-run onboarding, user management (add / remove / set-role), and an **admin fleet view**: every running board across all users with per-board CPU (per-core + % of host) / RAM / disk / idle + one-click **kill** | ✅ |
 | 🧰 | **Build me a board** — build the real NXP BSP in a container (you accept the EULA; Holobench hosts/accepts nothing): pick the **image depth** (core / multimedia / full, per SoC), **pre-cache** sources for offline & restart-safe builds, SSD-backed. All 3 SoCs × 3 depths build clean. | ✅ |
+| 🔗 | **Connect boards — multi-board labs (v3.0)** — wire 2+ boards over a real bus and message-pass between them: **eth / USB / UART / SPI / CAN**, all stock QEMU sockets (no host `vcan`/root/custom device), all validated byte-exact. See *[Connect two boards](#connect-two-boards-multi-board-labs)*. | ✅ |
 
 Boards: **i.MX 91 / 93 / 95**, each in two flavors — a quick **busybox** profile
 and a **full BSP distro** (`-sd`) profile that boots the real NXP `.wic`. All
@@ -123,6 +124,14 @@ choosing, impossible on a fixed physical board farm). Validated byte-exact on al
 three. See the **Camera** panel; each board ships its exact capture recipe.
 
 ## Quickstart
+
+> **Before your first boot you need, per board:** (1) a **built QEMU fork** that
+> registers the machine — the companion repos, see *[Related repos](#related-repos-the-boards-holobench-drives)*
+> (each profile's `qemu.binary` points at it); and (2) its **boot artifacts**
+> (`Image` / `dtb` / `.wic`) in `assets/<profile-id>/` — build them with *Build me
+> a board* (below) or supply your own. `holobench serve` starts the UI right away;
+> *Reserve & Boot* is the step that needs those two things. Running **two** boards
+> (e.g. i.MX95 + i.MX93) means a QEMU fork + artifacts for **each**.
 
 ```bash
 cd backend && python -m venv ../.venv && . ../.venv/bin/activate
@@ -144,7 +153,10 @@ CLI (headless, no UI):
 holobench profiles                    # list boards
 holobench command imx91-evk           # preview the resolved QEMU command line
 holobench launch imx91-evk --hold 30  # boot + prove QMP control, print console
+holobench console imx95-evk-sd        # host-terminal access: PuTTY/screen serial + SSH
 holobench ps | status | reset | stop  # act on a running session by id
+holobench labs                        # list multi-board labs (topologies)
+holobench lab launch gateway-lab      # boot a whole lab + wire the boards together
 ```
 
 ## Two flavors per board: quick busybox, or the real BSP distro
@@ -179,6 +191,43 @@ Golden distro images live at `assets/<profile-id>/disk.wic` (the BSP `.wic`);
 `tools/make-golden-disk.sh` builds a small data disk for the same overlay/reset
 mechanism. Want it fully self-contained? `docker/build.sh imx95-evk-sd` bakes the
 forked QEMU + M33 firmware + the distro image into one runnable container (below).
+
+## Connect two boards: multi-board labs
+
+A single board is the start. Holobench also wires **2+ boards together over a real
+bus** and lets them message-pass — the thing a physical bench needs cables and a
+second EVK to do. A **lab** is a small YAML topology (`labs/*.yaml`): board nodes +
+the links between them. The coordinator launches every node and bridges each link
+over a **stock QEMU socket** — no host `vcan`, no root, no custom device.
+
+```bash
+holobench labs                         # list the shipped labs
+holobench lab launch gateway-lab       # boot the lab + wire the boards together
+```
+
+**Five link types, all stock QEMU, all validated byte-exact:**
+
+| Link | How it's bridged | Guest sees | Example lab (boards) |
+|---|---|---|---|
+| **eth** | mcast socket = a virtual switch | `eth0` (any pair or group) | `lan-trio` (**i.MX93 ↔ i.MX95**), `eth-pair` |
+| **USB** | usbredir, host ↔ CDC gadget | `/dev/ttyACM0` (USB serial) | `gateway-lab` (i.MX93 ↔ MCXN947) |
+| **UART** | LPUART ↔ socket ↔ LPUART | `/dev/ttyLP1` | `uart-link-91` (i.MX91 ↔ i.MX91) |
+| **SPI** | `spi-link` SSI bridge over a socket | `/dev/spidev0.0` | `spi-link-91-mcx` (i.MX91 ↔ MCXN947) |
+| **CAN** | `can-host-chardev` over a socket | `can0` | `can-link-91` (i.MX91 ↔ i.MX91) |
+
+**Want two boards to message-pass? Match the transport to what's available:**
+- **Ethernet works for any pair today — including i.MX95 ↔ i.MX93** (`lan-trio`).
+  Run sockets / whatever protocol you like over `eth0`. This is the go-to for
+  95↔93 message-passing right now.
+- **USB is a *host ↔ device* link** — one end must be a USB **gadget**. Today the
+  gadget is the **MCXN947** (a CDC-ACM `/dev/ttyACM0`), so `gateway-lab` =
+  **i.MX93 (host) ↔ MCXN947 (gadget)**. A **95↔93 USB** link would need a USB
+  device/gadget role on a 93 or 95 model — that's an emulator-side capability
+  (§7) that isn't available yet, so **for 95↔93 use the eth link above**.
+
+Adding a board to a link, or a whole new link type, is a small profile block — no
+code. Full detail (the socket contracts + how to author your own lab):
+**[`docs/TOPOLOGIES.md`](docs/TOPOLOGIES.md)**.
 
 ## Build a board image yourself (the *Build me a board* wizard)
 
@@ -410,9 +459,11 @@ emulation). Runs **open** by default; add `-e HOLOBENCH_ADMIN_USER=admin
 ```
 holobench/
   README.md  CLAUDE.md  ROADMAP.md
-  docs/        ARCHITECTURE.md  BOARD_PROFILES.md
+  docs/        ARCHITECTURE.md  BOARD_PROFILES.md  TOPOLOGIES.md (multi-board labs)
   profiles/    imx9{1,3,5}-evk.yaml (busybox initramfs)
-               imx9{1,3,5}-evk-sd.yaml (full BSP distro, disk boot)  virt-smoke.yaml
+               imx9{1,3,5}-evk-sd.yaml (full BSP distro, disk boot)
+               mcxn947-*.yaml (USB/SPI gadget nodes)  virt-smoke.yaml
+  labs/        *.yaml — multi-board topologies (eth/USB/UART/SPI/CAN links)
   backend/     pyproject.toml
     holobench/ profiles/ (models+loader)  session/ (command+manager+control)
                bridges/ (console tap)  api/ (FastAPI app)  cli.py
