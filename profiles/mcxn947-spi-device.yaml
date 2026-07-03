@@ -1,0 +1,78 @@
+# Holobench board profile — MCXN947 as a board-to-board SPI node (mixed-SoC SPI lab).
+#
+# The SPI counterpart to mcxn947-usb-device: same frdm-mcxn947 binary/machine, but
+# boots the bare-metal SPI-link firmware and exposes its FlexComm5 LPSPI as the
+# `mcxn-lpspi` SSI bus, so the model's `spi-link` bridge peripheral carries SPI
+# words to a peer board over a socket. Facts from the mcxn947qemu session (bus
+# 2026-07-03, commit 582f7ef06e); proven 3-tree interoperable — 91<->MCX SPI
+# cross-check byte-exact both directions (Linux fsl-lpspi master <-> bare-metal
+# M33 master over one spi_link.c transport).
+#
+#   qemu-system-arm -M frdm-mcxn947 -serial null \
+#     -chardev socket,id=spil,path=<sock>,server=on,wait=off \
+#     -device spi-link,bus=mcxn-lpspi,chardev=spil \
+#     -kernel tests/mcxn-spi-link/spilink.elf
+#
+# The firmware auto-clocks a 0x5A MOSI stream out and collects a 0xA5-framed reply
+# in (MISO), adaptively paced to the async spi-link FIFO — so it syncs across the
+# peer's boot-offset window (a Linux peer boots slower). Bare-metal M33, no Linux,
+# no dtb; the guest SPI node is the FlexComm5 LPSPI regs @ 0x400B5000.
+
+id:           mcxn947-spi-device
+display_name: "NXP MCXN947 (SPI-link node)"
+soc:          "NXP MCXN947"
+description:  "MCXN947 booting the bare-metal spi-link firmware (spilink.elf) — an SPI board-to-board node (FlexComm5 LPSPI over the spi-link SSI bridge)."
+
+qemu:
+  binary:  /home/kyle/Documents/GitHub/mcxn947qemu/build/qemu-system-arm
+  machine: frdm-mcxn947
+  memory:  null
+  audio:   none
+  extra_args:
+    - "-no-reboot"
+
+boot:
+  mode: firmware-elf
+  artifacts:
+    firmware: /home/kyle/Documents/GitHub/mcxn947qemu/tests/mcxn-spi-link/spilink.elf
+    kernel:   null
+    dtb:      null
+    initrd:   null
+    rootfs:   null
+    disk:     null
+  append: null
+  command_template: null
+
+serial:
+  - { name: "LPUART4 console", chardev: console0, role: mcu-console, default: true }
+
+display: { enabled: false, device: null, vnc: false }
+
+net: { user_nics: 0, fabric_nic_model: mcxn-enet }
+
+# SPI board-to-board: the model exposes FlexComm5 LPSPI as the SSI bus `mcxn-lpspi`;
+# holobench supplies a `-device spi-link,bus=mcxn-lpspi` + the socket chardev (stock).
+# No attach_dtb — bare-metal firmware, no device tree. Master role; the peer is the
+# other end of the socket.
+spi:
+  link:
+    device:  "spi-link,bus=mcxn-lpspi,chardev={id}"
+    chardev: "socket,id={id},path={path}"    # coordinator adds server=on,wait=off / server=off,reconnect-ms=1000
+    dev:     "FlexComm5 LPSPI @ 0x400B5000"
+
+file_injection:
+  nine_p: { enabled: false, mount_tag: holobench }
+  tftp:   { enabled: false }
+  nfs:    { enabled: false }
+  image_swap: { enabled: false, target_drive: null }
+
+power: { warm_reset: true, cold_cycle: true, pause: true, reinstall: false }
+
+introspection:
+  qmp_events: true
+  memory_map: true
+  device_tree: true
+  gdbstub: { enabled: true }
+  snapshots: false
+
+reservation: { default_minutes: 30, max_minutes: 120 }

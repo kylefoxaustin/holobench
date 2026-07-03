@@ -1,0 +1,16 @@
+# SPDX-License-Identifier: GPL-2.0-or-later
+# Mixed-SoC SPI link — i.MX91 (Linux fsl-lpspi) <-> MCXN947 (bare-metal M33) over
+# the shared spi_link.c transport. The cross-SoC proof: one spi-link socket bridge
+# carries SPI words between a full-Linux spidev master and a bare-metal M33 master.
+# Mirrors 91emulator's 91<->MCX cross-check (byte-exact both directions). The MCX
+# node ('mcx') is the socket server + boots spilink.elf (auto-clocks + adaptively
+# paces across the Linux peer's boot window); the i.MX91 ('board91') is the client,
+# LPSPI1 via /dev/spidev0.0. See docs/TOPOLOGIES.md §SPI.
+id:           spi-link-91-mcx
+display_name: "SPI link — i.MX91 <-> MCXN947 (mixed-SoC)"
+description:  "Cross-SoC SPI: i.MX91 (Linux /dev/spidev0.0) bridged to an MCXN947 (bare-metal M33) over the spi-link socket transport."
+nodes:
+  - { name: mcx,     profile: mcxn947-spi-device }
+  - { name: board91, profile: imx91-evk-sd }
+links:
+  - { type: spi, a: mcx, b: board91 }
