@@ -79,7 +79,7 @@ class _FakeManager:
     async def launch(self, profile, *, asset_dir=None, owner=None, minutes=None,
                      nic_override=None, usb_override=None, uart_link_override=None,
                      spi_link_override=None, can_link_override=None,
-                     machine_extra=None, dtb_override=None):
+                     machine_extra=None, append_extra=None, dtb_override=None):
         if profile.id in self._fail:
             raise RuntimeError(f"boom:{profile.id}")
         self._n += 1
@@ -88,6 +88,7 @@ class _FakeManager:
         s.spi_link_override = spi_link_override
         s.can_link_override = can_link_override
         s.machine_extra = machine_extra
+        s.append_extra = append_extra
         s.dtb_override = dtb_override
         self.launches.append(s)
         return s
@@ -111,6 +112,37 @@ def test_eth_lab_wires_one_mcast_nic_per_member():
     assert len(macs) == 2                        # unique per node (no collision)
     # Sessions tagged with their lab identity.
     assert all(s.lab_id == "eth-pair" and s.lab_node for s in mgr.launches)
+
+
+def test_auto_ip_assigns_static_addresses_and_fabric_dtb():
+    # auto_ip (default) hands each eth-segment member a static IP via the kernel
+    # `ip=` cmdline (append_extra), and an i.MX95 node boots its net.fabric_dtb so
+    # ENETC actually enumerates eth0. Both distinct addresses on one /24.
+    mgr = _FakeManager()
+    coord = LabCoordinator(mgr)
+    running = asyncio.run(coord.launch(load_lab("lan-trio")))   # 2x imx95 + 1x imx93
+    by_node = {s.lab_node: s for s in mgr.launches}
+    ips = {}
+    for name, s in by_node.items():
+        assert s.append_extra and s.append_extra.startswith("ip=")
+        assert ":eth0:off" in s.append_extra
+        ips[name] = s.append_extra.split("ip=")[1].split(":")[0]
+    assert len(set(ips.values())) == 3                          # distinct addresses
+    assert all(ip.startswith("10.") for ip in ips.values())    # same /24 family
+    # the i.MX95 nodes boot the ENETC fixed-link dtb; the i.MX93 (FEC binds) doesn't
+    assert by_node["a95"].dtb_override == "imx95-19x19-evk-enetc.dtb"
+    assert by_node["b95"].dtb_override == "imx95-19x19-evk-enetc.dtb"
+    assert by_node["c93"].dtb_override is None
+    # node_ips is exposed for the CLI/UI
+    assert set(running.node_ips) == {"a95", "b95", "c93"}
+
+
+def test_auto_ip_off_leaves_a_bare_wire():
+    mgr = _FakeManager()
+    coord = LabCoordinator(mgr)
+    running = asyncio.run(coord.launch(load_lab("eth-pair"), auto_ip=False))
+    assert all(s.append_extra is None for s in mgr.launches)
+    assert running.node_ips == {}
 
 
 def test_separate_segments_get_isolated_groups():

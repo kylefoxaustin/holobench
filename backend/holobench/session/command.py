@@ -91,6 +91,10 @@ class SessionRuntime:
     # Extra `-machine` properties a fabric link needs (e.g. CAN's canbus0=cb,
     # canbus1=cb wiring the machine's can-buses to the bridged bus). None = normal.
     machine_extra: Optional[str] = None
+    # Extra kernel cmdline appended to -append (e.g. a lab's `ip=<addr>::…:eth0:off`
+    # to auto-configure a fabric NIC — the kernel IP-Config on busybox, or
+    # systemd-network-generator on the full distro, both honor it). None = normal.
+    append_extra: Optional[str] = None
     # Boot a specific dtb instead of the profile default (e.g. the LPUART2-enabled
     # dtb a UART link needs, or the LPSPI+spidev dtb an SPI link needs). Wins over
     # the LCD/camera dtb selection. None = normal.
@@ -170,8 +174,11 @@ def _boot_args(profile: Profile, rt: SessionRuntime) -> list[str]:
                 args += ["-dtb", dtb]
             if initrd:
                 args += ["-initrd", initrd]
-            if boot.append:
-                args += ["-append", boot.append]
+            append = boot.append or ""
+            if rt.append_extra:                # e.g. a lab's `ip=…:eth0:off`
+                append = (append + " " + rt.append_extra).strip()
+            if append:
+                args += ["-append", append]
     elif boot.mode is BootMode.firmware_elf:
         # Bare-metal/RTOS firmware on a Cortex-M MCU: QEMU loads the ELF and the
         # core boots from the Armv8-M vector table (SP@0x0, reset@0x4). No dtb, no

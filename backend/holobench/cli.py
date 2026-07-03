@@ -392,8 +392,9 @@ async def _lab_launch(args: argparse.Namespace) -> int:
     mgr = SessionManager()
     coord = LabCoordinator(mgr)
     print(f"launching lab: {lab.display_name}  ({len(lab.nodes)} nodes)")
+    auto_ip = not getattr(args, "no_auto_ip", False)
     try:
-        running = await coord.launch(lab)
+        running = await coord.launch(lab, auto_ip=auto_ip)
     except LabError as exc:
         _print_err(str(exc))
         return 1
@@ -402,12 +403,16 @@ async def _lab_launch(args: argparse.Namespace) -> int:
         sid = running.node_sessions.get(node.name)
         if sid:
             s = mgr.get(sid)
-            fabric = [a for a in s.argv if "socket,mcast" in a]
-            print(f"  {node.name:8} {node.profile:14} pid={s.pid} {s.state.value}")
-            for f in fabric:
-                print(f"           fabric: {f}")
+            ip = running.node_ips.get(node.name)
+            iptag = f"  ip={ip}" if ip else ""
+            print(f"  {node.name:8} {node.profile:16} pid={s.pid} {s.state.value}{iptag}")
         else:
-            print(f"  {node.name:8} {node.profile:14} FAILED: {running.node_errors.get(node.name)}")
+            print(f"  {node.name:8} {node.profile:16} FAILED: {running.node_errors.get(node.name)}")
+    if running.node_ips:
+        print("auto-IP: eth nodes are pre-configured on their segment (kernel ip=), ready to ping.")
+    elif any(l.type == "eth" for l in lab.links):
+        print("no auto-IP (--no-auto-ip): eth nodes come up with link-up but NO address —")
+        print("  assign one in-console, e.g.  ip addr add 10.0.0.1/24 dev eth0 && ip link set eth0 up")
     rc = 0
     try:
         if args.hold:
@@ -522,6 +527,8 @@ def build_parser() -> argparse.ArgumentParser:
     ll.add_argument("id")
     ll.add_argument("--hold", type=float, default=0.0, help="keep the lab up N seconds")
     ll.add_argument("--keep", action="store_true", help="do not stop the lab at the end")
+    ll.add_argument("--no-auto-ip", action="store_true",
+                    help="don't auto-assign eth IPs — boards come up link-only, you set them in-console")
     ll.set_defaults(func=cmd_lab_launch)
 
     p = sub.add_parser("serve", help="run the Holobench web backend (REST + console WS + UI)")

@@ -112,6 +112,7 @@ class RunningLab:
         self.node_errors: dict[str, str] = {}     # node name -> launch error
         # node name -> list of "segment@group:port" it joined (for status/UI edges)
         self.node_links: dict[str, list[str]] = {}
+        self.node_ips: dict[str, str] = {}        # node -> auto-assigned eth IP (if auto_ip)
         self.usb_socks: list[str] = []            # per-usb-link sockets (for teardown)
 
     @property
@@ -174,7 +175,7 @@ class LabCoordinator:
 
     # --- lifecycle ---------------------------------------------------------
     async def launch(self, lab: Lab, *, owner: Optional[str] = None,
-                     minutes: Optional[int] = None) -> RunningLab:
+                     minutes: Optional[int] = None, auto_ip: bool = True) -> RunningLab:
         if lab.id in self._labs:
             raise LabError(f"lab '{lab.id}' is already running")
 
@@ -200,10 +201,20 @@ class LabCoordinator:
                 except Exception as exc:
                     running.node_errors[node.name] = str(exc)
 
+            # Per-node dtb override + kernel-cmdline extra, filled by the wiring
+            # below (a fabric NIC / link UART that needs a specific dtb, or an
+            # auto-assigned IP). Shared across the eth/usb/uart/spi/can loops.
+            node_dtb: dict[str, str] = {}
+            node_append: dict[str, str] = {}
+
             # 2) Build each node's nic_override (one socket NIC per segment it joins).
             # Append model=<fabric_nic_model> when the board needs it to bind the
             # right modeled NIC (MCXN947 ENET-QoS, i.MX9 FEC); else QEMU auto-attaches.
+            # A board whose fabric NIC needs a specific dtb to enumerate (i.MX95
+            # ENETC) boots net.fabric_dtb. Track each segment's members (in order) so
+            # auto_ip can hand out addresses on the shared subnet.
             node_nics: dict[str, list[str]] = {n.name: [] for n in lab.nodes}
+            seg_members: dict[str, list[str]] = {}
             for link in lab.links:
                 if link.type != "eth":
                     continue
@@ -216,8 +227,33 @@ class LabCoordinator:
                             f"mac={_mac(running.lab_idx, node_idx[member], nic_i)}"
                             + (f",model={model}" if model else ""))
                     node_nics[member].append(spec)
+                    fabric_dtb = getattr(prof.net, "fabric_dtb", None) if prof else None
+                    if fabric_dtb:
+                        node_dtb[member] = fabric_dtb
+                    seg_members.setdefault(link.segment, [])
+                    if member not in seg_members[link.segment]:
+                        seg_members[link.segment].append(member)
                     running.node_links.setdefault(member, []).append(
                         f"{link.segment}@{group}:{_MCAST_PORT}")
+
+            # 2a) Auto-assign a static IP per eth-segment member (kernel `ip=` on the
+            # fabric NIC = eth0) so boards come up ping-ready — the segment is a bare
+            # L2 switch with no DHCP. Subnet 10.<group-octet>.0.0/24, member i -> .(i+1).
+            # The kernel IP-Config sets eth0 before userspace; on the full-distro (-sd)
+            # boards systemd-networkd would otherwise re-take eth0 and DHCP-flush the
+            # static IP (there's no network-generator to honor `ip=`), so we mask it —
+            # then the kernel config stands (as on busybox, which ignores the mask).
+            # Off (auto_ip=False) -> a bare wire; the dev assigns IPs in-console.
+            if auto_ip:
+                for seg, members in seg_members.items():
+                    octet = seg_group[seg].rsplit(".", 1)[1]
+                    for i, m in enumerate(members):
+                        ip = f"10.{octet}.0.{i + 1}"
+                        node_append[m] = (
+                            f"ip={ip}::0.0.0.0:255.255.255.0:{m}:eth0:off "
+                            f"systemd.mask=systemd-networkd.service "
+                            f"systemd.mask=systemd-networkd.socket").strip()
+                        running.node_ips[m] = f"{ip}/24"
 
             # 2b) Build each node's usb_override (one usbredir link at a time).
             # The DEVICE end is the exporter/listener, the HOST end is the stock
@@ -256,8 +292,7 @@ class LabCoordinator:
             # Symmetric: endpoint 'a' listens (socket server), 'b' connects (client);
             # both boot the link's attach_dtb (which enables the spare link UART).
             node_uart: dict[str, list[str]] = {n.name: [] for n in lab.nodes}
-            node_dtb: dict[str, str] = {}
-            uart_i = 0
+            uart_i = 0   # node_dtb is defined once above (shared across all links)
             for link in lab.links:
                 if link.type != "uart":
                     continue
@@ -365,6 +400,7 @@ class LabCoordinator:
                         spi_link_override=(node_spi[node.name] or None),
                         can_link_override=(node_can[node.name] or None),
                         machine_extra=node_machine.get(node.name),
+                        append_extra=node_append.get(node.name),
                         dtb_override=node_dtb.get(node.name),
                     )
                     session.lab_id = lab.id

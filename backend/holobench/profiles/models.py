@@ -142,6 +142,12 @@ class NetSpec(_Strict):
     # ENET-QoS = "mcxn-enet", the i.MX9 FEC = "imx.enet" to avoid the eQOS stub).
     # None = let QEMU auto-attach the first modeled NIC (works for the i.MX91 PoC).
     fabric_nic_model: Optional[str] = None
+    # v3.0 fabric: a dtb the board must boot for its fabric NIC to bind on an eth
+    # segment. Needed when the stock EVK dtb doesn't enumerate the NIC (i.MX95's
+    # ENETC points at unmodeled external PHYs -> deferred-probe -> no eth0; the
+    # fixed-link dtb from tools/make-enetc-dtb.sh fixes it). None = base dtb is fine
+    # (i.MX91/93 FEC binds out of the box). Confirmed per board with the emulator (§7).
+    fabric_dtb: Optional[str] = None
 
 
 # --- USB inter-board link (v3.0 fabric) ------------------------------------

@@ -95,7 +95,10 @@ display:
 # AND attach a `-nic ...,model=fsl-enetc` backend. Validated: eth0 up @10Gbps +
 # eth1 @1Gbps (fixed-link). (`holobench console` uses a stock virtio-net for SSH
 # instead — board-agnostic + no dtb swap — but the real ENETC path is available.)
-net: { user_nics: 1 }
+net:
+  user_nics: 1
+  fabric_nic_model: fsl-enetc                    # the mcast NIC binds the ENETC port
+  fabric_dtb: imx95-19x19-evk-enetc.dtb          # fixed-link dtb so ENETC enumerates eth0 (else deferred-probe)
 
 file_injection:
   nine_p: { enabled: true, mount_tag: holobench, device: virtio-9p-device }

@@ -131,6 +131,7 @@ class Session:
         spi_link_override: Optional[list[str]] = None,
         can_link_override: Optional[list[str]] = None,
         machine_extra: Optional[str] = None,
+        append_extra: Optional[str] = None,
         dtb_override: Optional[str] = None,
         qemu_binary: Optional[str] = None,
     ) -> None:
@@ -209,6 +210,7 @@ class Session:
             spi_link_override=spi_link_override,
             can_link_override=can_link_override,
             machine_extra=machine_extra,
+            append_extra=append_extra,
             dtb_override=dtb_override,
             qemu_binary=qemu_binary,
         )
@@ -687,6 +689,7 @@ class SessionManager:
         spi_link_override: Optional[list[str]] = None,
         can_link_override: Optional[list[str]] = None,
         machine_extra: Optional[str] = None,
+        append_extra: Optional[str] = None,
         dtb_override: Optional[str] = None,
         qemu_binary: Optional[str] = None,
     ) -> Session:
@@ -698,7 +701,8 @@ class SessionManager:
                 minutes=minutes, lcd_attached=lcd_attached, nic_override=nic_override,
                 usb_override=usb_override, uart_link_override=uart_link_override,
                 spi_link_override=spi_link_override, can_link_override=can_link_override,
-                machine_extra=machine_extra, dtb_override=dtb_override,
+                machine_extra=machine_extra, append_extra=append_extra,
+                dtb_override=dtb_override,
                 qemu_binary=qemu_binary,
             )
             await session.launch()
