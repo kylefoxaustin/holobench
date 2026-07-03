@@ -1,3 +1,7 @@
+<p align="center">
+  <img src="docs/img/holobench-hero.png" alt="Holobench — reserve a virtual board, console in, wire them together" width="900">
+</p>
+
 # Holobench
 
 **A board-farm-style web front end for QEMU machine models. A "virtual EVK."**
