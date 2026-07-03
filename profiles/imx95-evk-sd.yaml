@@ -87,6 +87,14 @@ display:
   attach_dtb: imx95-19x19-evk-lcd.dtb
   attach_label: "1280×800 LVDS"
 
+# The i.MX95 NETC/ENETC is COMPUTES-tier (confirmed 95emulator 2026-07-03): it
+# binds real eth0/eth1/eth2 and carries traffic. The STOCK evk dtb points the 3
+# ENETC ports at external RGMII/10G PHYs (MDIO/AQR) that aren't modeled, so they
+# never probe on the base dtb. For a REAL ENETC netdev boot the fixed-link dtb
+# (tools/make-enetc-dtb.sh -> imx95-19x19-evk-enetc.dtb, wraps 95's netc/patch-dtb.py)
+# AND attach a `-nic ...,model=fsl-enetc` backend. Validated: eth0 up @10Gbps +
+# eth1 @1Gbps (fixed-link). (`holobench console` uses a stock virtio-net for SSH
+# instead — board-agnostic + no dtb swap — but the real ENETC path is available.)
 net: { user_nics: 1 }
 
 file_injection:
