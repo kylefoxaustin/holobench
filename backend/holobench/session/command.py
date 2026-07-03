@@ -77,8 +77,14 @@ class SessionRuntime:
     # the declared consoles so the link UART is the next serial_hd(). Built by the
     # lab coordinator from the profile's `uart:` block. None = no inter-board UART.
     uart_link_override: Optional[list[str]] = None
+    # v3.0 fabric (SPI): raw extra QEMU args wiring this board's spare LPSPI into a
+    # board-to-board SPI bridge — a stock `-chardev socket` + `-device spi-link`
+    # (the model's inter-QEMU SSI bridge peripheral). Appended verbatim; built by the
+    # lab coordinator from the profile's `spi:` block. None = no inter-board SPI.
+    spi_link_override: Optional[list[str]] = None
     # Boot a specific dtb instead of the profile default (e.g. the LPUART2-enabled
-    # dtb a UART link needs). Wins over the LCD/camera dtb selection. None = normal.
+    # dtb a UART link needs, or the LPSPI+spidev dtb an SPI link needs). Wins over
+    # the LCD/camera dtb selection. None = normal.
     dtb_override: Optional[str] = None
 
 
@@ -282,6 +288,12 @@ def build_command(profile: Profile, rt: SessionRuntime) -> list[str]:
     # device). Appended verbatim; the coordinator built them from the usb: profile.
     if rt.usb_override:
         argv += rt.usb_override
+
+    # v3.0 fabric (SPI): stock `-chardev socket` + `-device spi-link` inter-board
+    # SPI bridge args, appended verbatim; the coordinator built them from the spi:
+    # profile block.
+    if rt.spi_link_override:
+        argv += rt.spi_link_override
 
     # Image-swap: per-session qcow2 overlay over the golden disk. Guest writes hit
     # the overlay; the golden is never touched; "reinstall" = fresh overlay.

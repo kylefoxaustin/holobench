@@ -1,0 +1,16 @@
+# SPDX-License-Identifier: GPL-2.0-or-later
+# SPI board-to-board link — two i.MX91 boards bridged over their spare LPSPI1
+# (/dev/spidev0.0) by the model's `spi-link` SSI bridge peripheral over a socket
+# chardev (one end server, one end client). The holobench version of 91emulator's
+# proven run-spi.sh (LPSPI<->spi-link<->socket<->spi-link<->LPSPI, byte-exact
+# between two i.MX91 guests). Each node boots the LPSPI1-enabled dtb
+# (imx91-11x11-evk-spilink.dtb) and gets a `-device spi-link,bus=lpspi1`; the
+# coordinator allocates the socket + wires a=server, b=client. See docs/TOPOLOGIES.md §SPI.
+id:           spi-link-91
+display_name: "SPI link — two i.MX91 over LPSPI1"
+description:  "Two i.MX91 boards bridged over LPSPI1 (/dev/spidev0.0) via the spi-link SSI bridge + a socket chardev — board-to-board SPI, byte-exact."
+nodes:
+  - { name: boardA, profile: imx91-evk-sd }
+  - { name: boardB, profile: imx91-evk-sd }
+links:
+  - { type: spi, a: boardA, b: boardB }

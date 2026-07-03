@@ -126,10 +126,23 @@ no model change). **Validated** through the coordinator (`uart-link-91`): a payl
 crossed boardA → LPUART2 → socket → LPUART2 → boardB **byte-exact** between two
 i.MX91 guests — the coordinator-launched version of 91emulator's `run-uart.sh`.
 
+### SPI — ✅ stock transport, DELIVERED 2026-07-03
+A board-to-board SPI bridge: each board is an LPSPI master with the model's
+`spi-link` SSI bridge peripheral on its bus, socket-bridged to the peer
+(`-device spi-link,bus=<lpspi>,chardev=<id>` + `-chardev socket`, one server /
+one reconnecting client). Lab: `{ type: spi, a: <node>, b: <node> }`. The
+`spi-link` peripheral is provided by the board model (fleet-converged on 91's
+`spi_link.c`; 91/93/mcx all ship it) — holobench only passes `-device`, adding
+nothing to the model. Per-board facts in the profile's `spi.link` block; for
+i.MX91 the link controller is **LPSPI1** (`spi@44360000`, `/dev/spidev0.0`), and
+`tools/make-spi-dtb.sh` generates `imx91-11x11-evk-spilink.dtb` (enables lpspi1 +
+a spidev child). **Validated** through the coordinator (`spi-link-91`): both i.MX91
+bind `fsl_lpspi` (PIO) + expose `/dev/spidev0.0` over the live socket bridge.
+
 ### Future links
-`can` (`-object can-bus` shared across procs), **SPI** (LPSPI cross-instance
-bridge — 91 building the model side), I2C bridges — same pattern: stock transport
-+ per-board facts, never a custom device.
+`can` (`-object can-bus` / FlexCAN, the last transport on the fleet roadmap),
+I2C bridges — same pattern: stock transport + per-board facts, never a custom
+device.
 
 ## Architecture
 

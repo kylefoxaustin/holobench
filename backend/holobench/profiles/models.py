@@ -189,6 +189,29 @@ class UartCapability(_Strict):
     link: Optional[UartLink] = None
 
 
+class SpiLink(_Strict):
+    """How a board wires its spare LPSPI into a board-to-board SPI bridge
+    (docs/TOPOLOGIES.md §SPI). Each end is an LPSPI master with a `spi-link` SSI
+    bridge peripheral on its bus (a device the board model provides for inter-QEMU
+    SPI — holobench only passes `-device`, it adds nothing to the model). The
+    coordinator makes one end the socket server, the other the client. Stock
+    interfaces (a `-chardev socket` + `-device spi-link`).
+
+    `device` is the `-device spi-link,bus=<lpspi-bus>,chardev={id}` template;
+    `chardev` the base `-chardev socket` template; `attach_dtb` enables the LPSPI +
+    a spidev child. Facts confirmed by the emulator (§7)."""
+    device: str                        # e.g. "spi-link,bus=lpspi1,chardev={id}"
+    chardev: str                       # e.g. "socket,id={id},path={path}"
+    attach_dtb: Optional[str] = None   # dtb that enables the LPSPI + spidev child
+    dev: Optional[str] = None          # informational: the guest node (e.g. /dev/spidev0.0)
+
+
+class SpiCapability(_Strict):
+    """A board's SPI inter-board-link capability. `link` = the spare LPSPI this
+    board can bridge to a peer. Absent = this board can't be an SPI-link endpoint."""
+    link: Optional[SpiLink] = None
+
+
 # --- File injection --------------------------------------------------------
 
 
@@ -323,6 +346,7 @@ class Profile(_Strict):
     net: NetSpec = Field(default_factory=NetSpec)
     usb: Optional[UsbCapability] = None        # v3.0 fabric: usbredir inter-board link role(s)
     uart: Optional[UartCapability] = None      # v3.0 fabric: UART board-to-board link role
+    spi: Optional[SpiCapability] = None        # v3.0 fabric: SPI board-to-board link role
     file_injection: FileInjection = Field(default_factory=FileInjection)
     camera: CameraSpec = Field(default_factory=CameraSpec)
     leds: list[LedSpec] = Field(default_factory=list)

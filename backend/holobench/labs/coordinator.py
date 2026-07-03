@@ -56,6 +56,15 @@ def _uart_args(role, cid: str, sock: str, *, server: bool) -> list[str]:
     spec += ",server=on,wait=off" if server else ",server=off"
     return ["-chardev", spec, "-serial", f"chardev:{cid}"]
 
+
+def _spi_args(role, cid: str, sock: str, *, server: bool) -> list[str]:
+    """Raw QEMU args for one end of an SPI board-to-board link: a `-chardev socket`
+    (listener when `server`, else a reconnecting connector) + `-device spi-link`
+    (the model's inter-QEMU SSI bridge on the board's LPSPI bus)."""
+    spec = role.chardev.format(id=cid, path=sock)
+    spec += ",server=on,wait=off" if server else ",server=off,reconnect-ms=1000"
+    return ["-chardev", spec, "-device", role.device.format(id=cid, path=sock)]
+
 # Multicast fabric: one group address per live segment (isolated L2 domains), a
 # shared port. 230.0.0.0/24 is an administratively-scoped, unrouted group block —
 # traffic stays on the host. Overridable for odd host network policies.
@@ -263,6 +272,38 @@ class LabCoordinator:
                 running.node_links.setdefault(link.b, []).append(f"uart<->{link.a}@{sock}")
                 uart_i += 1
 
+            # 2d) Build each node's spi_link_override (board-to-board SPI bridge).
+            # Symmetric: 'a' listens (socket server), 'b' connects (reconnecting
+            # client); both get a `-device spi-link` on their LPSPI bus + boot the
+            # link's attach_dtb (enables the LPSPI + a spidev child).
+            node_spi: dict[str, list[str]] = {n.name: [] for n in lab.nodes}
+            spi_i = 0
+            for link in lab.links:
+                if link.type != "spi":
+                    continue
+                ap = node_profiles.get(link.a)
+                bp = node_profiles.get(link.b)
+                arole = getattr(getattr(ap, "spi", None), "link", None) if ap else None
+                brole = getattr(getattr(bp, "spi", None), "link", None) if bp else None
+                if not arole or not brole:
+                    missing = link.a if not arole else link.b
+                    running.node_errors[missing] = (
+                        f"spi link {link.a}<->{link.b}: '{missing}' profile lacks a "
+                        f"spi.link role (confirm with the emulator session, §7)")
+                    continue
+                sock = str(sock_dir / f"spi-{lab.id}-{spi_i}.sock")
+                cid = f"hbspi{spi_i}"
+                node_spi[link.a] += _spi_args(arole, cid, sock, server=True)   # a listens
+                node_spi[link.b] += _spi_args(brole, cid, sock, server=False)  # b connects
+                if arole.attach_dtb:
+                    node_dtb[link.a] = arole.attach_dtb
+                if brole.attach_dtb:
+                    node_dtb[link.b] = brole.attach_dtb
+                running.usb_socks.append(sock)   # socket-cleanup list (unlinked on teardown)
+                running.node_links.setdefault(link.a, []).append(f"spi<->{link.b}@{sock}")
+                running.node_links.setdefault(link.b, []).append(f"spi<->{link.a}@{sock}")
+                spi_i += 1
+
             # 3) Launch each node as a Session with its fabric NICs.
             any_ok = False
             for node in lab.nodes:
@@ -276,6 +317,7 @@ class LabCoordinator:
                         profile, asset_dir=asset_dir, owner=owner, minutes=minutes,
                         nic_override=nics, usb_override=(node_usb[node.name] or None),
                         uart_link_override=(node_uart[node.name] or None),
+                        spi_link_override=(node_spi[node.name] or None),
                         dtb_override=node_dtb.get(node.name),
                     )
                     session.lab_id = lab.id

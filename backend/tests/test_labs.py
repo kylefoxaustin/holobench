@@ -78,12 +78,13 @@ class _FakeManager:
 
     async def launch(self, profile, *, asset_dir=None, owner=None, minutes=None,
                      nic_override=None, usb_override=None, uart_link_override=None,
-                     dtb_override=None):
+                     spi_link_override=None, dtb_override=None):
         if profile.id in self._fail:
             raise RuntimeError(f"boom:{profile.id}")
         self._n += 1
         s = _FakeSession(f"{profile.id}-{self._n}", nic_override, usb_override)
         s.uart_link_override = uart_link_override
+        s.spi_link_override = spi_link_override
         s.dtb_override = dtb_override
         self.launches.append(s)
         return s
@@ -203,6 +204,28 @@ def test_uart_lab_wires_symmetric_socket_bridge():
     # both boot the LPUART2-enabled dtb
     assert by_node["boardA"].dtb_override == "imx91-11x11-evk-uartlink.dtb"
     assert by_node["boardB"].dtb_override == "imx91-11x11-evk-uartlink.dtb"
+
+
+def test_spi_lab_wires_symmetric_socket_bridge():
+    # The spi-link-91 lab bridges two i.MX91 over LPSPI1: one end socket server,
+    # the other a reconnecting client, both with `-device spi-link,bus=lpspi1` and
+    # booting the LPSPI1+spidev dtb.
+    mgr = _FakeManager()
+    coord = LabCoordinator(mgr)
+    running = asyncio.run(coord.launch(load_lab("spi-link-91")))
+    assert running.state == LabState.RUNNING
+    by_node = {s.lab_node: s for s in mgr.launches}
+    a = by_node["boardA"].spi_link_override
+    b = by_node["boardB"].spi_link_override
+    assert any("spi-link,bus=lpspi1" in x for x in a)
+    assert any("spi-link,bus=lpspi1" in x for x in b)
+    assert any("server=on" in x for x in a)                     # boardA listens
+    assert any("server=off" in x and "reconnect-ms" in x for x in b)  # boardB reconnecting client
+    a_sock = a[a.index("-chardev") + 1].split("path=")[1].split(",")[0]
+    b_sock = b[b.index("-chardev") + 1].split("path=")[1].split(",")[0]
+    assert a_sock == b_sock
+    assert by_node["boardA"].dtb_override == "imx91-11x11-evk-spilink.dtb"
+    assert by_node["boardB"].dtb_override == "imx91-11x11-evk-spilink.dtb"
 
 
 def test_usb_lab_errors_when_a_profile_lacks_a_role():
