@@ -243,6 +243,26 @@ class CanCapability(_Strict):
     link: Optional[CanLink] = None
 
 
+class I2cLink(_Strict):
+    """How a board wires its LPI2C into a board-to-board I²C bridge
+    (docs/TOPOLOGIES.md §I2C). Each end is an LPI2C master with the model's
+    `i2c-link` target device at a fixed address on its bus; a write on one master
+    forwards over the socket to the peer, which reads it back byte-exact. The
+    coordinator makes one end the socket server, the other the client. Stock
+    interfaces (a `-chardev socket` + `-device i2c-link`); LPI2C3 + i2c-dev are
+    stock on the EVK dtb, so NO attach_dtb is needed. Facts confirmed by the
+    emulator (§7)."""
+    device: str                        # e.g. "i2c-link,bus=lpi2c3,address=0x42,chardev={id}"
+    chardev: str                       # e.g. "socket,id={id},path={path}"
+    dev: Optional[str] = None          # informational: the guest node (e.g. /dev/i2c-N, LPI2C3)
+
+
+class I2cCapability(_Strict):
+    """A board's I²C inter-board-link capability. `link` = the LPI2C this board can
+    bridge to a peer. Absent = this board can't be an I²C-link endpoint."""
+    link: Optional[I2cLink] = None
+
+
 # --- File injection --------------------------------------------------------
 
 
@@ -379,6 +399,7 @@ class Profile(_Strict):
     uart: Optional[UartCapability] = None      # v3.0 fabric: UART board-to-board link role
     spi: Optional[SpiCapability] = None        # v3.0 fabric: SPI board-to-board link role
     can: Optional[CanCapability] = None        # v3.0 fabric: CAN board-to-board link role
+    i2c: Optional[I2cCapability] = None        # v3.0 fabric: I2C board-to-board link role
     file_injection: FileInjection = Field(default_factory=FileInjection)
     camera: CameraSpec = Field(default_factory=CameraSpec)
     leds: list[LedSpec] = Field(default_factory=list)

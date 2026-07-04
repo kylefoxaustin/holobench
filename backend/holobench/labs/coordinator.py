@@ -66,6 +66,15 @@ def _spi_args(role, cid: str, sock: str, *, server: bool) -> list[str]:
     return ["-chardev", spec, "-device", role.device.format(id=cid, path=sock)]
 
 
+def _i2c_args(role, cid: str, sock: str, *, server: bool) -> list[str]:
+    """Raw QEMU args for one end of an I2C board-to-board link: a `-chardev socket`
+    (listener when `server`, else a reconnecting connector) + `-device i2c-link`
+    (the model's inter-QEMU I2C bridge target on the board's LPI2C bus)."""
+    spec = role.chardev.format(id=cid, path=sock)
+    spec += ",server=on,wait=off" if server else ",server=off,reconnect-ms=1000"
+    return ["-chardev", spec, "-device", role.device.format(id=cid, path=sock)]
+
+
 def _can_args(role, cid: str, sock: str, *, server: bool) -> list[str]:
     """Raw QEMU args for one end of a CAN board-to-board link: `-object can-bus` +
     a `-chardev socket` (listener when `server`, else a reconnecting connector) +
@@ -351,6 +360,33 @@ class LabCoordinator:
                 running.node_links.setdefault(link.b, []).append(f"spi<->{link.a}@{sock}")
                 spi_i += 1
 
+            # 2e2) Build each node's i2c_link_override (board-to-board I2C bridge).
+            # Symmetric: 'a' listens (server), 'b' reconnecting client. No attach_dtb
+            # (LPI2C3 + i2c-dev are stock on the EVK dtb).
+            node_i2c: dict[str, list[str]] = {n.name: [] for n in lab.nodes}
+            i2c_i = 0
+            for link in lab.links:
+                if link.type != "i2c":
+                    continue
+                ap = node_profiles.get(link.a)
+                bp = node_profiles.get(link.b)
+                arole = getattr(getattr(ap, "i2c", None), "link", None) if ap else None
+                brole = getattr(getattr(bp, "i2c", None), "link", None) if bp else None
+                if not arole or not brole:
+                    missing = link.a if not arole else link.b
+                    running.node_errors[missing] = (
+                        f"i2c link {link.a}<->{link.b}: '{missing}' profile lacks an "
+                        f"i2c.link role (confirm with the emulator session, §7)")
+                    continue
+                sock = str(sock_dir / f"i2c-{lab.id}-{i2c_i}.sock")
+                cid = f"hbi2c{i2c_i}"
+                node_i2c[link.a] += _i2c_args(arole, cid, sock, server=True)   # a listens
+                node_i2c[link.b] += _i2c_args(brole, cid, sock, server=False)  # b connects
+                running.usb_socks.append(sock)   # socket-cleanup list (unlinked on teardown)
+                running.node_links.setdefault(link.a, []).append(f"i2c<->{link.b}@{sock}")
+                running.node_links.setdefault(link.b, []).append(f"i2c<->{link.a}@{sock}")
+                i2c_i += 1
+
             # 2e) Build each node's can_link_override (board-to-board CAN bridge).
             # Symmetric: 'a' listens (socket server), 'b' connects (reconnecting
             # client); both get `-object can-bus` + `-object can-host-chardev`, and
@@ -398,6 +434,7 @@ class LabCoordinator:
                         nic_override=nics, usb_override=(node_usb[node.name] or None),
                         uart_link_override=(node_uart[node.name] or None),
                         spi_link_override=(node_spi[node.name] or None),
+                        i2c_link_override=(node_i2c[node.name] or None),
                         can_link_override=(node_can[node.name] or None),
                         machine_extra=node_machine.get(node.name),
                         append_extra=node_append.get(node.name),

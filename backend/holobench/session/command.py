@@ -82,6 +82,10 @@ class SessionRuntime:
     # (the model's inter-QEMU SSI bridge peripheral). Appended verbatim; built by the
     # lab coordinator from the profile's `spi:` block. None = no inter-board SPI.
     spi_link_override: Optional[list[str]] = None
+    # v3.0 fabric (I2C): raw extra QEMU args wiring this board's LPI2C into a
+    # board-to-board bridge — a stock `-chardev socket` + `-device i2c-link`.
+    # Appended verbatim; built from the i2c: profile block. None = no inter-board I2C.
+    i2c_link_override: Optional[list[str]] = None
     # v3.0 fabric (CAN): raw extra QEMU args wiring this board's FlexCAN into a
     # board-to-board CAN bridge — a stock `-object can-bus` + `-chardev socket` +
     # `-object can-host-chardev` (the fleet-shared generic CAN transport, no host
@@ -313,6 +317,11 @@ def build_command(profile: Profile, rt: SessionRuntime) -> list[str]:
     # profile block.
     if rt.spi_link_override:
         argv += rt.spi_link_override
+
+    # v3.0 fabric (I2C): stock `-chardev socket` + `-device i2c-link` inter-board
+    # I2C bridge args, appended verbatim; built from the i2c: profile block.
+    if rt.i2c_link_override:
+        argv += rt.i2c_link_override
 
     # v3.0 fabric (CAN): stock `-object can-bus` + `-chardev socket` + `-object
     # can-host-chardev` inter-board CAN bridge args, appended verbatim (the machine

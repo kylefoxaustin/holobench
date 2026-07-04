@@ -78,7 +78,7 @@ class _FakeManager:
 
     async def launch(self, profile, *, asset_dir=None, owner=None, minutes=None,
                      nic_override=None, usb_override=None, uart_link_override=None,
-                     spi_link_override=None, can_link_override=None,
+                     spi_link_override=None, i2c_link_override=None, can_link_override=None,
                      machine_extra=None, append_extra=None, dtb_override=None):
         if profile.id in self._fail:
             raise RuntimeError(f"boom:{profile.id}")
@@ -86,6 +86,7 @@ class _FakeManager:
         s = _FakeSession(f"{profile.id}-{self._n}", nic_override, usb_override)
         s.uart_link_override = uart_link_override
         s.spi_link_override = spi_link_override
+        s.i2c_link_override = i2c_link_override
         s.can_link_override = can_link_override
         s.machine_extra = machine_extra
         s.append_extra = append_extra
@@ -261,6 +262,26 @@ def test_spi_lab_wires_symmetric_socket_bridge():
     assert a_sock == b_sock
     assert by_node["boardA"].dtb_override == "imx91-11x11-evk-spilink.dtb"
     assert by_node["boardB"].dtb_override == "imx91-11x11-evk-spilink.dtb"
+
+
+def test_i2c_lab_wires_symmetric_socket_bridge():
+    # i2c-link-91: two i.MX91 over LPI2C3, one server / one reconnecting client,
+    # both with -device i2c-link,bus=lpi2c3. No dtb (stock EVK dtb enables LPI2C3).
+    mgr = _FakeManager()
+    coord = LabCoordinator(mgr)
+    running = asyncio.run(coord.launch(load_lab("i2c-link-91")))
+    assert running.state == LabState.RUNNING
+    by_node = {s.lab_node: s for s in mgr.launches}
+    a = by_node["boardA"].i2c_link_override
+    b = by_node["boardB"].i2c_link_override
+    assert any("i2c-link,bus=lpi2c3" in x for x in a)
+    assert any("i2c-link,bus=lpi2c3" in x for x in b)
+    assert any("server=on" in x for x in a)
+    assert any("server=off" in x and "reconnect-ms" in x for x in b)
+    a_sock = a[a.index("-chardev") + 1].split("path=")[1].split(",")[0]
+    b_sock = b[b.index("-chardev") + 1].split("path=")[1].split(",")[0]
+    assert a_sock == b_sock
+    assert by_node["boardA"].dtb_override is None   # no dtb patch needed for i2c
 
 
 def test_can_lab_wires_symmetric_socket_bridge():

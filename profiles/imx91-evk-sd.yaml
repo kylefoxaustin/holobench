@@ -111,6 +111,17 @@ can:
     machine_extra: "canbus0=cb,canbus1=cb"
     dev:           "can0"
 
+# v3.0 I2C fabric: i.MX91's LPI2C3 (i2c@42530000). Each end is an LPI2C master with
+# the model's i2c-link target device @0x42 on its bus, socket-bridged to the peer
+# (the analogue of spi-link for I2C — a bridged mailbox). LPI2C3 + i2c-dev are STOCK
+# on the EVK dtb, so NO attach_dtb is needed. Mirrors 93emulator's i2c-link (authored
+# there, carried on 91) / run-i2c.sh (byte-exact, LPI2C<->i2c-link<->socket).
+i2c:
+  link:
+    device:  "i2c-link,bus=lpi2c3,address=0x42,chardev={id}"
+    chardev: "socket,id={id},path={path}"    # coordinator adds server=on,wait=off / server=off,reconnect-ms=1000
+    dev:     "/dev/i2c-N (LPI2C3 @ i2c@42530000)"
+
 file_injection:
   nine_p: { enabled: true, mount_tag: holobench, device: virtio-9p-device }
   tftp:   { enabled: true }

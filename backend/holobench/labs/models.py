@@ -53,9 +53,9 @@ class LabLink(_Strict):
     @field_validator("type")
     @classmethod
     def _known_type(cls, v: str) -> str:
-        if v not in ("eth", "usb", "uart", "spi", "can"):
+        if v not in ("eth", "usb", "uart", "spi", "can", "i2c"):
             raise ValueError(
-                f"unknown link type '{v}' (expected 'eth', 'usb', 'uart', 'spi', or 'can')")
+                f"unknown link type '{v}' (expected 'eth', 'usb', 'uart', 'spi', 'can', or 'i2c')")
         return v
 
     @model_validator(mode="after")
@@ -74,7 +74,7 @@ class LabLink(_Strict):
                 raise ValueError("usb link needs both 'host' and 'device'")
             if self.host == self.device:
                 raise ValueError("usb link host and device must differ")
-        elif self.type in ("uart", "spi", "can"):
+        elif self.type in ("uart", "spi", "can", "i2c"):
             if not (self.a and self.b):
                 raise ValueError(f"{self.type} link needs both 'a' and 'b'")
             if self.a == self.b:

@@ -1,0 +1,16 @@
+# SPDX-License-Identifier: GPL-2.0-or-later
+# I2C board-to-board link — two i.MX91 boards bridged over their LPI2C3 by the
+# model's `i2c-link` target device over a socket chardev (one end server, one
+# client). The holobench version of the fleet's proven run-i2c.sh (LPI2C <->
+# i2c-link <-> socket <-> i2c-link <-> LPI2C, byte-exact between two i.MX91 guests).
+# i2c-link was authored on 93emulator (the 6th board-to-board transport) and carried
+# on 91; LPI2C3 + i2c-dev are stock on the EVK dtb, so no overlay dtb. The sixth and
+# final wired transport (eth/USB/UART/SPI/CAN/I2C). See docs/TOPOLOGIES.md §I2C.
+id:           i2c-link-91
+display_name: "I2C link — two i.MX91 over LPI2C3"
+description:  "Two i.MX91 boards bridged over LPI2C3 (/dev/i2c-N) via the i2c-link target + a socket chardev — board-to-board I2C, byte-exact."
+nodes:
+  - { name: boardA, profile: imx91-evk-sd }
+  - { name: boardB, profile: imx91-evk-sd }
+links:
+  - { type: i2c, a: boardA, b: boardB }

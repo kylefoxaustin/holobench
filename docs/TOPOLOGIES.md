@@ -151,10 +151,23 @@ EVK DT already enables it — no overlay dtb**. **Validated** through the coordi
 (`can-link-91`): a frame `0x321 [5] 48 41 42 43 44` crossed FlexCAN → can-bus →
 can-host-chardev → socket → FlexCAN **byte-exact** between two i.MX91 guests.
 
+### I2C — ✅ stock QEMU, DELIVERED 2026-07-03 (the sixth)
+A board-to-board I²C bridge: each board is an LPI2C master with the model's
+`i2c-link` target device at a fixed address on its bus, socket-bridged to the peer
+(`-device i2c-link,bus=<lpi2c>,address=0x42,chardev=<id>` + `-chardev socket`, one
+server / one reconnecting client — the I²C analogue of `spi-link`). Lab:
+`{ type: i2c, a: <node>, b: <node> }`. Per-board facts in the profile's `i2c.link`
+block; for i.MX91 the bus is **LPI2C3** (`i2c@42530000`, `/dev/i2c-N`) and — unlike
+UART/SPI — **no dtb patch** (LPI2C3 + `i2c-dev` are stock on the EVK dtb). The
+`i2c-link` device was authored on 93emulator (`hw/i2c/…`) and carried on 91.
+**Validated** through the coordinator (`i2c-link-91`): both i.MX91 register the
+LPI2C adapters and bind `i2c-link` over the live socket (byte-exact data path proven
+by the fleet's `run-i2c.sh`).
+
 ### Future links
-`i2c` bridges and further multi-node fabrics — same pattern: stock transport +
-per-board facts, never a custom device. **All five wired transports (eth, USB,
-UART, SPI, CAN) are now delivered.**
+Further multi-node fabrics — same pattern: stock transport + per-board facts, never
+a custom device. **All six wired transports (eth, USB, UART, SPI, CAN, I2C) are now
+delivered.**
 
 ## Architecture
 
