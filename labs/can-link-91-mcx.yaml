@@ -1,0 +1,16 @@
+# SPDX-License-Identifier: GPL-2.0-or-later
+# Mixed-SoC CAN link — i.MX91 (Linux FlexCAN can0) <-> MCXN947 (bare-metal M33
+# FlexCAN0) over the fleet-shared generic can-host-chardev backend. The cross-SoC
+# proof: one can-bus socket transport carries CAN frames between a full-Linux
+# SocketCAN node and a bare-metal M33 node. Mirrors the fleet's 91<->MCX / 95<->MCX
+# CAN cross-checks (byte-exact both directions). The MCX node ('mcx') is the socket
+# server + boots canlink.elf (resend-until-connected, so it rides the Linux peer's
+# boot window); the i.MX91 ('board91') is the client. See docs/TOPOLOGIES.md §CAN.
+id:           can-link-91-mcx
+display_name: "CAN link — i.MX91 <-> MCXN947 (mixed-SoC)"
+description:  "Cross-SoC CAN: i.MX91 (Linux FlexCAN can0) bridged to an MCXN947 (bare-metal M33 FlexCAN0) over the can-host-chardev socket transport."
+nodes:
+  - { name: mcx,     profile: mcxn947-can-device }
+  - { name: board91, profile: imx91-evk-sd }
+links:
+  - { type: can, a: mcx, b: board91 }
