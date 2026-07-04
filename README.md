@@ -115,7 +115,7 @@ QEMU i.MX SoC models, through stock interfaces only.
 | 6 | Hardening — auth (token expiry, login throttle, WS-origin, persistent key), **per-session cgroup v2 caps** (memory/pids/cpu), asset-path lockdown, audit log, [deploy guide](docs/DEPLOY.md) | ◐ optional netns/mount-ns next |
 | 6+ | **Accounts & admin** — self-service register / first-run onboarding, user management (add / remove / set-role), and an **admin fleet view**: every running board across all users with per-board CPU (per-core + % of host) / RAM / disk / idle + one-click **kill** | ✅ |
 | 🧰 | **Build me a board** — build the real NXP BSP in a container (you accept the EULA; Holobench hosts/accepts nothing): pick the **image depth** (core / multimedia / full, per SoC), **pre-cache** sources for offline & restart-safe builds, SSD-backed. All 3 SoCs × 3 depths build clean. | ✅ |
-| 🔗 | **Connect boards — multi-board labs (v3.0)** — wire 2+ boards over a real bus and message-pass between them: **eth / USB / UART / SPI / CAN**, all stock QEMU sockets (no host `vcan`/root/custom device), all validated byte-exact. See *[Connect two boards](#connect-two-boards-multi-board-labs)*. | ✅ |
+| 🔗 | **Connect boards — multi-board labs (v3.0)** — wire 2+ boards over a real bus and message-pass between them: **eth / USB / UART / SPI / CAN / I2C**, all stock QEMU sockets (no host `vcan`/root/custom device), all validated byte-exact — *including mixed-SoC, cross-arch* (a Linux i.MX ↔ a bare-metal MCXN947). See *[Connect two boards](#connect-two-boards-multi-board-labs)*. | ✅ |
 
 Boards: **i.MX 91 / 93 / 95**, each in two flavors — a quick **busybox** profile
 and a **full BSP distro** (`-sd`) profile that boots the real NXP `.wic`. All
@@ -209,15 +209,23 @@ holobench labs                         # list the shipped labs
 holobench lab launch gateway-lab       # boot the lab + wire the boards together
 ```
 
-**Five link types, all stock QEMU, all validated byte-exact:**
+**Six link types, all stock QEMU, all validated byte-exact:**
 
 | Link | How it's bridged | Guest sees | Example lab (boards) |
 |---|---|---|---|
 | **eth** | mcast socket = a virtual switch | `eth0` (any pair or group) | `lan-trio` (**i.MX93 ↔ i.MX95**), `eth-pair` |
 | **USB** | usbredir, host ↔ CDC gadget | `/dev/ttyACM0` (USB serial) | `gateway-lab` (i.MX93 ↔ MCXN947) |
-| **UART** | LPUART ↔ socket ↔ LPUART | `/dev/ttyLP1` | `uart-link-91` (i.MX91 ↔ i.MX91) |
-| **SPI** | `spi-link` SSI bridge over a socket | `/dev/spidev0.0` | `spi-link-91-mcx` (i.MX91 ↔ MCXN947) |
-| **CAN** | `can-host-chardev` over a socket | `can0` | `can-link-91` (i.MX91 ↔ i.MX91) |
+| **UART** | LPUART ↔ socket ↔ LPUART | `/dev/ttyLP1` | `uart-link-imx-mcx` (**i.MX91 ↔ MCXN947**) |
+| **SPI** | `spi-link` SSI bridge over a socket | `/dev/spidev0.0` | `spi-link-91-mcx` (**i.MX91 ↔ MCXN947**) |
+| **CAN** | `can-host-chardev` over a socket | `can0` | `can-link-91-mcx` (**i.MX91 ↔ MCXN947**, both ways) |
+| **I2C** | `i2c-link` target over a socket | `/dev/i2c-N` (LPI2C3) | `i2c-link-91` (i.MX91 ↔ i.MX91) |
+
+**Mixed-SoC, cross-architecture — the standout.** A full-**Linux** i.MX (aarch64)
+and a **bare-metal** MCXN947 (arm Cortex-M33, no OS) message-pass over one socket:
+SPI, UART, and CAN (bidirectional, byte-exact) are all validated *between* them —
+different SoCs, different instruction sets, different worlds (Linux ↔ bare-metal
+firmware), one stock backend. A physical bench would need two dev boards and a
+jumper harness; here it's `holobench lab launch can-link-91-mcx`.
 
 **Want two boards to message-pass? Match the transport to what's available:**
 - **Ethernet works for any pair today — including i.MX95 ↔ i.MX93** (`lan-trio`).
@@ -467,7 +475,7 @@ holobench/
   profiles/    imx9{1,3,5}-evk.yaml (busybox initramfs)
                imx9{1,3,5}-evk-sd.yaml (full BSP distro, disk boot)
                mcxn947-*.yaml (USB/SPI gadget nodes)  virt-smoke.yaml
-  labs/        *.yaml — multi-board topologies (eth/USB/UART/SPI/CAN links)
+  labs/        *.yaml — multi-board topologies (eth/USB/UART/SPI/CAN/I2C links)
   backend/     pyproject.toml
     holobench/ profiles/ (models+loader)  session/ (command+manager+control)
                bridges/ (console tap)  api/ (FastAPI app)  cli.py
