@@ -3,6 +3,7 @@
 # (bare-metal M33 LPSPI) over the spi-link SSI bridge + a socket. imx95 spilink
 # overlay swaps the LPSPI7 bk4 child to spidev (dmas kept). mcx boots spilink.elf;
 # mcx=server, board95=reconnecting client. See docs/TOPOLOGIES.md §SPI.
+# VALIDATED (2026-07-04): /dev/spidev0.0 bound on imx95 (LPSPI7 bk4->spidev overlay); spidev_test runs live.
 id:           spi-link-95-mcx
 display_name: "SPI link — i.MX95 <-> MCXN947 (mixed-SoC)"
 description:  "Cross-SoC SPI: i.MX95 (Linux /dev/spidev0.0, LPSPI7/eDMA) bridged to an MCXN947 (bare-metal M33 LPSPI) over the spi-link SSI bridge + a socket."

@@ -3,6 +3,7 @@
 # `i2c-link` target device over a socket chardev (i2c-link was authored on 93emulator).
 # LPI2C3 + i2c-dev are stock on the imx93 EVK dtb, so no overlay. The i.MX93 twin of
 # i2c-link-91. See docs/TOPOLOGIES.md §I2C.
+# VALIDATED (2026-07-04): both imx93 register the LPI2C adapters + i2c-link binds (LPI2C3).
 id:           i2c-link-93
 display_name: "I2C link — two i.MX93 over LPI2C3"
 description:  "Two i.MX93 boards bridged over LPI2C3 (/dev/i2c-N) via the i2c-link target + a socket chardev — board-to-board I2C."
