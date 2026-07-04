@@ -264,6 +264,38 @@ def test_spi_lab_wires_symmetric_socket_bridge():
     assert by_node["boardB"].dtb_override == "imx91-11x11-evk-spilink.dtb"
 
 
+def test_mixed_can_lab_wires_cross_arch():
+    # can-link-91-mcx: a bare-metal MCXN947 (arm) + a Linux i.MX91 (aarch64) on one
+    # can-host-chardev socket, each with its OWN machine props (the cross-arch tell:
+    # mcx=canbus0=cb, imx91=canbus0=cb,canbus1=cb). mcx=server, imx91=reconnecting client.
+    mgr = _FakeManager()
+    running = asyncio.run(LabCoordinator(mgr).launch(load_lab("can-link-91-mcx")))
+    assert running.state == LabState.RUNNING
+    by = {s.lab_node: s for s in mgr.launches}
+    assert any("can-host-chardev" in x for x in by["mcx"].can_link_override)
+    assert any("server=on" in x for x in by["mcx"].can_link_override)
+    assert any("server=off" in x and "reconnect-ms" in x for x in by["board91"].can_link_override)
+    assert by["mcx"].machine_extra == "canbus0=cb"                      # MCU: one can-bus
+    assert by["board91"].machine_extra == "canbus0=cb,canbus1=cb"       # i.MX: two
+    # same socket path bridges the two SoCs
+    sock = lambda ov: ov[ov.index("-chardev") + 1].split("path=")[1].split(",")[0]
+    assert sock(by["mcx"].can_link_override) == sock(by["board91"].can_link_override)
+
+
+def test_mixed_uart_lab_wires_cross_arch():
+    # uart-link-imx-mcx: MCX (bare-metal, no dtb) <-> imx91 (Linux, LPUART2 dtb) on
+    # one chardev socket. The imx91 needs its uartlink dtb override; the MCX doesn't.
+    mgr = _FakeManager()
+    running = asyncio.run(LabCoordinator(mgr).launch(load_lab("uart-link-imx-mcx")))
+    assert running.state == LabState.RUNNING
+    by = {s.lab_node: s for s in mgr.launches}
+    assert any("chardev:hbuart0" in x for x in by["mcx"].uart_link_override)
+    assert any("server=on" in x for x in by["mcx"].uart_link_override)
+    assert any("server=off" in x for x in by["board91"].uart_link_override)
+    assert by["mcx"].dtb_override is None                               # bare-metal, no dtb
+    assert by["board91"].dtb_override == "imx91-11x11-evk-uartlink.dtb" # Linux needs LPUART2 enabled
+
+
 def test_i2c_lab_wires_symmetric_socket_bridge():
     # i2c-link-91: two i.MX91 over LPI2C3, one server / one reconnecting client,
     # both with -device i2c-link,bus=lpi2c3. No dtb (stock EVK dtb enables LPI2C3).
