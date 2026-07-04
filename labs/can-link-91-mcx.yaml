@@ -4,8 +4,12 @@
 # proof: one can-bus socket transport carries CAN frames between a full-Linux
 # SocketCAN node and a bare-metal M33 node. Mirrors the fleet's 91<->MCX / 95<->MCX
 # CAN cross-checks (byte-exact both directions). The MCX node ('mcx') is the socket
-# server + boots canlink.elf (resend-until-connected, so it rides the Linux peer's
-# boot window); the i.MX91 ('board91') is the client. See docs/TOPOLOGIES.md §CAN.
+# server + boots canlink.elf (retry-forever: resends 0x321 + waits for the 0x322
+# reply with no timeout, so it rides out the full-distro i.MX91's ~2-3 min Linux
+# boot in a co-launched lab — mcx commit 4ed43a92b3); the i.MX91 ('board91') is the
+# client. VALIDATED bidirectional byte-exact through the coordinator (2026-07-04):
+# mcx 0x321 -> imx91 candump, and imx91 cansend 0x322 -> MCX "CAN LINK PASS".
+# See docs/TOPOLOGIES.md §CAN.
 id:           can-link-91-mcx
 display_name: "CAN link — i.MX91 <-> MCXN947 (mixed-SoC)"
 description:  "Cross-SoC CAN: i.MX91 (Linux FlexCAN can0) bridged to an MCXN947 (bare-metal M33 FlexCAN0) over the can-host-chardev socket transport."
