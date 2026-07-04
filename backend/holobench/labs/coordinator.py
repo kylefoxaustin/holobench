@@ -415,6 +415,12 @@ class LabCoordinator:
                     node_machine[link.a] = arole.machine_extra
                 if brole.machine_extra:
                     node_machine[link.b] = brole.machine_extra
+                # Boot the FlexCAN-enabling dtb where the board needs one (imx93/95
+                # ship FlexCAN disabled; imx91's is stock, bare-metal MCX has no dtb).
+                if arole.attach_dtb:
+                    node_dtb[link.a] = arole.attach_dtb
+                if brole.attach_dtb:
+                    node_dtb[link.b] = brole.attach_dtb
                 running.usb_socks.append(sock)   # socket-cleanup list (unlinked on teardown)
                 running.node_links.setdefault(link.a, []).append(f"can<->{link.b}@{sock}")
                 running.node_links.setdefault(link.b, []).append(f"can<->{link.a}@{sock}")

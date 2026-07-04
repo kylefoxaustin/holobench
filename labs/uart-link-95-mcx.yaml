@@ -1,0 +1,13 @@
+# SPDX-License-Identifier: GPL-2.0-or-later
+# Mixed-SoC UART link — i.MX95 (Linux /dev/ttyLP2, LPUART3) <-> MCXN947 (bare-metal
+# M33 LPUART2 raw echo) over a socket chardev. imx95 uartlink overlay enables LPUART3
+# (serial_hd(2), after the A-core console + the SM console). mcx boots passthrough.elf
+# (boot-order-immune raw echo). mcx=server, board95=client. See docs/TOPOLOGIES.md §UART.
+id:           uart-link-95-mcx
+display_name: "UART link — i.MX95 <-> MCXN947 (mixed-SoC)"
+description:  "Cross-SoC UART: i.MX95 (Linux /dev/ttyLP2, LPUART3) bridged to an MCXN947 (bare-metal M33 LPUART2 raw echo) over a socket chardev."
+nodes:
+  - { name: mcx,     profile: mcxn947-uart-device }
+  - { name: board95, profile: imx95-evk-sd }
+links:
+  - { type: uart, a: mcx, b: board95 }

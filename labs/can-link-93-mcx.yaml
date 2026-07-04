@@ -1,0 +1,14 @@
+# SPDX-License-Identifier: GPL-2.0-or-later
+# Mixed-SoC CAN link — i.MX93 (Linux FlexCAN can0) <-> MCXN947 (bare-metal M33
+# FlexCAN0) over the fleet-shared can-host-chardev backend. The imx93 canlink overlay
+# enables flexcan1/2 (dummy xceiver regulator). mcx boots the retry-forever canlink.elf
+# (outwaits the ~2.5min imx93 Linux boot in a co-launched lab). mcx=server,
+# board93=reconnecting client. Twin of can-link-91-mcx. See docs/TOPOLOGIES.md §CAN.
+id:           can-link-93-mcx
+display_name: "CAN link — i.MX93 <-> MCXN947 (mixed-SoC)"
+description:  "Cross-SoC CAN: i.MX93 (Linux FlexCAN can0) bridged to an MCXN947 (bare-metal M33 FlexCAN0) over the can-host-chardev socket transport."
+nodes:
+  - { name: mcx,     profile: mcxn947-can-device }
+  - { name: board93, profile: imx93-evk-sd }
+links:
+  - { type: can, a: mcx, b: board93 }

@@ -1,0 +1,13 @@
+# SPDX-License-Identifier: GPL-2.0-or-later
+# Mixed-SoC SPI link — i.MX93 (Linux /dev/spidev0.0, LPSPI1) <-> MCXN947 (bare-metal
+# M33 LPSPI) over the model's spi-link SSI bridge + a socket chardev. The i.MX93
+# spilink overlay enables LPSPI1 + a spidev child (PIO, dmas dropped). mcx boots
+# spilink.elf; mcx=server, board93=reconnecting client. See docs/TOPOLOGIES.md §SPI.
+id:           spi-link-93-mcx
+display_name: "SPI link — i.MX93 <-> MCXN947 (mixed-SoC)"
+description:  "Cross-SoC SPI: i.MX93 (Linux /dev/spidev0.0) bridged to an MCXN947 (bare-metal M33 LPSPI) over the spi-link SSI bridge + a socket."
+nodes:
+  - { name: mcx,     profile: mcxn947-spi-device }
+  - { name: board93, profile: imx93-evk-sd }
+links:
+  - { type: spi, a: mcx, b: board93 }

@@ -234,6 +234,7 @@ class CanLink(_Strict):
     host: str                          # -object <this>  (e.g. "can-host-chardev,id=canh,canbus=cb,chardev={id}")
     chardev: str                       # -chardev <this> (e.g. "socket,id={id},path={path}")
     machine_extra: Optional[str] = None  # appended to -machine (e.g. "canbus0=cb,canbus1=cb")
+    attach_dtb: Optional[str] = None     # dtb that ENABLES FlexCAN (many EVK dtbs ship it disabled); None = base dtb
     dev: Optional[str] = None          # informational: the guest node (e.g. can0)
 
 
