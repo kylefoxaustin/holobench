@@ -1,0 +1,16 @@
+# SPDX-License-Identifier: GPL-2.0-or-later
+# Mixed-SoC UART link — i.MX91 (Linux /dev/ttyLP1) <-> MCXN947 (bare-metal M33
+# LPUART2) over a stock chardev socket. The MCX node ('mcx') boots the raw-echo
+# passthrough firmware (passthrough.elf): no handshake, no timeout — whatever the
+# i.MX91 writes on its link UART, the M33 echoes back byte-exact, so holobench drives
+# the exchange at its own pace (immune to the co-launched-lab boot disparity). The
+# i.MX91 ('board91') boots the LPUART2-enabled dtb (imx91-11x11-evk-uartlink.dtb) and
+# is the socket client; mcx is the server. See docs/TOPOLOGIES.md §UART.
+id:           uart-link-imx-mcx
+display_name: "UART link — i.MX91 <-> MCXN947 (mixed-SoC)"
+description:  "Cross-SoC UART: i.MX91 (Linux /dev/ttyLP1) bridged to an MCXN947 (bare-metal M33 LPUART2 raw echo) over a socket chardev."
+nodes:
+  - { name: mcx,     profile: mcxn947-uart-device }
+  - { name: board91, profile: imx91-evk-sd }
+links:
+  - { type: uart, a: mcx, b: board91 }

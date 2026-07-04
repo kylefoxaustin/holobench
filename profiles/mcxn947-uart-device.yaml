@@ -1,0 +1,74 @@
+# Holobench board profile — MCXN947 as a board-to-board UART node (mixed-SoC UART lab).
+#
+# The UART counterpart to mcxn947-spi-device / -can-device: same frdm-mcxn947
+# binary/machine, boots the bare-metal UART passthrough firmware (passthrough.elf).
+# LPUART2 = serial_hd(1) is the link (console = LPUART4 = serial_hd(0)); the firmware
+# is a RAW ECHO server — no handshake, no timeout, boot-order-immune: whatever the
+# peer sends on the link UART, the M33 echoes back byte-exact (+ mirrors to its
+# console). Facts from the mcxn947qemu session (bus 2026-07-04, commit 15c7f93e2b).
+#
+#   qemu-system-arm -M frdm-mcxn947 -serial file:<console> \
+#     -chardev socket,id=ul,path=<sock>,server=on|off -serial chardev:ul \
+#     -kernel tests/mcxn-uart-link/passthrough.elf
+#
+# Passthrough (vs the uartlink.elf self-test) so holobench drives the exchange at
+# its own pace — the imx91 peer just writes bytes to /dev/ttyLP1 and reads the echo,
+# immune to the co-launched-lab boot disparity. Bare-metal M33, no dtb.
+
+id:           mcxn947-uart-device
+display_name: "NXP MCXN947 (UART echo node)"
+soc:          "NXP MCXN947"
+description:  "MCXN947 booting the bare-metal UART passthrough firmware (passthrough.elf) — a UART board-to-board node: a raw echo server on LPUART2 (whatever you send, it echoes byte-exact)."
+
+qemu:
+  binary:  /home/kyle/Documents/GitHub/mcxn947qemu/build/qemu-system-arm
+  machine: frdm-mcxn947
+  memory:  null
+  audio:   none
+  extra_args:
+    - "-no-reboot"
+
+boot:
+  mode: firmware-elf
+  artifacts:
+    firmware: /home/kyle/Documents/GitHub/mcxn947qemu/tests/mcxn-uart-link/passthrough.elf
+    kernel:   null
+    dtb:      null
+    initrd:   null
+    rootfs:   null
+    disk:     null
+  append: null
+  command_template: null
+
+serial:
+  - { name: "LPUART4 console", chardev: console0, role: mcu-console, default: true }
+
+display: { enabled: false, device: null, vnc: false }
+
+net: { user_nics: 0, fabric_nic_model: mcxn-enet }
+
+# UART board-to-board: LPUART2 is the link (serial_hd(1), after the console at
+# serial_hd(0)). holobench supplies the socket -chardev + `-serial chardev:` (stock);
+# the coordinator appends it as the next serial after the declared console. No
+# attach_dtb — bare-metal firmware, no device tree. Raw echo (passthrough.elf).
+uart:
+  link:
+    chardev: "socket,id={id},path={path}"    # coordinator adds server=on,wait=off / server=off
+    dev:     "LPUART2 (serial_hd(1)) — raw echo"
+
+file_injection:
+  nine_p: { enabled: false, mount_tag: holobench }
+  tftp:   { enabled: false }
+  nfs:    { enabled: false }
+  image_swap: { enabled: false, target_drive: null }
+
+power: { warm_reset: true, cold_cycle: true, pause: true, reinstall: false }
+
+introspection:
+  qmp_events: true
+  memory_map: true
+  device_tree: true
+  gdbstub: { enabled: true }
+  snapshots: false
+
+reservation: { default_minutes: 30, max_minutes: 120 }
