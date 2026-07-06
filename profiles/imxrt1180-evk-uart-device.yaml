@@ -1,0 +1,83 @@
+# Holobench board profile — NXP i.MX RT1180 EVK as a board-to-board UART node.
+#
+# The fleet's 6th QEMU node (rt1180emulator): a dual-core Cortex-M7 + Cortex-M33
+# real-time crossover MCU. Onboarded first over UART (facts from rt1180emulator, bus
+# 2026-07-05). Like the MCXN947 it's a bare-metal MCU peer: boots a firmware ELF, the
+# link rides serial_hd(1). LPUART2 = serial@44390000 = serial_hd(1) (the SAME cell the
+# i.MX91/93 side uses), console LPUART1 = serial_hd(0).
+#
+# Console: the firmware prints via ARM SEMIHOSTING (not a UART), so we enable
+# semihosting and let QEMU route it to the process stdout, which holobench captures in
+# work_dir/qemu.log — that's where "UARTLINK: PASS" lands. serial_hd(0) is declared as
+# a (silent) console slot; the firmware never writes LPUART1.
+#
+#   qemu-system-arm -M mimxrt1180-evk -semihosting-config enable=on,target=native \
+#     -kernel uartlink.elf -serial chardev:console0 -serial chardev:<link>
+#
+# FIRMWARE NOTE (finding 2026-07-05): uartlink.elf is a run-once SELF-TEST — it does
+# the GO(0xA5)+32-byte-echo exchange, prints "UARTLINK: PASS", then calls semihosting
+# SYS_EXIT, which TERMINATES QEMU. The link itself is PROVEN byte-exact (rt1180 <-> MCX
+# passthrough, PASS captured in qemu.log), but a self-exiting firmware is incompatible
+# with holobench's model (a persistent QEMU it manages over QMP) — the coordinator's
+# QMP connect is refused because the process is already gone. This profile therefore
+# awaits a PERSISTENT firmware: a passthrough (raw-echo, NO SYS_EXIT, WFI idle loop) —
+# the same boot-order-immune pattern that won for the MCX labs. Requested from rt1180;
+# swap `firmware` to passthrough.elf when it lands, then pair with a sender (imx91).
+
+id:           imxrt1180-evk-uart-device
+display_name: "NXP i.MX RT1180 EVK (UART node)"
+soc:          "NXP i.MX RT1180 (Cortex-M7 + Cortex-M33)"
+description:  "i.MX RT1180 EVK booting the bare-metal UART-link firmware — a board-to-board UART node (LPUART2 link, semihosting console)."
+
+qemu:
+  binary:  /home/kyle/Documents/GitHub/rt1180emulator/build/qemu-system-arm
+  machine: mimxrt1180-evk
+  memory:  null
+  audio:   none
+  extra_args:
+    - "-semihosting-config"
+    - "enable=on,target=native"
+    - "-no-reboot"
+
+boot:
+  mode: firmware-elf
+  artifacts:
+    firmware: /home/kyle/Documents/GitHub/rt1180emulator/tests/imxrt1180-uartlink/uartlink.elf
+    kernel:   null
+    dtb:      null
+    initrd:   null
+    rootfs:   null
+    disk:     null
+  append: null
+  command_template: null
+
+serial:
+  - { name: "LPUART1 console (semihosting mirrors to qemu.log)", chardev: console0, role: mcu-console, default: true }
+
+display: { enabled: false, device: null, vnc: false }
+
+net: { user_nics: 0, fabric_nic_model: null }
+
+# UART board-to-board: LPUART2 (serial@44390000) = serial_hd(1), right after the
+# console at serial_hd(0). Stand-alone-modelled, so no dtb and no -serial-null clash.
+uart:
+  link:
+    chardev: "socket,id={id},path={path}"    # coordinator adds server=on,wait=off / server=off
+    dev:     "LPUART2 (serial_hd(1)) — GO(0xA5)+echo self-test"
+
+file_injection:
+  nine_p: { enabled: false, mount_tag: holobench }
+  tftp:   { enabled: false }
+  nfs:    { enabled: false }
+  image_swap: { enabled: false, target_drive: null }
+
+power: { warm_reset: true, cold_cycle: true, pause: true, reinstall: false }
+
+introspection:
+  qmp_events: true
+  memory_map: true
+  device_tree: true
+  gdbstub: { enabled: true }
+  snapshots: false
+
+reservation: { default_minutes: 30, max_minutes: 120 }
