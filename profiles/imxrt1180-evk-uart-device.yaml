@@ -27,7 +27,7 @@
 id:           imxrt1180-evk-uart-device
 display_name: "NXP i.MX RT1180 EVK (UART node)"
 soc:          "NXP i.MX RT1180 (Cortex-M7 + Cortex-M33)"
-description:  "i.MX RT1180 EVK booting the bare-metal UART-link firmware — a board-to-board UART node (LPUART2 link, semihosting console)."
+description:  "i.MX RT1180 EVK booting the persistent UART passthrough firmware (raw echo, WFI idle) — a board-to-board UART echo node (LPUART2 link, semihosting console)."
 
 qemu:
   binary:  /home/kyle/Documents/GitHub/rt1180emulator/build/qemu-system-arm
@@ -42,7 +42,7 @@ qemu:
 boot:
   mode: firmware-elf
   artifacts:
-    firmware: /home/kyle/Documents/GitHub/rt1180emulator/tests/imxrt1180-uartlink/uartlink.elf
+    firmware: /home/kyle/Documents/GitHub/rt1180emulator/tests/imxrt1180-uartlink/passthrough.elf
     kernel:   null
     dtb:      null
     initrd:   null
@@ -63,7 +63,7 @@ net: { user_nics: 0, fabric_nic_model: null }
 uart:
   link:
     chardev: "socket,id={id},path={path}"    # coordinator adds server=on,wait=off / server=off
-    dev:     "LPUART2 (serial_hd(1)) — GO(0xA5)+echo self-test"
+    dev:     "LPUART2 (serial_hd(1)) — persistent raw echo (RX-ISR, no SYS_EXIT)"
 
 file_injection:
   nine_p: { enabled: false, mount_tag: holobench }

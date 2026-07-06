@@ -1,0 +1,16 @@
+# SPDX-License-Identifier: GPL-2.0-or-later
+# Mixed-SoC UART link — i.MX91 (Linux /dev/ttyLP1) <-> i.MX RT1180 (bare-metal M7+M33)
+# over a socket chardev. RT1180 boots passthrough.elf (persistent raw echo: RX-IRQ ->
+# echo from the ISR, for(;;)wfi, no SYS_EXIT — stays alive for holobench's QMP hold).
+# The i.MX91 writes bytes to /dev/ttyLP1 (LPUART2, uartlink overlay) and reads them
+# back byte-exact. Both nodes persistent, both coordinator-managed. RT1180 = socket
+# server (instant boot), i.MX91 = client. The fleet's 6th QEMU node in a live lab.
+# See docs/TOPOLOGIES.md §UART.
+id:           uart-link-91-rt1180
+display_name: "UART link — i.MX91 <-> i.MX RT1180 (mixed-SoC)"
+description:  "Cross-SoC UART: i.MX91 (Linux /dev/ttyLP1) bridged to an i.MX RT1180 (bare-metal M7+M33 raw-echo passthrough) over a socket chardev."
+nodes:
+  - { name: rt1180,  profile: imxrt1180-evk-uart-device }
+  - { name: board91, profile: imx91-evk-sd }
+links:
+  - { type: uart, a: rt1180, b: board91 }
