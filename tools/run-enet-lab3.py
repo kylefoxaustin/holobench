@@ -322,6 +322,23 @@ async def main() -> int:
             print(f"           on intervals cannot see it. Unscoreable, NOT failed.")
             unscoreable.add(n.name)
             continue
+        if q is None:
+            # ≥2 beats, but EVERY gap between them straddles the departure window — so we
+            # have no sample of this node's NORMAL spacing to judge the timeout against.
+            # That is not a healthy node and it is not a broken one: it is a node we cannot
+            # calibrate against. Unscoreable, never failed.
+            #
+            # This branch exists because its absence CRASHED the scorer on a completed run
+            # and destroyed the verdict — `None` formatted as a float. THE FIFTH INSTRUMENT
+            # BUG IN THIS LAB, and once again the subject was fine and the observer was not.
+            # A scorer that dies is not a scorer that found nothing; it is a scorer that
+            # found nothing OUT.
+            print(f"  ⚠️  {n.name:7} {nb} beat(s), but EVERY gap straddles the departure —")
+            print(f"           no sample of its NORMAL spacing, so the timeout cannot be")
+            print(f"           calibrated for it. Unscoreable, NOT failed.")
+            unscoreable.add(n.name)
+            inconclusive.append(f"{n.name}: no normal beat-gap to calibrate the timeout against")
+            continue
         headroom = BEAT_TIMEOUT_S / q if q else float("inf")
         ok = headroom >= QUIET_MARGIN
         print(f"  {'✅' if ok else '⚠️ '} {n.name:7} longest NORMAL quiet {q:5.1f}s vs "
