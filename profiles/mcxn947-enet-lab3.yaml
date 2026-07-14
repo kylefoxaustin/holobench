@@ -47,6 +47,11 @@ qemu:
   extra_args:
     - "-no-reboot"
 
+  # PIN THE INVOCATION, not just the binary (tools/argv-pin.py). A RUNNER IS PART OF THE
+  # ARTIFACT: every artifact hash can still match while a flag appears, vanishes or moves,
+  # and the run goes green about a command nobody chose. A mismatch REFUSES TO LAUNCH.
+  argv_pin: "ce7892167280b6ddc742a52d26d2d71e"
+
 boot:
   mode: firmware-elf
   artifacts:

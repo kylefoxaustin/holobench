@@ -808,3 +808,79 @@ def test_fabric_user_nics_defaults_to_zero_so_no_existing_lab_moves():
     silently rewrites every other lab's command line is not a fix, it's a blast radius."""
     for pid in ("imx95-evk-enet-lab3", "imxrt1180-evk-netc", "mcxn947-enet-lab3"):
         assert load_profile(pid).net.fabric_user_nics == 0
+
+
+# --- qemu.argv_pin: A RUNNER IS PART OF THE ARTIFACT ------------------------------------
+#
+# rt1180emulator, 2026-07-14: their board-farm script shipped `-device tmp105` with no
+# `bus=`, so it bound to whichever bus QEMU saw LAST -- and when new LPI2C instances were
+# added, "last" stopped being the one the firmware drove. Two FAILs on aarch64, green on
+# x86, and the difference was never the architecture.
+#
+#   "We test the MODEL on two machines and the HARNESS on one -- so the harness is exactly
+#    where untested code goes to live. If you pin our node's ELF, PIN THE INVOCATION WITH
+#    IT, because ours just proved it can rot independently."
+#
+# boot.pin hashes the BINARY. A lab's result is a function of the binary AND the command
+# line: a flag can appear, vanish or move while every artifact hash still matches, and the
+# run goes green about a command nobody chose.
+
+def _lab_session(profile_id, **kw):
+    from holobench.profiles.loader import default_asset_dir
+    from holobench.session.manager import Session
+
+    p = load_profile(profile_id)
+    sess = Session(
+        p,
+        asset_dir=default_asset_dir(p.id),
+        session_id="fp-test",
+        nic_override=["socket,mcast=230.1.2.3:11666,mac=54:27:8d:00:00:00"],
+        **kw,
+    )
+    return p, sess
+
+
+def test_a_device_appearing_in_the_runner_CHANGES_the_fingerprint():
+    """rt1180's exact bug: the binary is untouched, the RUNNER grew a -device."""
+    p, sess = _lab_session("imxrt1180-evk-netc")
+    before = sess.invocation_fingerprint()
+    p.qemu.extra_args += ["-device", "tmp105"]      # no bus= -- binds to whatever is last
+    sess.argv = None
+    assert sess.invocation_fingerprint() != before
+
+
+def test_a_flag_silently_DROPPED_from_the_runner_changes_the_fingerprint():
+    """The other direction, and the quieter one: nothing is added, something goes missing."""
+    p, sess = _lab_session("imxrt1180-evk-netc")
+    before = sess.invocation_fingerprint()
+    p.qemu.extra_args.remove("-no-reboot")
+    sess.argv = None
+    assert sess.invocation_fingerprint() != before
+
+
+def test_the_fingerprint_IGNORES_what_legitimately_varies_per_run():
+    """Negative-tested: a gate that fires on everything is a gate nobody keeps.
+
+    The session id, the gdb port and the lab's mcast segment are allocated per launch. If
+    they moved the fingerprint, every run would refuse and the pin would be torn out within
+    a day -- which is how a real guard gets deleted."""
+    _, a = _lab_session("imxrt1180-evk-netc")
+    _, b = _lab_session("imxrt1180-evk-netc")
+    # different Session objects -> different gdb port, different work dir
+    assert a.invocation_fingerprint() == b.invocation_fingerprint()
+
+
+def test_the_argv_gate_REFUSES_the_launch_not_merely_warns():
+    from holobench.session.manager import SessionError
+
+    p, sess = _lab_session("imxrt1180-evk-netc")
+    p.qemu.extra_args.append("-snapshot")
+    sess.argv = None
+    with pytest.raises(SessionError, match="THE INVOCATION CHANGED"):
+        sess._verify_argv_pin()
+
+
+def test_every_lab3_profile_pins_its_INVOCATION_as_well_as_its_binary():
+    for pid in ("imx91-evk-enet-lab3", "imx95-evk-enet-lab3",
+                "imxrt1180-evk-netc", "mcxn947-enet-lab3"):
+        assert load_profile(pid).qemu.argv_pin, f"{pid} pins its binary but not its RUNNER"

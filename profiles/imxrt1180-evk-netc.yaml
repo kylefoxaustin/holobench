@@ -66,6 +66,11 @@ qemu:
     - "enable=on,target=native"
     - "-no-reboot"
 
+  # PIN THE INVOCATION, not just the binary (tools/argv-pin.py). A RUNNER IS PART OF THE
+  # ARTIFACT: every artifact hash can still match while a flag appears, vanishes or moves,
+  # and the run goes green about a command nobody chose. A mismatch REFUSES TO LAUNCH.
+  argv_pin: "fa1ddfb634bdde8aaa3f309758bb7b01"
+
 boot:
   mode: firmware-elf
   artifacts:
@@ -89,9 +94,27 @@ serial:
 
 display: { enabled: false, device: null, vnc: false }
 
-# The machine auto-attaches its NETC to the first -nic; rt1180's own verified launch
-# line carries no model=, so we add none. user_nics 0 = no slirp; the lab's mcast
-# socket is this board's only NIC.
+# ⚠️  THE ONE UNDER-SPECIFIED BINDING LEFT IN THIS REPO, AND IT IS THE SAME BUG rt1180 JUST
+# SHIPPED IN ITS OWN RUNNER. fabric_nic_model: null means the segment goes to WHICHEVER
+# MODELED NIC QEMU ATTACHES FIRST. That is not a binding — it is a coincidence that has held.
+#
+# rt1180's board-farm script attached `-device tmp105` with no `bus=`, so it landed on
+# whichever bus QEMU saw LAST; when new LPI2C instances were added, "last" stopped being the
+# one the firmware drove, and it cost them two phantom FAILs they nearly blamed on endianness.
+# THIS LINE HAS EXACTLY THAT SHAPE. rt1180 is actively developing NETC. The day their machine
+# gains a second modeled NIC, this lab's segment moves to the wrong controller — and it will
+# not error. It will go QUIET: a wire connected to nothing, and a node that simply never sees
+# a peer, which reads as a wire bug in someone else's model.
+#
+# EVERY OTHER BOARD IN THIS LAB NEEDED AN EXPLICIT model= FOR PRECISELY THIS REASON — the
+# i.MX91's auto-attach grabbed the EQOS instead of the FEC; the i.MX95's grabbed a convenience
+# NIC instead of ENETC. rt1180 is the only one still relying on the coincidence, and the only
+# reason is that I copied their verified line and it worked.
+#
+#   ⭐ "IT WORKED WHEN I COPIED IT" IS THE REASONING THAT LETS A RUNNER ROT.
+#
+# ASKED on the bus (not guessed here, per CLAUDE.md §7): what is the NETC's `model=` string?
+# The moment they answer, this becomes explicit and the coincidence stops being load-bearing.
 net: { user_nics: 0, fabric_nic_model: null }
 
 file_injection:

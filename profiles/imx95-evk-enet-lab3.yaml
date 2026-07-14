@@ -52,6 +52,11 @@ qemu:
     - "-device"
     - "loader,file={asset_dir}/m33_image_M2.elf,cpu-num=6"
 
+  # PIN THE INVOCATION, not just the binary (tools/argv-pin.py). A RUNNER IS PART OF THE
+  # ARTIFACT: every artifact hash can still match while a flag appears, vanishes or moves,
+  # and the run goes green about a command nobody chose. A mismatch REFUSES TO LAUNCH.
+  argv_pin: "0e1e6fd02aa41062943f4a27db59aac3"
+
 boot:
   mode: direct-kernel
   artifacts:

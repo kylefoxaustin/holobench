@@ -46,6 +46,27 @@ class QemuSpec(_Strict):
     audio: Optional[str] = "none"
     extra_args: list[str] = Field(default_factory=list)
 
+    # PIN THE INVOCATION, not just the binary. boot.pin hashes the ARTIFACT; this hashes
+    # the COMMAND LINE that runs it (Session.invocation_fingerprint — session paths, gdb
+    # port and mcast segment masked). A mismatch REFUSES TO LAUNCH.
+    #
+    # ⭐ A RUNNER IS PART OF THE ARTIFACT. rt1180emulator's board-farm script shipped
+    # `-device tmp105` with no `bus=`, so it bound to whichever bus QEMU saw LAST — and
+    # when new LPI2C instances were added, "last" stopped being the one the firmware drove.
+    # Two FAILs on aarch64, green on x86; the difference was never the architecture. They
+    # nearly spent an afternoon hunting a phantom endianness bug in a model that was fine.
+    #
+    #   "We test the MODEL on two machines and the HARNESS on one — so the harness is
+    #    exactly where untested code goes to live. If you pin our node's ELF, PIN THE
+    #    INVOCATION WITH IT, because ours just proved it can rot independently."
+    #
+    # A lab's result is a function of the binary AND the command line. Every artifact hash
+    # can still match while a flag appears, vanishes or moves — and the run goes green about
+    # a command nobody chose. That is the stale-artifact bug, one layer out.
+    #
+    # Get the current value with `holobench show <id> --argv`.
+    argv_pin: Optional[str] = None
+
 
 # --- Boot artifacts --------------------------------------------------------
 

@@ -78,6 +78,11 @@ qemu:
     - "-serial"
     - "null"
 
+  # PIN THE INVOCATION, not just the binary (tools/argv-pin.py). A RUNNER IS PART OF THE
+  # ARTIFACT: every artifact hash can still match while a flag appears, vanishes or moves,
+  # and the run goes green about a command nobody chose. A mismatch REFUSES TO LAUNCH.
+  argv_pin: "a15b8edcfe901ef68a70b9cafe12974c"
+
 boot:
   mode: direct-kernel
   artifacts:

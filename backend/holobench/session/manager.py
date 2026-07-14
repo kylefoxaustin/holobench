@@ -277,6 +277,7 @@ class Session:
                 self.runtime.disk_overlay = None
         self._verify_pins()
         self.argv = build_command(self.profile, self.runtime)
+        self._verify_argv_pin()
 
         # Per-session cgroup v2 caps (opt-in; no-op when disabled/unavailable).
         self._cgroup = SessionCgroup.create(
@@ -361,6 +362,58 @@ class Session:
                     f"this run — including a green one — would be about a binary "
                     f"nobody chose. Re-verify the artifact, then update boot.pin."
                 )
+
+    def invocation_fingerprint(self) -> str:
+        """A stable hash of the COMMAND LINE, with the per-run parts masked out.
+
+        ⭐ A RUNNER IS PART OF THE ARTIFACT. (rt1180emulator, 2026-07-14.) Their board-farm
+        script shipped `-device tmp105` with no `bus=`, so it bound to whichever bus QEMU saw
+        LAST — and when new LPI2C instances were added, "last" stopped being the one the
+        firmware drove. Two FAILs on aarch64, green on x86, and the difference was never the
+        architecture: they nearly spent an afternoon hunting a phantom endianness bug in a
+        model that was fine. Their conclusion, and it lands squarely on this repo:
+
+            "We test the MODEL on two machines and the HARNESS on one — so the harness is
+             exactly where untested code goes to live. If you pin our node's ELF, PIN THE
+             INVOCATION WITH IT, because ours just proved it can rot independently."
+
+        boot.pin hashes the BINARY. It says nothing about the command line that runs it — and
+        a lab's result is a function of BOTH. A flag that appears, vanishes, or moves changes
+        what was tested while every artifact hash still matches, and the run goes green about
+        something nobody chose. That is the same failure as the stale artifact, one layer out.
+
+        Three things legitimately vary per run and are masked: the session id in paths, the
+        gdbstub port, and the lab's mcast segment (allocated per launch). Everything else —
+        machine type, every -device, every -nic model, the MACs, the artifact paths, the
+        kernel cmdline — IS the invocation, and a change to any of it must be deliberate.
+        """
+        import re
+
+        argv = self.argv or build_command(self.profile, self.runtime)
+        norm = []
+        for a in argv:
+            a = a.replace(str(self.work_dir), "<session>")
+            a = re.sub(r"tcp:127\.0\.0\.1:\d+", "tcp:127.0.0.1:<gdb>", a)
+            a = re.sub(r"mcast=[\d.]+:\d+", "mcast=<segment>", a)
+            norm.append(a)
+        return hashlib.sha256("\x00".join(norm).encode()).hexdigest()[:32]
+
+    def _verify_argv_pin(self) -> None:
+        want = self.profile.qemu.argv_pin
+        if not want:
+            return
+        got = self.invocation_fingerprint()
+        if got != want:
+            raise SessionError(
+                f"{self.profile.id}: THE INVOCATION CHANGED.\n"
+                f"    pinned: {want}\n"
+                f"    actual: {got}\n"
+                f"The QEMU command line is not the one this profile was validated against. "
+                f"Every artifact hash may still match and the run may still go GREEN — about "
+                f"a command nobody chose. A RUNNER IS PART OF THE ARTIFACT. Re-verify the "
+                f"invocation (holobench show <id> --argv), then update qemu.argv_pin.\n"
+                f"    {' '.join(self.argv or [])}"
+            )
 
     def _stage_capture_helper(self) -> None:
         """Stage the V4L2 capture helper + any sensor .ko into the 9p share (->/mnt)."""
