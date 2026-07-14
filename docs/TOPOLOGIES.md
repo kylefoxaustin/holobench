@@ -243,7 +243,38 @@ it holds every board over QMP for that board's whole life. Two consequences, bot
 Reference lab: **`labs/mcx-rt1180-95-l2.yaml`** — MCXN947 (M33, bare metal) + i.MX RT1180
 (M33, bare metal) + i.MX 95 (A55, Linux) on one stock `-nic socket,mcast=` wire; three
 SoCs, two QEMU binaries, two instruction sets, distinct ethertypes (0x88B5/B6/B7), each
-node PASSing only on **observing both others**.
+node PASSing only on **observing both others**. Ran green 2026-07-13.
+
+### What that green run did NOT prove (and the schedule that would)
+
+The **arrival** half is fully exercised, and it is where rt1180's queue stall actually
+lives: `netc_can_receive()` returned false until the guest programmed its RX ring, and
+**QEMU stalls that peer's queue and never retries** unless the device calls
+`qemu_flush_queued_packets()`. That window opens *only* for a node joining traffic
+already in flight — which is precisely why no synchronous test can reach it.
+
+**But every PASS token was earned before the departure.**
+
+| | |
+|---|---|
+| **Proven** | the departure fires, and the survivors keep **running** |
+| **NOT proven** | the **wire** survives it |
+
+> ⭐ **A green run that asserts nothing after the event it exists to test has not tested
+> that event — it has only witnessed it.** "The other two kept running" is a statement
+> about two *processes*, not about a *wire*.
+
+rt1180 documented the same hole from its own side rather than assuming it away: *"what
+the surviving peers do when a beacon they were counting on stops is completely
+unexercised."* Every node still on the segment had already found its peers and stopped
+needing them, so a stalled wire and a healthy one look identical from the outside.
+
+**The assertion that closes it: a node must ARRIVE *after* the departure, and be SEEN.**
+That is the only thing that can tell "the segment absorbed the loss" apart from "the
+segment quietly stalled and nobody was left to notice." 91emulator has offered a
+persistent ENET/FEC beacon (ethertype `0x88B8`); when it lands, the lab gets a 4th node
+scheduled to join **after** mcx leaves, and its PASS is the first evidence this fleet
+will have that a departure is survivable at all.
 
 ## Architecture
 

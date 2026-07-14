@@ -28,12 +28,17 @@
 # PASS terminates QEMU and holobench's QMP connect is refused even though the link
 # passed — that is what bit the UART onboarding.
 #
-# ARTIFACT: staged COPY at holobench-images/enet-lab3/ (see its PROVENANCE.md).
+# ARTIFACT — now the emulator repo's own COMMITTED binary (rt1180emulator 776a83f783).
+# Originally we staged a copy, because their build recipe patched the MCUXpresso SDK at
+# run time and dropped the ELF in /tmp (wiped on reboot). They agreed that was a real
+# gap and committed the artifact: "A REPRODUCIBLE BUILD RECIPE IS NOT A DELIVERABLE" —
+# a board farm has neither the SDK nor any reason to trust a binary that did not exist
+# five seconds ago.
+#
 # Verified by its own banner, not its filename:
 #   "ENET-LAB3 up: rt1180 ethertype 0x88b6, need 0x88b5 + 0x88b7"
-# It is a copy because rt1180's script builds into /tmp (wiped on reboot) and
-# holobench must never write into an emulator repo (CLAUDE.md §7). Regenerate with
-# rt1180emulator's `tools/netc-eth-lab3.sh` (needs the MCUXpresso SDK + west).
+# And md5-identical to the binary the first live green run actually used
+# (63c3a2e88f192ff0ff0d7d96dcbec063), so pointing here changed the path, not the bits.
 
 id:           imxrt1180-evk-netc
 display_name: "NXP i.MX RT1180 EVK (NETC Ethernet node, 0x88B6)"
@@ -53,7 +58,7 @@ qemu:
 boot:
   mode: firmware-elf
   artifacts:
-    firmware: /home/kyle/holobench-images/enet-lab3/node-rt1180.elf
+    firmware: /home/kyle/Documents/GitHub/rt1180emulator/tests/imxrt1180-netc-lab3/netc-lab3-0x88B6.elf
     kernel:   null
     dtb:      null
     initrd:   null

@@ -66,6 +66,40 @@
 # console. And a timeout is INCONCLUSIVE, never a FAILURE (mcxn947's rule): a killed
 # run is not a caught bug.
 #
+# ─────────────────────────────────────────────────────────────────────────────────────
+# ⚠️  WHAT THE FIRST GREEN RUN DID **NOT** PROVE — READ THIS BEFORE TRUSTING THE PASS
+#
+# It ran green on 2026-07-13: all three nodes PASSed, and mcx departed on schedule at
+# t+420 while the other two kept running. That is the ARRIVAL half of the spec, fully
+# exercised — and rt1180's queue stall lives in exactly that half (`netc_can_receive()`
+# returned false until the guest programmed its RX ring; QEMU then STALLS that peer's
+# queue and NEVER RETRIES unless the device calls `qemu_flush_queued_packets()`. The
+# window opens ONLY for a node joining traffic already in flight, which is why no
+# synchronous test can reach it).
+#
+# **BUT EVERY PASS TOKEN WAS EARNED BEFORE t+420.** Nothing in this lab asserts anything
+# AFTER the departure. So:
+#
+#     PROVEN     the departure FIRES, and the survivors keep RUNNING.
+#     NOT PROVEN the WIRE SURVIVES IT.
+#
+# rt1180 said the same from its side, and said it plainly rather than assuming it away
+# (2026-07-13 20:21): "This node has never been the one that departs mid-run... what the
+# SURVIVING peers do when a beacon they were counting on stops is completely
+# unexercised." An honestly-documented hole is still a hole.
+#
+# ⭐ A GREEN RUN THAT ASSERTS NOTHING AFTER THE EVENT IT EXISTS TO TEST HAS NOT TESTED
+#   THAT EVENT — it has only WITNESSED it. "The other two kept running" is a statement
+#   about two PROCESSES, not about a WIRE.
+#
+# THE FIX, AND IT IS THE NEXT SCHEDULE TO RUN: a node must ARRIVE **AFTER** THE DEPARTURE
+# and be SEEN. That is the only assertion that can distinguish "the segment absorbed the
+# loss" from "the segment quietly stalled and nobody was left to notice" — because every
+# node still on the wire had already found its peers and stopped needing them. 91emulator
+# has offered a persistent ENET/FEC beacon (ethertype 0x88B8); when it lands, this lab
+# gets a 4th node scheduled to join AFTER mcx leaves, and its PASS is the first evidence
+# anyone in this fleet will have that a departure is survivable.
+#
 # Recommended observation window: the full horizon (420s) plus margin. A staggered lab
 # observed for less than its horizon has not been run — it has been interrupted.
 
