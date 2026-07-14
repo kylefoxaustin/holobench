@@ -544,3 +544,91 @@ def test_the_three_node_l2_lab_is_staggered_and_someone_leaves_early():
     # three distinct SoCs on ONE segment
     seg = [l for l in lab.links if l.type == "eth"][0]
     assert sorted(seg.members) == ["imx95", "mcx", "rt1180"]
+
+
+# --- rejoin: THE RESUME IS THE ASSERTION -------------------------------------
+#
+# Without a return, a departure can only be shown to be NOTICED (the survivors' heartbeat
+# stops because they lost a peer), never SURVIVED. rt1180 measured the real thing: a
+# surviving re-arming node went silent at 17.0s — exactly when its peer left — and resumed
+# at 35.4s, exactly when it came back. THE GAP IS THE DEPARTURE; THE RESUME IS THE RECOVERY.
+
+def test_a_departed_node_can_REJOIN_and_gets_a_fresh_session():
+    lab = Lab.model_validate({
+        "id": "rj", "display_name": "rj",
+        "nodes": [
+            {"name": "a", "profile": "imx91-evk"},
+            {"name": "b", "profile": "imx91-evk",
+             "start_at": 0.02, "stop_at": 0.08, "rejoin_at": 0.16},
+        ],
+        "links": [{"type": "eth", "segment": "s0", "members": ["a", "b"]}],
+    })
+    mgr = _FakeManager()
+    coord = LabCoordinator(mgr)
+
+    async def go():
+        running = await coord.launch(lab)
+        await asyncio.sleep(0.30)
+        return running
+
+    running = asyncio.run(go())
+    assert running.departed("b") and running.rejoined("b")
+    assert running.node_departures["b"] < running.node_rejoins["b"]
+    # A rejoining node is a FRESH QEMU (the old one is dead, and its socket with it).
+    hist = running.node_session_history["b"]
+    assert len(hist) == 2 and hist[0] != hist[1]
+    assert running.node_sessions["b"] == hist[1]      # current = the new one
+    assert mgr.get(hist[0]).quit_called                # the old one was retired, not killed
+
+
+def test_teardown_reaps_the_OLD_session_of_a_rejoined_node():
+    # REGRESSION: node_sessions only holds the CURRENT session, so reaping that map alone
+    # would orphan the pre-rejoin session — and its work dir holds the console log that
+    # proves what the node did before it left.
+    lab = Lab.model_validate({
+        "id": "rj2", "display_name": "rj2",
+        "nodes": [
+            {"name": "a", "profile": "imx91-evk"},
+            {"name": "b", "profile": "imx91-evk",
+             "start_at": 0.02, "stop_at": 0.08, "rejoin_at": 0.16},
+        ],
+        "links": [{"type": "eth", "segment": "s0", "members": ["a", "b"]}],
+    })
+    mgr = _FakeManager()
+    coord = LabCoordinator(mgr)
+
+    async def go():
+        running = await coord.launch(lab)
+        await asyncio.sleep(0.30)
+        hist = list(running.node_session_history["b"])
+        await coord.stop(lab.id)
+        return hist
+
+    hist = asyncio.run(go())
+    assert set(hist) <= set(mgr.destroyed), "the pre-rejoin session was orphaned"
+
+
+def test_rejoin_without_a_departure_is_rejected():
+    with pytest.raises(Exception):   # you cannot come back if you never left
+        Lab.model_validate({
+            "id": "x", "display_name": "x",
+            "nodes": [{"name": "a", "profile": "imx91-evk", "rejoin_at": 10}],
+        })
+
+
+def test_rejoin_before_the_departure_is_rejected():
+    with pytest.raises(Exception):
+        Lab.model_validate({
+            "id": "x", "display_name": "x",
+            "nodes": [{"name": "a", "profile": "imx91-evk",
+                       "start_at": 0, "stop_at": 10, "rejoin_at": 5}],
+        })
+
+
+def test_the_l2_lab_departs_AND_rejoins_so_recovery_can_be_asserted():
+    lab = load_lab("mcx-rt1180-95-l2")
+    mcx = {n.name: n for n in lab.nodes}["mcx"]
+    assert mcx.stop_at is not None and mcx.rejoin_at is not None
+    assert mcx.rejoin_at > mcx.stop_at
+    # the horizon must reach past the RETURN, or the run stops before the assertion lands
+    assert lab.horizon_s >= mcx.rejoin_at

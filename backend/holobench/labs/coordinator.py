@@ -133,10 +133,18 @@ class RunningLab:
         self.t0: Optional[float] = None
         self.node_arrivals: dict[str, float] = {}
         self.node_departures: dict[str, float] = {}
+        self.node_rejoins: dict[str, float] = {}
+        # Every session a node has ever had (a rejoining node gets a FRESH one). Teardown
+        # walks this, not node_sessions — else a departed node's work dir (and its console
+        # log) is orphaned when its replacement overwrites the current-session entry.
+        self.node_session_history: dict[str, list[str]] = {}
         self._departure_tasks: list[asyncio.Task] = []
 
     def departed(self, node: str) -> bool:
         return node in self.node_departures
+
+    def rejoined(self, node: str) -> bool:
+        return node in self.node_rejoins
 
     @property
     def id(self) -> str:
@@ -476,7 +484,7 @@ class LabCoordinator:
             running.t0 = t0
             any_ok = False
 
-            async def _arrive(node) -> None:
+            async def _arrive(node, *, rejoin: bool = False) -> None:
                 nonlocal any_ok
                 profile = node_profiles.get(node.name)
                 if profile is None:
@@ -498,14 +506,19 @@ class LabCoordinator:
                     session.lab_id = lab.id
                     session.lab_node = node.name
                     running.node_sessions[node.name] = session.id
+                    running.node_session_history.setdefault(node.name, []).append(session.id)
                     at = loop.time() - t0
-                    running.node_arrivals[node.name] = at
+                    if rejoin:
+                        running.node_rejoins[node.name] = at
+                    else:
+                        running.node_arrivals[node.name] = at
                     any_ok = True
                     # getattr: a launch must never fail because its LOG LINE couldn't
                     # read an attribute. Reporting is not allowed to break the thing
                     # it reports on.
                     pid = getattr(session, "pid", "?")
-                    _emit(f"  t+{at:6.1f}s  ARRIVE  {node.name} ({node.profile}) pid={pid}")
+                    verb = "REJOIN" if rejoin else "ARRIVE"
+                    _emit(f"  t+{at:6.1f}s  {verb}  {node.name} ({node.profile}) pid={pid}")
                 except Exception as exc:  # one bad node shouldn't kill the lab
                     running.node_errors[node.name] = str(exc)
                     _emit(f"  t+{loop.time() - t0:6.1f}s  FAILED  {node.name}: {exc}")
@@ -530,6 +543,17 @@ class LabCoordinator:
                 running.node_departures[node.name] = at
                 _emit(f"  t+{at:6.1f}s  DEPART  {node.name} "
                       f"(scheduled — the coordinator retired it; NOT a crash)")
+
+                # COME BACK. Without a return, a departure can only be shown to be NOTICED,
+                # never SURVIVED: the survivors' heartbeat stops because they lost a peer,
+                # and nothing distinguishes "the wire absorbed the loss" from "the wire
+                # stalled." THE RESUME IS THE ASSERTION. A rejoining node is a FRESH QEMU
+                # (the old one is dead and its socket with it), so it also re-runs the
+                # join-late path that the first arrival exercised.
+                if node.rejoin_at is None:
+                    return
+                await asyncio.sleep(max(0.0, t0 + node.rejoin_at - loop.time()))
+                await _arrive(node, rejoin=True)
 
             for node in sorted(lab.nodes, key=lambda n: n.start_at):
                 delay = t0 + node.start_at - loop.time()
@@ -566,7 +590,12 @@ class LabCoordinator:
         # would write a departure into the timeline that never happened.
         for task in getattr(running, "_departure_tasks", []):
             task.cancel()
-        for sid in list(running.node_sessions.values()):
+        # Walk the HISTORY, not the current map: a node that departed and rejoined has an
+        # older session whose entry was overwritten, and that older session still owns a
+        # work dir (with its console log). Reaping only the current one leaks it.
+        sids = {sid for sids in getattr(running, "node_session_history", {}).values()
+                for sid in sids} | set(running.node_sessions.values())
+        for sid in list(sids):
             try:
                 await self.manager.destroy(sid)
             except SessionError:

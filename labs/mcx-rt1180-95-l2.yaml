@@ -184,12 +184,18 @@ nodes:
     mac: "02:49:4d:58:95:01"
     start_at: 0
 
-  # Joins a segment that is already live. Leaves while the others keep running.
+  # Joins a segment that is already live. Leaves while the others keep running — AND COMES
+  # BACK, because the RESUME is the assertion. Without the return, a departure can only be
+  # shown to be NOTICED (the survivors' heartbeat stops when they lose a peer), never
+  # SURVIVED. rt1180 measured it: a surviving re-arming node went silent at 17.0s, exactly
+  # when its peer left, and resumed at 35.4s, exactly when it came back. THE GAP IS THE
+  # DEPARTURE; THE RESUME IS THE RECOVERY. Both are numbers now, not silences.
   - name: mcx
     profile: mcxn947-enet-lab3
     mac: "02:4d:43:58:00:01"     # from mcx's own main.c:95 — see the profile on provenance
     start_at: 150
     stop_at: 420
+    rejoin_at: 480
 
   # Joins later still. Nobody can pass before this moment.
   - name: rt1180

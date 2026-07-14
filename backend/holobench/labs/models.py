@@ -43,6 +43,16 @@ class LabNode(_Strict):
                   issues the QMP quit at a known moment, which is the only reason an
                   early departure is a FACT and not an inference: a node that exits
                   itself makes "left" and "crashed" the same observation.
+      rejoin_at — this node COMES BACK. Without it, a departure can only ever be shown to
+                  be NOTICED, never SURVIVED: the survivors' heartbeat stops (they lost a
+                  peer) and there is nothing left to distinguish "the wire absorbed the
+                  loss" from "the wire stalled." **The RESUME is the assertion.** rt1180
+                  measured it (2026-07-13): a surviving re-arming node beat 15,245 times,
+                  went silent at 17.0s — exactly when its peer left — and resumed at
+                  35.4s, exactly when it came back. THE GAP IS THE DEPARTURE, and the
+                  resume is the recovery, and both are now numbers rather than silences.
+                  (Requires the peers to RE-ARM: a latched node prints PASS once at t+5
+                  and shows absolutely nothing here.)
 
     Defaults (0 / None) preserve the old behaviour exactly — every existing lab is
     unchanged: all nodes arrive at t=0 and nobody departs.
@@ -54,6 +64,7 @@ class LabNode(_Strict):
     profile: str
     start_at: float = 0.0
     stop_at: Optional[float] = None
+    rejoin_at: Optional[float] = None
     mac: Optional[str] = None
 
     @model_validator(mode="after")
@@ -65,6 +76,17 @@ class LabNode(_Strict):
                 f"node '{self.name}': stop_at ({self.stop_at}) must be after "
                 f"start_at ({self.start_at}) — a node cannot leave before it arrives"
             )
+        if self.rejoin_at is not None:
+            if self.stop_at is None:
+                raise ValueError(
+                    f"node '{self.name}': rejoin_at needs a stop_at — a node cannot come "
+                    f"back if it never left"
+                )
+            if self.rejoin_at <= self.stop_at:
+                raise ValueError(
+                    f"node '{self.name}': rejoin_at ({self.rejoin_at}) must be after "
+                    f"stop_at ({self.stop_at})"
+                )
         return self
 
 
@@ -136,15 +158,18 @@ class Lab(_Strict):
 
     @property
     def is_staggered(self) -> bool:
-        """True if this lab actually exercises TIME (someone arrives late or leaves)."""
-        return any(n.start_at > 0 or n.stop_at is not None for n in self.nodes)
+        """True if this lab actually exercises TIME (someone arrives late, leaves, returns)."""
+        return any(n.start_at > 0 or n.stop_at is not None or n.rejoin_at is not None
+                   for n in self.nodes)
 
     @property
     def horizon_s(self) -> float:
         """Last scheduled event. A staggered lab observed for less than this has not
         been run — it has been interrupted."""
-        return max([0.0] + [n.start_at for n in self.nodes]
-                   + [n.stop_at for n in self.nodes if n.stop_at is not None])
+        return max([0.0]
+                   + [n.start_at for n in self.nodes]
+                   + [n.stop_at for n in self.nodes if n.stop_at is not None]
+                   + [n.rejoin_at for n in self.nodes if n.rejoin_at is not None])
 
     @field_validator("nodes")
     @classmethod
