@@ -7,8 +7,15 @@
 id:           spi-link-95-mcx
 display_name: "SPI link — i.MX95 <-> MCXN947 (mixed-SoC)"
 description:  "Cross-SoC SPI: i.MX95 (Linux /dev/spidev0.0, LPSPI7/eDMA) bridged to an MCXN947 (bare-metal M33 LPSPI) over the spi-link SSI bridge + a socket."
+# board95 was `imx95-evk-sd` — the full Yocto SD image, which boots to a LOGIN PROMPT with
+# NOBODY DRIVING /dev/spidev0.0. The MCX asserts SPI LINK PASS/FAIL against a pattern it must
+# RECEIVE, so with nothing sending it could only ever print its banner. This lab COULD NOT
+# PASS and never had — the same defect as can-link-95-mcx, found by fixing that one.
+#   ⭐ A LAB THAT CANNOT PASS IS NOT A FAILING LAB — IT IS ONE NOBODY RAN TO THE END.
+# imx95-evk-spi-lab sends the MCX the frame it is actually waiting for (0xA5 marker + 32 x
+# (i*3+5)&0x7F) — NOT spilink's default text payload, which is valid bytes and the wrong ones.
 nodes:
   - { name: mcx,     profile: mcxn947-spi-device }
-  - { name: board95, profile: imx95-evk-sd }
+  - { name: board95, profile: imx95-evk-spi-lab }
 links:
   - { type: spi, a: mcx, b: board95 }

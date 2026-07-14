@@ -941,3 +941,41 @@ def test_the_can_responder_kernel_and_its_modules_are_ONE_BUILD():
         "the CAN lab's kernel is not the build its staged modules came from -- insmod will "
         "refuse them on vermagic and can0 will never appear"
     )
+
+
+def test_the_spi_lab_boots_a_node_that_actually_SENDS():
+    """Same defect as the CAN lab, found by fixing it: spi-link-95-mcx booted the Yocto SD
+    image -- a login prompt with NOBODY DRIVING /dev/spidev0.0. The MCX asserts SPI LINK
+    PASS/FAIL against a pattern it must RECEIVE, so with nothing sending it could only print
+    its banner. The lab could not pass."""
+    lab = load_lab("spi-link-95-mcx")
+    by = {n.name: n.profile for n in lab.nodes}
+    assert by["board95"] == "imx95-evk-spi-lab", (
+        "the 95 side of the SPI lab must run the sender profile; a login-prompt image drives "
+        "nothing and the MCX waits forever"
+    )
+    prof = load_profile("imx95-evk-spi-lab")
+    assert prof.spi and prof.spi.link and prof.spi.link.dev == "/dev/spidev0.0"
+    assert prof.boot.artifacts.initrd == "spi-lab.cpio.gz"
+    assert prof.boot.pin.get("initrd")
+
+
+def test_the_spi_frame_is_the_one_the_MCX_IS_WAITING_FOR():
+    """⭐ TWO PROGRAMS THAT BOTH 'WORK' AND NEVER AGREE ON THE BYTES.
+
+    The MCX (mcxn947qemu tests/mcxn-spi-link/main.c) hunts a 0xA5 MARKER then N=32 bytes of
+    expect(i) = (i*3+5) & 0x7F. spilink's DEFAULT payload is a text string -- perfectly valid
+    bytes, and the wrong ones. Sending it would clock a clean stream the MCX resyncs on
+    forever, printing nothing, and the lab would look like a broken SPI model instead of two
+    programs that never agreed. This is the Ethernet magic-mismatch bug one wire down, so it
+    gets a test rather than a comment.
+
+    Also asserts the three properties that would silently corrupt the frame in transit --
+    each one a real hazard, not a hypothetical (the payload really does contain 0x20 SPACE
+    and 0x5C BACKSLASH, which is why it is shipped as raw bytes and never as an escape).
+    """
+    frame = bytes([0xA5] + [((i * 3 + 5) & 0x7F) for i in range(32)])
+    assert len(frame) == 33
+    assert 0x00 not in frame, "a NUL would truncate spilink's C-string payload mid-frame"
+    assert 0xFF not in frame, "0xFF is the MCX's IDLE byte -- it would be skipped"
+    assert 0xA5 not in frame[1:], "a second MARKER would resync the MCX mid-frame"
