@@ -28,17 +28,28 @@
 # PASS terminates QEMU and holobench's QMP connect is refused even though the link
 # passed — that is what bit the UART onboarding.
 #
-# ARTIFACT — now the emulator repo's own COMMITTED binary (rt1180emulator 776a83f783).
-# Originally we staged a copy, because their build recipe patched the MCUXpresso SDK at
-# run time and dropped the ELF in /tmp (wiped on reboot). They agreed that was a real
-# gap and committed the artifact: "A REPRODUCIBLE BUILD RECIPE IS NOT A DELIVERABLE" —
-# a board farm has neither the SDK nor any reason to trust a binary that did not exist
-# five seconds ago.
+# ARTIFACT — the emulator repo's own COMMITTED binary. Originally we staged a copy, because
+# their build recipe patched the MCUXpresso SDK at run time and dropped the ELF in /tmp
+# (wiped on reboot). They agreed that was a real gap and committed it: "A REPRODUCIBLE BUILD
+# RECIPE IS NOT A DELIVERABLE" — a board farm has neither the SDK nor any reason to trust a
+# binary that did not exist five seconds ago.
 #
+# ⚠️  AND THIS COMMENT IS WHY boot.pin EXISTS. It used to name two md5s — the first green run's
+# binary (63c3a2e8) and the first committed one (e6a636df) — and asserted they were the same
+# bits. BOTH ARE NOW STALE. The ELF has been recommitted THREE TIMES since (the seq/freshness
+# work, then b3bb27d0c4 which fixed rt1180's CORRUPT token so this repo's scorer can actually
+# see it). Nothing warned us. The profile went on describing a binary that had not existed for
+# hours, in a comment written specifically to establish provenance.
+#
+#   ⭐ A COMMENT ABOUT A HASH IS A HASH NOBODY CHECKS. The pin below is the same claim, made to
+#     the LAUNCHER instead of the reader — and a mismatch REFUSES TO LAUNCH.
+#
+# Current pin = rt1180emulator HEAD (clean worktree, verified with `git show HEAD:<path>`).
 # Verified by its own banner, not its filename:
 #   "ENET-LAB3 up: rt1180 ethertype 0x88b6, need 0x88b5 + 0x88b7"
-# And md5-identical to the binary the first live green run actually used
-# (63c3a2e88f192ff0ff0d7d96dcbec063), so pointing here changed the path, not the bits.
+# Note that banner is `up:` LOWERCASE — it is NOT the `ENET-LAB3 UP:` contract line imx91
+# prints. There is no agreed declaration format yet; the scorer treats this node's contract as
+# UNDECLARED rather than inferring it. (See tools/run-enet-lab3.py §2.)
 
 id:           imxrt1180-evk-netc
 display_name: "NXP i.MX RT1180 EVK (NETC Ethernet node, 0x88B6)"
@@ -66,6 +77,12 @@ boot:
     disk:     null
   append: null
   command_template: null
+
+  # md5 PIN — a mismatch REFUSES TO LAUNCH (see BootSpec.pin). Holobench never builds
+  # these; it consumes them from repos it does not own. It cannot obey the fleet's
+  # "never test a binary you did not just build" — it can only refuse to be SURPRISED.
+  pin:
+    firmware: "8c3e02e36ea09d230cfa3c0e90a547bd"
 
 serial:
   - { name: "LPUART1 console (ENET-LAB3 output lands here)", chardev: console0, role: mcu-console, default: true }

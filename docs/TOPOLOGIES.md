@@ -408,10 +408,138 @@ needing them, so a stalled wire and a healthy one look identical from the outsid
 
 **The assertion that closes it: a node must ARRIVE *after* the departure, and be SEEN.**
 That is the only thing that can tell "the segment absorbed the loss" apart from "the
-segment quietly stalled and nobody was left to notice." 91emulator has offered a
-persistent ENET/FEC beacon (ethertype `0x88B8`); when it lands, the lab gets a 4th node
-scheduled to join **after** mcx leaves, and its PASS is the first evidence this fleet
-will have that a departure is survivable at all.
+segment quietly stalled and nobody was left to notice."
+
+### ✅ The 4th node — the oracle that cannot be pre-satisfied (2026-07-14)
+
+91emulator built it in an hour: `0x88B8`, AF_PACKET on the FEC, and it is now
+`profiles/imx91-evk-enet-lab3` scheduled at **t+450 — thirty seconds after mcx is gone.**
+
+A **survivor** only ever shows that the segment still works *for someone already on it*.
+Its ring is programmed, its peers are known, its descriptors are armed — and a departure
+re-tests none of that. This node has none of it. It has to build every bit of that state
+against a segment that has just lost a member.
+
+> ⭐ **A SURVIVOR PROVES THE SEGMENT STILL WORKS FOR WHOEVER WAS ALREADY ON IT. ONLY A NEW
+> ARRIVAL PROVES IT STILL WORKS FOR SOMEBODY WHO WASN'T.**
+
+Its peer list is `0x88B6,0x88B7` — the two that never leave. **mcx (`0x88B5`) is deliberately
+absent:** requiring the departed node would make this node's PASS fail for exactly the reason
+the lab exists to demonstrate. An assertion that cannot survive its own premise is not an
+assertion. (Guarded by `test_the_post_departure_joiner_does_NOT_require_the_departed_peer`.)
+
+**And the honest limit, written down before anyone reads the green:** this node *sees* the
+survivors; the survivors **cannot see it.** mcx, rt1180 and imx95 each compile a fixed peer
+list of `0x88B5/0x88B6/0x88B7`, and `0x88B8` is in none of them — they are *structurally
+blind* to it. So this buys "the post-departure segment **carries** a new joiner", not "the
+fleet **noticed** one." The absence of a complaint from a node that cannot complain is not
+evidence of anything. Adding `0x88B8` to three peer lists is **asked, not assumed.**
+
+### 🔴 A path in a live worktree is not an artifact (2026-07-14)
+
+The fleet's rule is **NEVER TEST A BINARY YOU DID NOT JUST BUILD** — rt1180, 91 and 93 each
+shipped a quiet, plausible, wrong number after testing a stale binary, and rt1180 named why
+it survives: *"'my new assertion found nothing' is a very comfortable thing to believe."*
+
+**Holobench cannot obey that rule.** It never builds any of these artifacts; it consumes them
+from five repos it does not own (CLAUDE.md §7). **Its binaries are stale by construction.** The
+only question is whether it *notices*.
+
+It did not. On 2026-07-13/14, every artifact in this lab had drifted from what the bus said:
+
+| artifact | announced | what was actually there |
+|---|---|---|
+| 91 `enet-lab3-imx91.cpio.gz` | `242b361df9` / `42a68dca` (and the **commit matched exactly** — the announcement was honest) | an **uncommitted** rebuild at that path, then **another one an hour later**: `1a8f3301` → `f569d0c4` |
+| rt1180 `netc-lab3-0x88B6.elf` | pinned in a *comment* | recommitted **three times**, incl. `b3bb27d0c4`, unannounced |
+| mcx `node-mcx.elf` (staged copy) | — | **two generations stale — it predated the freshness fix entirely** |
+
+The mcx one is the sharpest: the lab would have run a beacon with **no replay detection, in the
+very run that reports on replay detection.**
+
+> ⭐ **A PATH IN A LIVE WORKTREE IS NOT AN ARTIFACT.** If a peer announces a *commit*, consume
+> the **commit** (`git show <sha>:<path>`), never the path.
+>
+> ⭐ **NEVER RUN A LAB AGAINST AN ARTIFACT WHOSE HASH YOU DID NOT VERIFY** — the farm-shaped
+> dual of the fleet's rule.
+
+`boot.pin` is an md5 per artifact, and a mismatch **refuses to launch**. Not a warning: *a
+warning printed above a green result is a warning nobody reads.* A pin naming a field that does
+not exist is a **load error**, because a check that silently guards nothing is precisely the bug
+the pin was added to prevent.
+
+### The flag day is retired — ask the sender, not the frame (2026-07-14)
+
+The phase gate below (emit-then-enforce) was the right *concern* and the wrong *mechanism*.
+91emulator found the escape, and it needs no coordination at all:
+
+> ⭐ **A PEER THAT HAS EVER EMITTED A VALID BODY CANNOT STOP KNOWING HOW.**
+
+Arm the body check **per peer**, on first evidence that peer *can* emit. Never emitted → it
+hasn't upgraded; count it, say so once. Has emitted, and now `magic=0` → **that is a buffer that
+was never written**, and it is caught. Identical bytes on the wire; benign in one case, a hard
+fail in the other. **Ask the sender, not the frame.**
+
+So `ENFORCE_CORRUPT` is gone from the scorer. Enforcement is now decided **per node**, because
+whether a `CORRUPT` line is trustworthy is a property of that node's *firmware*, not of the
+calendar. A self-arming node's CORRUPT is a hard fail; an unconditionally-enforcing node's is
+reported and **not scored** — a red we cannot trust is worse than no red, because it gets the
+check deleted by the people it protects.
+
+### And freshness, not validity — every stale frame is a good frame
+
+rt1180 found the thing that made the whole checkable-body design half-useless:
+
+> **The corruption is not a mangled frame. It is an *old* one, delivered again.**
+
+A dropped frame leaves the RX descriptor pointing at a **stale buffer** — which holds a
+*previously valid* frame from the same peer. Its magic is right. Its embedded ethertype agrees
+with its header *perfectly*. Its `0x5A` pattern is intact. **Every integrity check that asks "is
+this frame well-formed?" answers yes — because it is.** Three trees, one number:
+
+| node | well-formedness failures | replays caught by the sequence check |
+|---|---|---|
+| rt1180 | node still **PASSES** | 26 |
+| 91 | **0** | 40 |
+| mcxn | **0** | 490 |
+
+The fix was a field all four nodes had emitted since their first commit and **none of them ever
+read backwards**: the per-sender sequence must **strictly increase**. `seq <= last` is a stale
+buffer (and must not update `last`, or it drags the baseline backwards with it). `seq > last+1`
+is loss — a statistic, never a failure.
+
+> ⭐ **THE QUESTION WAS NEVER "IS THIS FRAME VALID." IT WAS "IS THIS FRAME *NEW*."**
+
+### The assertion only the coordinator can make
+
+mcxn947 observed that on a *node*, a stalled ring and a departed peer produce the identical
+signal — a rejected frame never refreshes a peer's liveness — and called that the honest answer,
+because from the segment's point of view they *are* the same event. **Correct for a node.**
+
+Not correct for the **coordinator**: *we scheduled the departure.* A heartbeat gap that brackets
+`t+stop_at` is the event we ordered. **A gap anywhere else is a wire fault that no node on the
+segment is in a position to name**, and it is now a hard fail (`unscheduled_gaps`). It is the one
+thing the farm can see that none of the boards can.
+
+### The instrument is audited before the subject
+
+mcxn947 lost **six** departure runs and **not one** was the firmware. Every failure was in the
+instrument, and every one *looked* like a model bug. All four are now guards in the scorer:
+
+1. **An observer that cannot keep up with its subject is observing its own backlog.** Their node
+   printed every frame, fell behind the wire, and a *killed* peer's stale backlog kept refreshing
+   its liveness timer. "The peer is still here" and "I am 40,000 frames behind" were the same
+   observation.
+2. **A liveness timeout that is too short does not fail safe — it manufactures departures that
+   never happened.** Their 300-spin hold declared a *live* peer dead 75 times. So the scorer no
+   longer hardcodes a timeout and hopes: it **measures each node's own inter-beat spacing** and
+   refuses to score any node whose normal quiet period is within 3× of the timeout.
+3. **Never test a binary you did not just build** → `boot.pin`, above.
+4. **A kill that reaches the wrapper and not the process is not a kill.** Five of their "failed"
+   departure runs were scoring a departure that never happened. Holobench departs over QMP, which
+   is a different mechanism — *and that is exactly why it must still be checked, because a
+   mechanism you trust is a mechanism you stopped verifying.* The departed node is now **verified
+   dead** before its departure is scored, and an un-killable peer is **inconclusive, not a
+   failure.**
 
 ## Architecture
 

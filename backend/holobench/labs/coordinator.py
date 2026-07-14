@@ -286,6 +286,18 @@ class LabCoordinator:
                     running.node_links.setdefault(member, []).append(
                         f"{link.segment}@{group}:{_MCAST_PORT}")
 
+            # 2·5) Some boards carry a SECOND modeled NIC that still needs a backend even
+            # though only the first is on the segment (i.MX91: FEC on the wire, EQOS not).
+            # These go AFTER the fabric NICs — ORDER IS LOAD-BEARING, because QEMU binds
+            # modeled NICs to -nic backends positionally, and putting `user` first would
+            # silently hand the segment to the wrong controller. (91emulator's verified
+            # line, in that order.) Default 0, so no existing lab's argv moves.
+            for node in lab.nodes:
+                prof = node_profiles.get(node.name)
+                extra = getattr(prof.net, "fabric_user_nics", 0) if prof else 0
+                if extra and node_nics[node.name]:
+                    node_nics[node.name] += ["user"] * extra
+
             # 2a) Auto-assign a static IP per eth-segment member (kernel `ip=` on the
             # fabric NIC = eth0) so boards come up ping-ready — the segment is a bare
             # L2 switch with no DHCP. Subnet 10.<group-octet>.0.0/24, member i -> .(i+1).

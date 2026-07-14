@@ -171,8 +171,8 @@
 # observed for less than its horizon has not been run — it has been interrupted.
 
 id:           mcx-rt1180-95-l2
-display_name: "MCX + RT1180 + i.MX95 — 3-node raw-L2 segment (staggered)"
-description:  "Three SoCs, two QEMU binaries, one L2 wire. Nodes arrive late and one leaves early — because the bug class lives in time, not topology."
+display_name: "MCX + RT1180 + i.MX95 + i.MX91 — 4-node raw-L2 segment (staggered)"
+description:  "Four SoCs, two QEMU binaries, one L2 wire. Nodes arrive late, one leaves early, and one arrives AFTER the departure — because the bug class lives in time, not topology."
 
 # Raw L2: these nodes speak in ethertypes, not IP. A kernel `ip=` would be noise.
 auto_ip: false
@@ -203,5 +203,37 @@ nodes:
     mac: "54:27:8d:00:00:00"
     start_at: 210
 
+  # ⭐ THE POST-DEPARTURE JOINER — the assertion this lab was missing, and the reason the
+  # first green run proved less than it looked like it proved.
+  #
+  # imx95, mcx and rt1180 are ALL on the wire before t+420. Every PASS they emit is earned
+  # on a segment that has never lost anybody. A SURVIVOR only ever shows that the segment
+  # still works FOR SOMEONE ALREADY ON IT — its ring is programmed, its peers are known,
+  # its descriptors are armed. None of that is re-tested by a departure.
+  #
+  # This node has NONE of that. It starts at t+450 — THIRTY SECONDS AFTER mcx IS GONE — and
+  # must build every bit of its state against a segment that has just lost a member. It is
+  # the only oracle in the lab that CANNOT BE PRE-SATISFIED, because it did not exist when
+  # the wire was whole.
+  #
+  #   PROVEN BY A SURVIVOR   the wire kept working for the nodes that were already talking.
+  #   PROVEN BY THIS NODE    the wire still works for somebody who WASN'T.
+  #
+  # Its peer list is 0x88B6 + 0x88B7 (rt1180 + imx95) — the two that never leave. mcx is
+  # deliberately NOT required: demanding the departed node would make this node's PASS fail
+  # for precisely the reason the lab exists to demonstrate. (It will very likely SEE mcx
+  # anyway, after the t+480 rejoin. Seeing it is a bonus; needing it would be a bug.)
+  #
+  # HONEST LIMIT, WRITTEN DOWN BEFORE ANYONE READS THE GREEN: this node SEES the survivors.
+  # The survivors CANNOT SEE IT — mcx, rt1180 and imx95 each compile a fixed peer list of
+  # 0x88B5/0x88B6/0x88B7, and 0x88B8 is in none of them. They are STRUCTURALLY BLIND to it.
+  # So this buys "the post-departure segment CARRIES a new joiner", NOT "the fleet NOTICED
+  # one" — the second needs 0x88B8 added to three peer lists, which is asked, not assumed.
+  # The absence of a complaint from a node that CANNOT complain is not evidence of anything.
+  - name: imx91
+    profile: imx91-evk-enet-lab3
+    mac: "52:54:00:12:34:b8"
+    start_at: 450
+
 links:
-  - { type: eth, segment: seg0, members: [imx95, mcx, rt1180] }
+  - { type: eth, segment: seg0, members: [imx95, mcx, rt1180, imx91] }

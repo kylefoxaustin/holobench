@@ -64,6 +64,12 @@ boot:
   append: "console=ttyLP0,115200 cpuidle.off=1 rdinit=/init lab_et=0x88B7 lab_peers=0x88B5,0x88B6 lab_deadline=600000 lab_postpass=86400000"
   command_template: null
 
+  # md5 PIN — a mismatch REFUSES TO LAUNCH (see BootSpec.pin). Holobench never builds
+  # these; it consumes them from repos it does not own. It cannot obey the fleet's
+  # "never test a binary you did not just build" — it can only refuse to be SURPRISED.
+  pin:
+    initrd: "6193518f33493395f2cf607132a47355"
+
 serial:
   - { name: "A-core console (ENET-LAB3 output lands here)", chardev: console0, role: a-core, default: true }
   # M33 System Manager debug console = serial_hd(1). Quiet under the M=2 idle

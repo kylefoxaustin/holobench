@@ -1,0 +1,132 @@
+# Holobench board profile — NXP i.MX 91 EVK as the 0x88B8 node of the L2 lab.
+#
+# THE FOURTH NODE, AND THE ONE THAT CLOSES THE REMAINING HOLE. mcx/rt1180/imx95 are all
+# present BEFORE the departure. Every one of their PASS tokens is therefore earned on a
+# segment that has never lost anybody — which is why the first "green" run of this lab
+# proved the departure FIRED, not that the wire SURVIVED it. This node is scheduled to
+# arrive AFTER mcx leaves (labs/mcx-rt1180-95-l2.yaml, start_at 450 > stop_at 420):
+#
+#   ⭐ A SURVIVOR PROVES THE SEGMENT STILL WORKS FOR WHOEVER WAS ALREADY ON IT.
+#      ONLY A NEW ARRIVAL PROVES IT STILL WORKS FOR SOMEBODY WHO WASN'T.
+#
+# WHAT THIS NODE CANNOT PROVE — STATED BEFORE ANYONE READS THE GREEN. imx91 will SEE the
+# survivors. The survivors CANNOT SEE IT: mcx, rt1180 and imx95 each compile a fixed peer
+# list (0x88B5/0x88B6/0x88B7) and 0x88B8 is not in any of them, so they are STRUCTURALLY
+# BLIND to this node — they will not print CORRUPT about it, and they will not count it.
+# So this profile buys "the post-departure segment CARRIES a new joiner", NOT "the fleet
+# NOTICED one". The second needs 0x88B8 added to the other three peer lists — asked on the
+# bus, not assumed here. (An asymmetric assertion that reads as symmetric is how a lab
+# starts lying: the absence of a complaint from a node that cannot complain is not evidence.)
+#
+# FACTS (91emulator, tests/interconnect-imx91/run-enet-lab.sh — its own verified line):
+#   qemu-system-aarch64 -M imx91-11x11-evk -smp 1 -m 1G -display none -audio driver=none \
+#     -kernel Image -dtb imx91-11x11-evk.dtb -initrd enet-lab3-imx91.cpio.gz \
+#     -nic socket,mcast=<group>,model=imx.enet,mac=52:54:00:12:34:b8 \
+#     -nic user \
+#     -append "console=ttyLP0,115200 cpuidle.off=1 rdinit=/init beacon.et=0x88B8 beacon.peers=..."
+#
+# NIC ORDER IS LOAD-BEARING. The 91 has TWO modeled NICs (FEC + EQOS) and QEMU binds them to
+# -nic backends POSITIONALLY. The FEC must take the socket (it is the one on the segment) and
+# the EQOS still needs a backend, hence `-nic user` SECOND — net.fabric_user_nics, appended
+# after the fabric NIC by the coordinator. Reverse them and the segment silently goes to the
+# wrong controller: a wire that is connected to nothing, with no error anywhere.
+#
+# ARTIFACT — the COMMITTED blob (91emulator 242b361df9), staged, NOT the path in their tree.
+# This is the profile that found the rule. 91 announced md5 42a68dca / 1,305,563 B, and the
+# announcement was HONEST — the committed blob matches it exactly. But NINE MINUTES LATER the
+# file AT THAT PATH was an uncommitted rebuild (1a8f3301, 1,305,760 B) and it is still dirty.
+# Pointing a farm profile at a live worktree would have run this lab against a binary that is
+# in no commit, that nobody announced, and that their next build overwrites — and it would
+# very likely have gone GREEN.
+#
+#   ⭐ A PATH IN A LIVE WORKTREE IS NOT AN ARTIFACT. If a peer announces a COMMIT, consume
+#     the COMMIT. And pin the hash, because the farm cannot obey "never test a binary you
+#     did not just build" — it never builds any of them. It can only refuse to be surprised.
+#
+# The beacon self-arms its corruption check PER PEER (91emulator, 22:38): it condemns a peer
+# only after that peer has PROVEN it can emit a valid body. So this node is safe on today's
+# mixed segment and needs no flag day — see lab_node.enforces_on_arm below.
+
+id:           imx91-evk-enet-lab3
+display_name: "NXP i.MX 91 EVK (FEC 4-node L2 lab, 0x88B8 — the post-departure joiner)"
+soc:          "NXP i.MX 91"
+description:  "i.MX 91 Linux node that joins the segment AFTER a peer departs — beacons 0x88B8, PASSes only on seeing both SURVIVORS."
+
+qemu:
+  binary:  /home/kyle/Documents/GitHub/91emulator/build/qemu-system-aarch64
+  machine: imx91-11x11-evk
+  memory:  "1G"
+  audio:   none
+  extra_args:
+    - "-smp"
+    - "1"
+    # Second LPUART needs a backend (console is ttyLP0 = first serial).
+    - "-serial"
+    - "null"
+
+boot:
+  mode: direct-kernel
+  artifacts:
+    kernel:  Image
+    dtb:     imx91-11x11-evk.dtb
+    initrd:  enet-lab3-imx91.cpio.gz
+    rootfs:  null
+    disk:    null
+  # beacon.peers = the two nodes that NEVER LEAVE (rt1180 0x88B6 + imx95 0x88B7).
+  # mcx (0x88B5) is deliberately ABSENT: this node arrives after mcx has departed, so
+  # requiring it would make the node's PASS depend on a peer that is, by design, gone —
+  # the assertion would fail for the exact reason the lab is trying to demonstrate.
+  append: "console=ttyLP0,115200 cpuidle.off=1 rdinit=/init beacon.et=0x88B8 beacon.peers=0x88B6,0x88B7"
+  command_template: null
+
+  # md5 PIN. A mismatch REFUSES TO LAUNCH — see BootSpec.pin. This is the committed
+  # blob at 91emulator 242b361df9, verified against `git show`, not against the file.
+  pin:
+    initrd: "42a68dca05eeb6345bcea8ea19b6060c"
+
+serial:
+  - { name: "A-core console (ENET-LAB3 output lands here)", chardev: console0, role: a-core, default: true }
+
+display: { enabled: false, device: null, vnc: false }
+
+net:
+  user_nics: 0                 # the lab path replaces these wholesale; kept 0 for honesty
+  fabric_nic_model: imx.enet   # the FEC — NOT the EQOS stub. Must take the segment NIC.
+  fabric_user_nics: 1          # ...and the EQOS still needs a backend, appended AFTER it.
+
+# The beacon's own contract, as DATA — so the fleet's emit-status board can be DERIVED from
+# the profiles instead of maintained by hand. (91emulator, 22:38: "a status board that is not
+# derived is a status board that drifts" — said about a board of MINE that was three hours
+# stale while I was quoting from the very file that disproved it.)
+lab_node:
+  beacon_ethertype: "0x88B8"
+  peers: ["0x88B6", "0x88B7"]
+  # Emits the checkable body: magic 0xB5B6B7C0 @14, own ethertype @18, seq @20, 0x5A @24..63.
+  emits_checkable_body: true
+  # Asserts the per-sender sequence STRICTLY INCREASES. This is the only check that sees a
+  # stale buffer: a dropped frame leaves the descriptor pointing at a PREVIOUSLY VALID frame,
+  # so magic/pattern/self-ethertype all pass — "every stale frame is a good frame".
+  asserts_freshness: true
+  # Condemns a peer ONLY after that peer has proven it can emit a valid body. This is what
+  # makes CORRUPT from this node TRUSTWORTHY on a mixed segment, and what retires the flag day.
+  enforces_on_arm: true
+  # PASS/CORRUPT lines carry the ratified prefixes; no banner of this node contains either.
+  pass_prefix: "ENET-LAB3 PASS"
+  corrupt_prefix: "ENET-LAB3 CORRUPT"
+
+file_injection:
+  nine_p: { enabled: false, mount_tag: holobench }
+  tftp:   { enabled: false }
+  nfs:    { enabled: false }
+  image_swap: { enabled: false, target_drive: null }
+
+power: { warm_reset: true, cold_cycle: true, pause: true, reinstall: false }
+
+introspection:
+  qmp_events: true
+  memory_map: true
+  device_tree: true
+  gdbstub: { enabled: true }
+  snapshots: false
+
+reservation: { default_minutes: 30, max_minutes: 120 }

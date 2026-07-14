@@ -9,6 +9,7 @@ import pytest
 from holobench.labs import LabError, list_labs, load_lab
 from holobench.labs.coordinator import LabCoordinator, LabState, _mac
 from holobench.labs.models import Lab
+from holobench.profiles.loader import load_profile
 
 
 # --- spec validation -------------------------------------------------------
@@ -525,7 +526,7 @@ def test_existing_labs_are_unstaggered_by_default():
         assert lab.horizon_s == 0
 
 
-def test_the_three_node_l2_lab_is_staggered_and_someone_leaves_early():
+def test_the_l2_lab_is_staggered_and_someone_leaves_early():
     # The lab the fleet asked for, exactly as they specified it: staggered arrivals,
     # a departure mid-run, and raw L2 (no auto-IP — these nodes talk in ethertypes).
     lab = load_lab("mcx-rt1180-95-l2")
@@ -537,13 +538,63 @@ def test_the_three_node_l2_lab_is_staggered_and_someone_leaves_early():
     # the others join a live segment, at different times
     assert byname["mcx"].start_at > 0
     assert byname["rt1180"].start_at > byname["mcx"].start_at
-    # and exactly one node leaves early, while the other two keep running
+    # and exactly one node leaves early, while the others keep running
     leavers = [n.name for n in lab.nodes if n.stop_at is not None]
     assert leavers == ["mcx"]
     assert byname["mcx"].stop_at > byname["rt1180"].start_at
-    # three distinct SoCs on ONE segment
+    # FOUR distinct SoCs, two QEMU binaries, two ISAs, ONE segment
     seg = [l for l in lab.links if l.type == "eth"][0]
-    assert sorted(seg.members) == ["imx95", "mcx", "rt1180"]
+    assert sorted(seg.members) == ["imx91", "imx95", "mcx", "rt1180"]
+
+
+def test_a_node_ARRIVES_AFTER_THE_DEPARTURE_or_the_lab_proves_nothing_new():
+    """⭐ The assertion the first green run was missing, guarded so it cannot be lost again.
+
+    imx95, mcx and rt1180 are all on the wire before the departure. Every PASS they emit is
+    therefore earned on a segment that has never lost anybody — which is why a green run
+    proved the departure FIRED, not that the wire SURVIVED it.
+
+    A SURVIVOR only shows the segment still works FOR SOMEONE ALREADY ON IT: its ring is
+    programmed, its peers are known, its descriptors are armed, and a departure re-tests none
+    of that. Only a node that arrives AFTERWARDS has to build all of it against a segment that
+    has just lost a member — and it is the one oracle in the lab that CANNOT BE PRE-SATISFIED,
+    because it did not exist when the wire was whole.
+
+    If someone ever "simplifies" this lab by starting all four nodes together, this test fails
+    and tells them what they threw away.
+    """
+    lab = load_lab("mcx-rt1180-95-l2")
+    dep = [n for n in lab.nodes if n.stop_at is not None][0]
+    joiners = [n for n in lab.nodes if n.start_at > dep.stop_at]
+    assert joiners, (
+        "no node arrives after the departure: every oracle on this segment was already "
+        "satisfied before the event the lab exists to test"
+    )
+    j = joiners[0]
+    assert j.name == "imx91"
+    assert j.start_at > dep.stop_at          # arrives strictly after the departure
+    # and it must be ON the segment it is supposed to be joining
+    seg = [l for l in lab.links if l.type == "eth"][0]
+    assert j.name in seg.members
+
+
+def test_the_post_departure_joiner_does_NOT_require_the_departed_peer():
+    """A node scheduled to arrive after mcx leaves must not need mcx to pass.
+
+    Requiring it would make the node's PASS fail for EXACTLY the reason the lab exists to
+    demonstrate — the assertion would be measuring its own premise. imx91's peer list is
+    rt1180 (0x88B6) + imx95 (0x88B7): the two that never leave. mcx (0x88B5) is absent on
+    purpose, and it is a bug the day someone "completes" it.
+    """
+    prof = load_profile("imx91-evk-enet-lab3")
+    assert prof.lab_node is not None
+    assert prof.lab_node.beacon_ethertype == "0x88B8"
+    assert prof.lab_node.peers == ["0x88B6", "0x88B7"]
+    assert "0x88B5" not in prof.lab_node.peers      # the DEPARTED node. Never require it.
+    # the kernel cmdline the node actually boots must agree with the declared contract:
+    # a contract in a yaml field the boot line contradicts is a contract nobody enforces.
+    assert "beacon.et=0x88B8" in prof.boot.append
+    assert "beacon.peers=0x88B6,0x88B7" in prof.boot.append
 
 
 # --- rejoin: THE RESUME IS THE ASSERTION -------------------------------------
@@ -632,3 +683,128 @@ def test_the_l2_lab_departs_AND_rejoins_so_recovery_can_be_asserted():
     assert mcx.rejoin_at > mcx.stop_at
     # the horizon must reach past the RETURN, or the run stops before the assertion lands
     assert lab.horizon_s >= mcx.rejoin_at
+
+
+# --- boot.pin: NEVER RUN A LAB AGAINST AN ARTIFACT WHOSE HASH YOU DID NOT VERIFY -------
+#
+# The fleet's rule is "NEVER TEST A BINARY YOU DID NOT JUST BUILD" — rt1180, 91 and 93 each
+# shipped a quiet, plausible, WRONG number after testing a stale binary, and rt1180 named why
+# it survives: "'my new assertion found nothing' is a VERY COMFORTABLE THING TO BELIEVE."
+#
+# Holobench CANNOT obey that rule. It never builds any of these artifacts — it consumes them
+# from repos it does not own (CLAUDE.md §7). Its binaries are stale BY CONSTRUCTION. The only
+# question is whether it NOTICES. boot.pin is the farm-shaped version of the rule, and these
+# tests exist because a guard nobody proved fires is a guard that does not.
+
+def test_a_pin_that_does_not_match_REFUSES_TO_LAUNCH(tmp_path):
+    """The whole point: a drifted artifact must not produce a RESULT, green or otherwise."""
+    from holobench.profiles.models import Profile
+    from holobench.session.manager import Session, SessionError
+
+    art = tmp_path / "fw.elf"
+    art.write_bytes(b"the binary that is actually there")
+    prof = Profile.model_validate({
+        "id": "pinned", "display_name": "p", "soc": "s",
+        "qemu": {"binary": "/bin/true", "machine": "virt"},
+        "boot": {
+            "mode": "firmware-elf",
+            "artifacts": {"firmware": str(art)},
+            "pin": {"firmware": "00000000000000000000000000000000"},
+        },
+    })
+    sess = Session(prof, base_dir=tmp_path / "work")
+    with pytest.raises(SessionError, match="CHANGED UNDER US"):
+        asyncio.get_event_loop_policy().new_event_loop().run_until_complete(sess.launch())
+
+
+def test_a_pin_that_MATCHES_does_not_block_the_launch(tmp_path):
+    """Negative-tested: the gate must be a gate, not a wall. (A check that always fails is
+    indistinguishable from a check that always fires — and just as useless.)"""
+    import hashlib
+
+    from holobench.profiles.models import Profile
+    from holobench.session.manager import Session
+
+    art = tmp_path / "fw.elf"
+    art.write_bytes(b"the binary that is actually there")
+    good = hashlib.md5(art.read_bytes()).hexdigest()
+    prof = Profile.model_validate({
+        "id": "pinned", "display_name": "p", "soc": "s",
+        "qemu": {"binary": "/bin/true", "machine": "virt"},
+        "boot": {
+            "mode": "firmware-elf",
+            "artifacts": {"firmware": str(art)},
+            "pin": {"firmware": good},
+        },
+    })
+    sess = Session(prof, base_dir=tmp_path / "work")
+    sess.work_dir.mkdir(parents=True, exist_ok=True)
+    sess._verify_pins()          # the assertion under test: it does NOT raise
+
+
+def test_a_pin_naming_an_artifact_that_does_not_exist_is_a_LOAD_ERROR():
+    """⭐ A pin whose key is not an artifact field guards NOTHING — and does it SILENTLY.
+
+    That is the exact failure the pin exists to prevent, one level up: a check that reads like
+    a check, runs, and asserts nothing. Someone typos `firmwre:` and the profile still loads,
+    still launches, and still looks pinned. So a misspelled pin is a LOAD ERROR.
+    """
+    from pydantic import ValidationError
+
+    from holobench.profiles.models import BootSpec
+
+    with pytest.raises(ValidationError, match="no artifact named"):
+        BootSpec.model_validate({"pin": {"firmwre": "deadbeef"}})   # typo, on purpose
+
+
+def test_every_lab3_profile_is_PINNED_because_all_four_artifacts_moved_under_us():
+    """Not a style rule — a regression guard on a thing that actually happened.
+
+    On 2026-07-13/14 EVERY artifact in this lab drifted from what the bus announced:
+      · 91's cpio moved TWICE in 12 minutes, and the file at its path was an UNCOMMITTED
+        rebuild 9 minutes after they announced the committed one;
+      · rt1180's ELF was recommitted THREE times;
+      · the staged mcx ELF was two generations behind and predated the freshness fix entirely.
+    Every one of them would have run. Most would have gone GREEN.
+    """
+    for pid in ("imx91-evk-enet-lab3", "imx95-evk-enet-lab3",
+                "imxrt1180-evk-netc", "mcxn947-enet-lab3"):
+        prof = load_profile(pid)
+        assert prof.boot.pin, f"{pid} boots an UNPINNED artifact"
+
+
+def test_a_node_cannot_claim_freshness_without_emitting_a_body():
+    """You cannot assert a sequence number you do not transmit. A profile claiming freshness
+    with no body claims an assertion that CANNOT RUN — and on a derived status board it would
+    read exactly like one that can."""
+    from pydantic import ValidationError
+
+    from holobench.profiles.models import LabNodeBeacon
+
+    with pytest.raises(ValidationError, match="has no sequence to assert on"):
+        LabNodeBeacon.model_validate({
+            "beacon_ethertype": "0x88B8",
+            "emits_checkable_body": False,
+            "asserts_freshness": True,
+        })
+
+
+def test_the_imx91_node_gets_its_EQOS_backend_AFTER_the_fabric_nic():
+    """NIC ORDER IS LOAD-BEARING and it is silent when wrong.
+
+    The i.MX91 has two modeled NICs (FEC + EQOS) and QEMU binds them to -nic backends
+    POSITIONALLY. The FEC must take the socket — it is the one on the segment — and the EQOS
+    still needs a backend, so 91emulator's verified line is `-nic socket,...,model=imx.enet`
+    FOLLOWED BY `-nic user`. Reverse them and the segment goes to the wrong controller: a wire
+    connected to nothing, with no error anywhere.
+    """
+    prof = load_profile("imx91-evk-enet-lab3")
+    assert prof.net.fabric_nic_model == "imx.enet"     # the FEC, not the EQOS stub
+    assert prof.net.fabric_user_nics == 1
+
+
+def test_fabric_user_nics_defaults_to_zero_so_no_existing_lab_moves():
+    """The new field must be inert everywhere it wasn't asked for. A fabric change that
+    silently rewrites every other lab's command line is not a fix, it's a blast radius."""
+    for pid in ("imx95-evk-enet-lab3", "imxrt1180-evk-netc", "mcxn947-enet-lab3"):
+        assert load_profile(pid).net.fabric_user_nics == 0

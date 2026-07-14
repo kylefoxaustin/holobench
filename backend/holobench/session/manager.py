@@ -14,6 +14,7 @@ never leaves the backend; callers get mediated control verbs, not raw QMP.
 from __future__ import annotations
 
 import asyncio
+import hashlib
 import os
 import shutil
 import socket
@@ -29,7 +30,12 @@ from qemu.qmp import EventListener, QMPClient
 
 from ..bridges.console import SerialTap
 from ..profiles.models import Profile
-from .command import SessionRuntime, build_command, command_str
+from .command import (
+    SessionRuntime,
+    _resolve_artifact,
+    build_command,
+    command_str,
+)
 from .isolation import SessionCgroup, memory_max_bytes
 
 
@@ -269,6 +275,7 @@ class Session:
             else:
                 # golden disk missing -> degrade gracefully (no swap drive)
                 self.runtime.disk_overlay = None
+        self._verify_pins()
         self.argv = build_command(self.profile, self.runtime)
 
         # Per-session cgroup v2 caps (opt-in; no-op when disabled/unavailable).
@@ -305,6 +312,55 @@ class Session:
             await self._start_serial_taps()
         self._start_event_capture()
         self.state = SessionState.RUNNING
+
+    def _verify_pins(self) -> None:
+        """Refuse to launch if a pinned boot artifact is not the one we pinned.
+
+        Holobench does not build its artifacts — the emulator repos do, and they
+        are read-only to us (CLAUDE.md §7). So the fleet's rule ("never test a
+        binary you did not just build") cannot be obeyed here as written: our
+        binaries are stale BY CONSTRUCTION. What we can do is refuse to be
+        SURPRISED by one.
+
+        The failure this prevents is not a crash; it is a PASS. An artifact that
+        moved under a stable path runs, goes green, and the green is about a
+        binary nobody meant to test. rt1180 put it best after nearly filing an
+        assertion as ineffective against a stale ELF: "a broken build produces a
+        quiet, plausible, WRONG number, and 'my new assertion found nothing' is a
+        very comfortable thing to believe."
+
+        Hence: a mismatch RAISES. It does not warn. A warning printed above a
+        green result is a warning nobody reads.
+        """
+        pins = self.profile.boot.pin
+        if not pins:
+            return
+        art = self.profile.boot.artifacts
+        for field, want in pins.items():
+            name = getattr(art, field)
+            if not name:
+                raise SessionError(
+                    f"{self.profile.id}: boot.pin['{field}'] pins an artifact the "
+                    f"profile does not set. A pin on an absent artifact is a check "
+                    f"that cannot run."
+                )
+            path = Path(_resolve_artifact(name, self.asset_dir) or name)
+            if not path.exists():
+                raise SessionError(
+                    f"{self.profile.id}: pinned {field} is missing: {path}"
+                )
+            got = hashlib.md5(path.read_bytes()).hexdigest()
+            if got != want:
+                raise SessionError(
+                    f"{self.profile.id}: pinned {field} CHANGED UNDER US.\n"
+                    f"    path:   {path}\n"
+                    f"    pinned: {want}\n"
+                    f"    actual: {got}\n"
+                    f"This is not a warning. The artifact at that path is not the "
+                    f"one this profile was validated against, so any result from "
+                    f"this run — including a green one — would be about a binary "
+                    f"nobody chose. Re-verify the artifact, then update boot.pin."
+                )
 
     def _stage_capture_helper(self) -> None:
         """Stage the V4L2 capture helper + any sensor .ko into the 9p share (->/mnt)."""

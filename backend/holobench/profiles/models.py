@@ -12,7 +12,7 @@ from __future__ import annotations
 from enum import Enum
 from typing import Optional
 
-from pydantic import BaseModel, ConfigDict, Field
+from pydantic import BaseModel, ConfigDict, Field, model_validator
 
 
 class _Strict(BaseModel):
@@ -73,6 +73,43 @@ class BootSpec(_Strict):
     append: Optional[str] = None
     # Escape hatch; tokens: {flash_bin} {kernel} {dtb} {initrd} {rootfs} {session}
     command_template: Optional[str] = None
+
+    # md5 PINS, keyed by artifact field name: {"firmware": "e6a636df..."}.
+    #
+    # WHY THIS EXISTS. The fleet's rule is "NEVER TEST A BINARY YOU DID NOT JUST
+    # BUILD" — three sessions each shipped a quiet, plausible, wrong number after
+    # testing a stale binary. Holobench cannot obey that rule as written: it does
+    # not build the artifacts, it CONSUMES them, and the emulator repos are
+    # read-only to us (CLAUDE.md §7). Our binaries are stale by construction — the
+    # only question is whether we NOTICE.
+    #
+    # A profile pins a PATH. A path is not an identity. On 2026-07-13 the imx91
+    # artifact moved TWICE IN TWELVE MINUTES at a stable path, and the rt1180 ELF
+    # was recommitted under us. Either would have run green against a binary that
+    # was no longer the one the result was about — and a green run nobody doubts is
+    # exactly the wrong answer to be handed.
+    #
+    # So: the farm's version of the rule is NEVER RUN A LAB AGAINST AN ARTIFACT
+    # WHOSE HASH YOU DID NOT VERIFY. A mismatch is a REFUSAL TO LAUNCH, not a
+    # warning — a warning on a green run is a warning nobody reads.
+    pin: dict[str, str] = Field(default_factory=dict)
+
+    @model_validator(mode="after")
+    def _pins_name_real_artifacts(self) -> "BootSpec":
+        """A pin whose key is not an artifact field guards NOTHING, and does it
+        silently — the exact failure the pin was added to prevent, one level up.
+        (91emulator: "a status board that is not derived is a status board that
+        drifts.") So a misspelled pin is a LOAD ERROR, never an inert dict entry."""
+        known = set(BootArtifacts.model_fields)
+        for key in self.pin:
+            if key not in known:
+                raise ValueError(
+                    f"boot.pin has no artifact named {key!r} to pin "
+                    f"(known: {', '.join(sorted(known))}). A pin that names "
+                    f"nothing is not a weak check — it is NO check, and it reads "
+                    f"like one."
+                )
+        return self
 
 
 # --- Serial / consoles -----------------------------------------------------
@@ -148,6 +185,14 @@ class NetSpec(_Strict):
     # fixed-link dtb from tools/make-enetc-dtb.sh fixes it). None = base dtb is fine
     # (i.MX91/93 FEC binds out of the box). Confirmed per board with the emulator (§7).
     fabric_dtb: Optional[str] = None
+    # v3.0 fabric: user-mode NICs to append AFTER the fabric socket NIC(s) when this
+    # board is a lab node. NOT the same as user_nics, which the lab path replaces
+    # wholesale — this is a board that needs a *second* modeled NIC to have a backend
+    # at all. The i.MX91 has two (FEC + EQOS) and 91emulator's verified lab line is
+    # `-nic socket,...,model=imx.enet` FOLLOWED BY `-nic user`: the FEC must be first
+    # (it is the one on the segment), and the EQOS still needs something to attach to.
+    # Default 0 = every existing lab's command line is byte-for-byte unchanged.
+    fabric_user_nics: int = 0
 
 
 # --- USB inter-board link (v3.0 fabric) ------------------------------------
@@ -385,6 +430,60 @@ class Reservation(_Strict):
 # --- Top level -------------------------------------------------------------
 
 
+class LabNodeBeacon(_Strict):
+    """What a raw-L2 lab node's firmware ASSERTS — as data, not as a comment.
+
+    This exists so the fleet's emit-status board can be DERIVED. On 2026-07-13 I
+    published a board saying `imx91 ⏳` (does not emit the checkable body) while
+    reading, in that same session, the very source file that had emitted it for
+    three hours. 91emulator's diagnosis is the reason this block is here:
+
+      ⭐ A STATUS BOARD THAT IS NOT DERIVED IS A STATUS BOARD THAT DRIFTS.
+
+    The obvious objection is that transcribing a peer's firmware facts into a
+    profile is *itself* a hand-copy that can drift — and it is. What stops it is
+    BootSpec.pin: these claims are pinned to an artifact md5, so the moment that
+    artifact moves, the profile REFUSES TO LAUNCH and the claim must be re-verified
+    before the lab can run again. A transcription that is re-validated whenever its
+    subject changes is not a copy; it is a cache with an invalidation rule.
+    """
+
+    beacon_ethertype: str
+    # The ethertypes this node requires to see before it declares PASS. Not "all the
+    # other nodes" — a node scheduled to arrive after a departure must NOT require
+    # the departed peer, or it fails for exactly the reason the lab is demonstrating.
+    peers: list[str] = Field(default_factory=list)
+    # Emits the agreed body (magic @14, own ethertype @18, per-sender seq @20, 0x5A fill).
+    emits_checkable_body: bool = False
+    # Asserts the per-sender sequence STRICTLY INCREASES. The ONLY check that can see a
+    # stale buffer: a dropped frame leaves the descriptor pointing at a previously VALID
+    # frame, so magic, pattern and self-consistent ethertype all pass. Every stale frame
+    # is a good frame; the question was never "is this valid" but "is this NEW".
+    asserts_freshness: bool = False
+    # Condemns a peer only after that peer has PROVEN it can emit a valid body
+    # ("a peer that has ever emitted a valid body cannot stop knowing how"). This is
+    # what makes a CORRUPT line from this node trustworthy on a MIXED segment — and
+    # therefore what lets the scorer enforce CORRUPT per-node instead of waiting for a
+    # fleet-wide flag day. A node WITHOUT it will condemn honest peers that have not
+    # upgraded, and its CORRUPT must not be scored.
+    enforces_on_arm: bool = False
+    pass_prefix: str = "ENET-LAB3 PASS"
+    corrupt_prefix: str = "ENET-LAB3 CORRUPT"
+
+    @model_validator(mode="after")
+    def _freshness_needs_a_body(self) -> "LabNodeBeacon":
+        """You cannot assert a sequence number you do not transmit. A profile
+        claiming freshness without a body is claiming an assertion that cannot run —
+        and it would read, on the derived board, exactly like one that can."""
+        if self.asserts_freshness and not self.emits_checkable_body:
+            raise ValueError(
+                "lab_node.asserts_freshness=true with emits_checkable_body=false: "
+                "the sequence number lives IN the body. A node that emits no body "
+                "has no sequence to assert on."
+            )
+        return self
+
+
 class Profile(_Strict):
     id: str
     display_name: str
@@ -401,6 +500,7 @@ class Profile(_Strict):
     spi: Optional[SpiCapability] = None        # v3.0 fabric: SPI board-to-board link role
     can: Optional[CanCapability] = None        # v3.0 fabric: CAN board-to-board link role
     i2c: Optional[I2cCapability] = None        # v3.0 fabric: I2C board-to-board link role
+    lab_node: Optional[LabNodeBeacon] = None   # raw-L2 beacon contract (derived emit board)
     file_injection: FileInjection = Field(default_factory=FileInjection)
     camera: CameraSpec = Field(default_factory=CameraSpec)
     leds: list[LedSpec] = Field(default_factory=list)
