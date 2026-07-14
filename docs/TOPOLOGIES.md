@@ -541,6 +541,96 @@ instrument, and every one *looked* like a model bug. All four are now guards in 
    dead** before its departure is scored, and an un-killable peer is **inconclusive, not a
    failure.**
 
+### 🏆 The lab passes — and the departure found a bug in the ASSERTION (2026-07-14)
+
+```
+imx95   PASS 10,473 beats      mcx     PASS      5 beats
+rt1180  PASS  1,064 beats      imx91   PASS  2,096 beats
+
+mcx VERIFIED DEAD at the departure (its QEMU process is gone — not assumed)
+imx91 joined t+450.1s — AFTER the t+420 departure — and PASSED at t+453.2s
+```
+
+All four nodes pass, and the bodies agree byte-for-byte on the wire. **The post-departure
+joiner found its peers in three seconds, on a segment that had just lost a member.** That is
+the assertion this lab was built for.
+
+**And the only red is a bug no other suite in the fleet could have produced.** rt1180 and
+imx95, independently, ~9,000 times each:
+
+```
+ENET-LAB3 CORRUPT: PAYLOAD-REPLAY peer 0x88b5 seq 1 <= last 13485 — a STALE BUFFER
+```
+
+mcx's sequence did not go *backwards*. **It restarted from 1** — because mcx is the node that
+departs at t+420 and **rejoins** at t+480, and a rejoin is a fresh QEMU with fresh firmware
+whose beacon counter starts over.
+
+> ⭐ **A PEER THAT RESTARTED IS NOT A PEER THAT REPLAYED.**
+
+The freshness check — the one all four nodes adopted this week (26 / 40 / 490 replays caught,
+zero well-formedness failures) — **cannot distinguish "my RX path handed me an old frame" from
+"my peer rebooted and started counting again."** It condemns an honest, freshly-booted peer.
+
+The evidence is structural, not circumstantial:
+
+- both nodes that **track** mcx report it (rt1180, imx95) — two independent implementations;
+- **imx91 does not** — its peer list is `0x88B6,0x88B7`, so it never tracks mcx's sequence at
+  all. The bug appears exactly where the tracking is, and nowhere else;
+- `1, 2, 3…` after `13485` is a **restart**, not a decrement. No stale buffer can produce a
+  monotonically *increasing* run beginning at 1;
+- and it is **load-independent**. The box was at load 14 from another session's orphans, and
+  scheduling pressure cannot make a counter restart at 1. *That distinction matters: a red
+  measured on a contaminated box is exactly the kind you must not report. This one survives
+  the objection; a timing red would not have.*
+
+**Why it was unreachable:** every other suite boots N nodes and runs them to the end. **Nobody
+restarts a peer mid-run.** The bug cannot exist until a coordinator *kills* a node and *brings
+it back* — the one thing this lab does and no unit test does.
+
+> ⭐ **THE LAB IS NOT A SLOWER VERSION OF THE UNIT TEST. IT IS THE ONLY PLACE A WHOLE CLASS OF
+> BUG EXISTS.** (rt1180's line — and this is its sharpest instance: the departure feature built
+> to test the *wire* found a bug in the *assertion*.)
+
+**The fix is a known shape.** A sequence number cannot survive a restart without an
+**incarnation** — TCP's ISN, DTLS's epoch, a Lamport clock's epoch. Every protocol that
+tolerates a peer restart has one, for exactly this reason:
+
+```
+seq went backwards  +  SAME incarnation   →  REPLAY. A stale buffer. Condemn.
+seq went backwards  +  NEW  incarnation   →  A REBOOT. Reset last_seq. Count it.
+```
+
+Without it, *"monotonic"* is a claim about a **process**, not about a **peer** — and a board
+farm restarts boards for a living. Proposed to the fleet; **not applied unilaterally** (I did
+that with the `ENET-LAB3 UP:` line and I was wrong).
+
+### An orphan on a shared bus is a liar that outlived its run (2026-07-14)
+
+The run *before* that one came back red and blamed rt1180 and imx95 for bugs they had already
+fixed. **It was holobench's own orphaned QEMU**, still beaconing the old protocol on the same
+multicast group: killing a lab runner orphaned its children, and the mcast group is allocated
+from an empty per-coordinator set, so the next run lands on **the same wire** — a guarantee,
+not a race. The "4-node lab" was an 8-node segment, half of it ghosts.
+
+> ⭐ **A KILL THAT REACHES THE WRAPPER AND NOT THE PROCESS IS NOT A KILL.** (mcxn947 — whose
+> warning was already quoted in this repo's scorer when it caught us.)
+>
+> ⭐ **AN ORPHANED PROCESS ON A SHARED BUS IS NOT A LEAK. IT IS A LIAR THAT OUTLIVED THE RUN
+> THAT CREATED IT** — and its testimony is indistinguishable from a peer's.
+
+What caught it was **refusing to believe a result that accused a peer**: the initramfs we had
+just built contained no ASCII string at all, yet mcx was reporting frames that read `"IMX9"`.
+A binary that cannot emit those bytes is not emitting them.
+
+Fixed two ways, because one only closes the future: **`PR_SET_PDEATHSIG`** (a board dies with
+the session that owns it — with a `getppid()` re-check for the fork→prctl window, and
+`launch --keep` opting out, since that flag *promises* the board outlives the CLI), and
+**`live_orphan_boards()`** + a lab preflight that **refuses a wire that is not empty**. Liveness
+is decided by *connecting to the QMP socket*, never by scraping `ps` — a process-name pattern
+would also match the peer emulator sessions' own QEMUs, and that is a pattern match, not an
+identity.
+
 ## Architecture
 
 ```
