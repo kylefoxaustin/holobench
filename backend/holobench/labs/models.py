@@ -22,9 +22,50 @@ class LabError(Exception):
 
 
 class LabNode(_Strict):
-    """One board in the topology. `profile` is a profile id (profiles/<id>.yaml)."""
+    """One board in the topology. `profile` is a profile id (profiles/<id>.yaml).
+
+    SCHEDULE (`start_at` / `stop_at`, seconds relative to lab launch). A lab used to
+    be purely topological: every node came up at once and none ever left. That models
+    a bench where someone plugs in three boards simultaneously and never unplugs one,
+    which is not a bench that exists — and, more to the point, it is BLIND.
+
+    The fleet's three emulator sessions found a QEMU `can_receive()` /
+    `qemu_flush_queued_packets()` queue stall that is structurally invisible to any
+    2-node test AND to any 3-node test whose nodes boot together. Their conclusion,
+    verbatim: **"THE BUG CLASS LIVES IN TIME, NOT TOPOLOGY."** Not N>2 — N>2 *plus
+    asynchronous arrival and departure*. Three synchronous self-verifying rehearsals
+    all passed; the staggered co-launch found four distinct bugs.
+
+    So time is a FIRST-CLASS field, not a convenience knob:
+      start_at  — this node joins a segment that is ALREADY LIVE (or, at 0, broadcasts
+                  alone into an empty one and must not mind).
+      stop_at   — this node DEPARTS while the others keep running. The coordinator
+                  issues the QMP quit at a known moment, which is the only reason an
+                  early departure is a FACT and not an inference: a node that exits
+                  itself makes "left" and "crashed" the same observation.
+
+    Defaults (0 / None) preserve the old behaviour exactly — every existing lab is
+    unchanged: all nodes arrive at t=0 and nobody departs.
+
+    `mac` pins the fleet's documented source MAC instead of the coordinator's
+    auto-generated one, for labs whose peers identify each other by address.
+    """
     name: str
     profile: str
+    start_at: float = 0.0
+    stop_at: Optional[float] = None
+    mac: Optional[str] = None
+
+    @model_validator(mode="after")
+    def _schedule_sane(self) -> "LabNode":
+        if self.start_at < 0:
+            raise ValueError(f"node '{self.name}': start_at must be >= 0")
+        if self.stop_at is not None and self.stop_at <= self.start_at:
+            raise ValueError(
+                f"node '{self.name}': stop_at ({self.stop_at}) must be after "
+                f"start_at ({self.start_at}) — a node cannot leave before it arrives"
+            )
+        return self
 
 
 class LabLink(_Strict):
@@ -83,12 +124,27 @@ class LabLink(_Strict):
 
 
 class Lab(_Strict):
-    """A topology: nodes (boards) + links (how they're wired)."""
+    """A topology: nodes (boards) + links (how they're wired) + WHEN they come and go."""
     id: str
     display_name: str
     description: str = ""
     nodes: list[LabNode]
     links: list[LabLink] = []
+    # None = let the caller decide (CLI default: on). A raw-L2 lab sets this false:
+    # its nodes talk in ethertypes, not IP, and a kernel `ip=` would be noise.
+    auto_ip: Optional[bool] = None
+
+    @property
+    def is_staggered(self) -> bool:
+        """True if this lab actually exercises TIME (someone arrives late or leaves)."""
+        return any(n.start_at > 0 or n.stop_at is not None for n in self.nodes)
+
+    @property
+    def horizon_s(self) -> float:
+        """Last scheduled event. A staggered lab observed for less than this has not
+        been run — it has been interrupted."""
+        return max([0.0] + [n.start_at for n in self.nodes]
+                   + [n.stop_at for n in self.nodes if n.stop_at is not None])
 
     @field_validator("nodes")
     @classmethod

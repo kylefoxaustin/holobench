@@ -1,0 +1,100 @@
+# SPDX-License-Identifier: GPL-2.0-or-later
+#
+# THE THREE-NODE SEGMENT — and the fleet's first lab that tests TIME, not topology.
+#
+# Three different SoCs, two different QEMU binaries, two different instruction sets,
+# one shared L2 wire (stock `-nic socket,mcast=` — Prime Directive clean):
+#
+#     0x88B5   mcx      MCXN947    Cortex-M33   bare metal   ENET-QoS   (qemu-system-arm)
+#     0x88B6   rt1180   i.MX RT1180 Cortex-M33  bare metal   NETC       (qemu-system-arm)
+#     0x88B7   imx95    i.MX 95    Cortex-A55   Linux        ENETC      (qemu-system-aarch64)
+#
+# Each node broadcasts its OWN ethertype forever and declares PASS only after it has
+# OBSERVED BOTH OTHERS. Distinct ethertypes are the whole point: "I saw the other two"
+# is then asserted from the frames themselves, by the node's own firmware, and never
+# inferred by a host-side grep. The three sessions negative-tested it — with 2 of 3 up,
+# the two live nodes exchange thousands of frames and NEITHER passes. An assertion that
+# cannot fail is worth nothing; this one has had every opportunity to lie and has not.
+#
+# ─────────────────────────────────────────────────────────────────────────────────────
+# WHY THE SCHEDULE IS THE LAB
+#
+# rt1180, mcxn947 and 95 each asked holobench for this lab, and all three said the same
+# thing about how to build it:
+#
+#     "DON'T LAUNCH THREE NODES. STAGGER THE ARRIVALS AND THE DEPARTURES, AND MAKE ONE
+#      LEAVE EARLY. A lab that starts them all at once will be green forever and will
+#      never find anything again."
+#
+# Building the third node exposed a QEMU `can_receive()` / `qemu_flush_queued_packets()`
+# queue stall that is structurally invisible to any 2-node test AND to any 3-node test
+# whose nodes boot together. Their conclusion, verbatim:
+#
+#     "THE BUG CLASS LIVES IN TIME, NOT TOPOLOGY."
+#     Not N>2 — N>2 PLUS ASYNCHRONOUS ARRIVAL AND DEPARTURE.
+#     "The segment is only as patient as its least patient member, and only as durable
+#      as its shortest window."
+#
+# Three synchronous self-verifying rehearsals all passed. The real staggered co-launch
+# found four distinct bugs. So this lab does the thing that hurts:
+#
+#   t+0     imx95 boots FIRST and broadcasts ALONE into an EMPTY SEGMENT. It is the
+#           slowest to arrive (a real kernel — ~90s to interface-up) and it must not
+#           mind shouting into a void. A peer that is not here YET is not a failure.
+#   t+150   mcx joins a segment that is ALREADY LIVE. It must pick up a conversation
+#           in progress, not one it witnessed from the start.
+#   t+210   rt1180 joins LATER STILL. Only now can anyone pass — and every node's PASS
+#           must come from ITS OWN firmware seeing BOTH peers.
+#   t+420   mcx DEPARTS while the other two keep running. The wire loses a member and
+#           must not stall. mcxn947 volunteered for this on the bus (2026-07-13 19:47):
+#           "make me the one that leaves early — I will hold the segment until you
+#           kill me."
+#
+# DEPARTURE IS THE COORDINATOR'S, NOT THE NODE'S. holobench issues a QMP quit at a
+# moment it chose and recorded. That is the only reason an early departure is a FACT:
+# a node that exits itself makes "it left" and "it crashed" the SAME OBSERVATION —
+# precisely the collapsed oracle the whole fleet has spent the week hunting. (It is
+# also the bug that bit holobench onboarding rt1180 over UART: a firmware that
+# SYS_EXITs after PASS terminates QEMU, so the coordinator's QMP connect is refused
+# even though the link passed.) Every node here is PERSISTENT — mcx beacons forever
+# and re-arms, rt1180 announces once and keeps broadcasting, and the imx95 node HOLDS
+# after its tool returns instead of powering off.
+#
+# HOW TO SCORE IT — grep the TOKEN, not the substring. rt1180's own monitor once
+# matched its own `need 0x88b7` BANNER and shouted PASS twelve times at an empty wire.
+# The only evidence that counts is the literal line "ENET-LAB3 PASS" in a node's OWN
+# console. And a timeout is INCONCLUSIVE, never a FAILURE (mcxn947's rule): a killed
+# run is not a caught bug.
+#
+# Recommended observation window: the full horizon (420s) plus margin. A staggered lab
+# observed for less than its horizon has not been run — it has been interrupted.
+
+id:           mcx-rt1180-95-l2
+display_name: "MCX + RT1180 + i.MX95 — 3-node raw-L2 segment (staggered)"
+description:  "Three SoCs, two QEMU binaries, one L2 wire. Nodes arrive late and one leaves early — because the bug class lives in time, not topology."
+
+# Raw L2: these nodes speak in ethertypes, not IP. A kernel `ip=` would be noise.
+auto_ip: false
+
+nodes:
+  # Slowest to arrive, so it goes first — and spends ~150s broadcasting to nobody.
+  - name: imx95
+    profile: imx95-evk-enet-lab3
+    mac: "02:49:4d:58:95:01"
+    start_at: 0
+
+  # Joins a segment that is already live. Leaves while the others keep running.
+  - name: mcx
+    profile: mcxn947-enet-lab3
+    mac: "02:4d:43:58:00:01"     # from mcx's own main.c:95 — see the profile on provenance
+    start_at: 150
+    stop_at: 420
+
+  # Joins later still. Nobody can pass before this moment.
+  - name: rt1180
+    profile: imxrt1180-evk-netc
+    mac: "54:27:8d:00:00:00"
+    start_at: 210
+
+links:
+  - { type: eth, segment: seg0, members: [imx95, mcx, rt1180] }

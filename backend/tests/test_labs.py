@@ -65,6 +65,10 @@ class _FakeSession:
         self.usb_override = usb_override
         self.lab_id = None
         self.lab_node = None
+        self.quit_called = False
+
+    async def quit(self):
+        self.quit_called = True
 
 
 class _FakeManager:
@@ -75,6 +79,10 @@ class _FakeManager:
         self._n = 0
         self._fail = set(fail)  # profile ids that should raise
         self.base_dir = None    # coordinator reads this for usb-socket placement
+        self._by_id = {}
+
+    def get(self, sid):
+        return self._by_id[sid]
 
     async def launch(self, profile, *, asset_dir=None, owner=None, minutes=None,
                      nic_override=None, usb_override=None, uart_link_override=None,
@@ -92,6 +100,7 @@ class _FakeManager:
         s.append_extra = append_extra
         s.dtb_override = dtb_override
         self.launches.append(s)
+        self._by_id[s.id] = s
         return s
 
     async def destroy(self, sid):
@@ -412,3 +421,126 @@ def test_double_launch_rejected_and_stop_frees_group():
     # group was freed -> relaunch works and reuses the lowest group octet.
     asyncio.run(coord.launch(load_lab("eth-pair")))
     assert coord.peek("eth-pair") is not None
+
+
+# --- the SCHEDULE: labs that test TIME, not just topology -------------------
+#
+# The fleet's three emulator sessions (rt1180 + mcxn947 + 95) found a QEMU
+# can_receive()/qemu_flush_queued_packets() queue stall that is structurally invisible
+# to any 2-node test AND to any 3-node test whose nodes boot together: "THE BUG CLASS
+# LIVES IN TIME, NOT TOPOLOGY." These guard the machinery that lets a lab express it.
+
+def _sched_lab(**over):
+    spec = {
+        "id": "sched", "display_name": "sched",
+        "nodes": [
+            {"name": "a", "profile": "imx91-evk", "start_at": 0},
+            {"name": "b", "profile": "imx91-evk", "start_at": 0.05, "stop_at": 0.12},
+            {"name": "c", "profile": "imx91-evk", "start_at": 0.10},
+        ],
+        "links": [{"type": "eth", "segment": "s0", "members": ["a", "b", "c"]}],
+    }
+    spec.update(over)
+    return Lab.model_validate(spec)
+
+
+def test_schedule_staggers_arrivals_in_start_order():
+    lab = _sched_lab()
+    mgr = _FakeManager()
+    coord = LabCoordinator(mgr)
+    running = asyncio.run(coord.launch(lab))
+    assert running.state == LabState.RUNNING
+    # Arrivals happen in start_at order, and each one is TIMED (measured, not assumed).
+    assert [s.lab_node for s in mgr.launches] == ["a", "b", "c"]
+    assert running.node_arrivals["a"] < running.node_arrivals["b"] < running.node_arrivals["c"]
+    # 'c' really did join a segment that was already live — it arrived after 'a'.
+    assert running.node_arrivals["c"] >= 0.10
+
+
+def test_scheduled_departure_fires_and_is_recorded_as_a_departure():
+    # The whole point: a node that is gone because WE retired it must never be
+    # confused with a node that is gone because it died. The coordinator records it.
+    lab = _sched_lab()
+    mgr = _FakeManager()
+    coord = LabCoordinator(mgr)
+
+    async def go():
+        running = await coord.launch(lab)
+        await asyncio.sleep(0.25)          # past b's stop_at
+        return running
+
+    running = asyncio.run(go())
+    assert running.departed("b")
+    assert not running.departed("a") and not running.departed("c")
+    assert running.node_departures["b"] >= 0.12
+
+
+def test_departure_quits_the_node_but_does_NOT_destroy_its_session():
+    # REGRESSION. destroy() calls cleanup(), which rmtree's the session work dir —
+    # and that dir holds the node's CONSOLE LOG. A departure that destroyed the
+    # session would erase the evidence of the very node whose departure is the point
+    # ("did it PASS before it left?"). Departure must quit() and leave the log.
+    lab = _sched_lab()
+    mgr = _FakeManager()
+    coord = LabCoordinator(mgr)
+
+    async def go():
+        running = await coord.launch(lab)
+        await asyncio.sleep(0.25)
+        return running
+
+    running = asyncio.run(go())
+    b_sid = running.node_sessions["b"]
+    assert mgr.get(b_sid).quit_called, "departed node must be powered off"
+    assert b_sid not in mgr.destroyed, "departure must NOT destroy the session (rmtree's the console log)"
+
+
+def test_a_node_cannot_leave_before_it_arrives():
+    with pytest.raises(Exception):
+        Lab.model_validate({
+            "id": "x", "display_name": "x",
+            "nodes": [{"name": "a", "profile": "imx91-evk",
+                       "start_at": 10, "stop_at": 5}],
+        })
+
+
+def test_lab_can_pin_a_node_mac():
+    lab = _sched_lab(nodes=[
+        {"name": "a", "profile": "imx91-evk", "mac": "02:4d:43:58:00:01"},
+        {"name": "b", "profile": "imx91-evk"},
+    ], links=[{"type": "eth", "segment": "s0", "members": ["a", "b"]}])
+    mgr = _FakeManager()
+    coord = LabCoordinator(mgr)
+    asyncio.run(coord.launch(lab))
+    by_node = {s.lab_node: s.nic_override[0] for s in mgr.launches}
+    assert "mac=02:4d:43:58:00:01" in by_node["a"]        # pinned
+    assert "mac=52:54:00:" in by_node["b"]                # auto, unchanged
+
+
+def test_existing_labs_are_unstaggered_by_default():
+    # Defaults must preserve the old behaviour exactly: everyone at t=0, nobody leaves.
+    for lid in ("eth-pair", "lan-trio", "gateway-lab", "uart-link-91"):
+        lab = load_lab(lid)
+        assert not lab.is_staggered, f"{lid} unexpectedly staggered"
+        assert lab.horizon_s == 0
+
+
+def test_the_three_node_l2_lab_is_staggered_and_someone_leaves_early():
+    # The lab the fleet asked for, exactly as they specified it: staggered arrivals,
+    # a departure mid-run, and raw L2 (no auto-IP — these nodes talk in ethertypes).
+    lab = load_lab("mcx-rt1180-95-l2")
+    assert lab.is_staggered
+    assert lab.auto_ip is False
+    byname = {n.name: n for n in lab.nodes}
+    # imx95 (the slow Linux node) goes first and broadcasts alone into an empty segment.
+    assert byname["imx95"].start_at == 0
+    # the others join a live segment, at different times
+    assert byname["mcx"].start_at > 0
+    assert byname["rt1180"].start_at > byname["mcx"].start_at
+    # and exactly one node leaves early, while the other two keep running
+    leavers = [n.name for n in lab.nodes if n.stop_at is not None]
+    assert leavers == ["mcx"]
+    assert byname["mcx"].stop_at > byname["rt1180"].start_at
+    # three distinct SoCs on ONE segment
+    seg = [l for l in lab.links if l.type == "eth"][0]
+    assert sorted(seg.members) == ["imx95", "mcx", "rt1180"]

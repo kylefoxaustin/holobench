@@ -18,10 +18,11 @@ gadget at HIGH speed and binds /dev/ttyACM0 (docs/TOPOLOGIES.md §USB).
 """
 from __future__ import annotations
 
+import asyncio
 import os
 from enum import Enum
 from pathlib import Path
-from typing import Optional
+from typing import Callable, Optional
 
 from ..profiles.loader import default_asset_dir, load_profile
 from ..session.manager import DEFAULT_BASE_DIR, SessionError, SessionManager
@@ -106,7 +107,10 @@ class LabState(str, Enum):
 def _mac(lab_idx: int, node_idx: int, nic_idx: int) -> str:
     """Deterministic, collision-free locally-administered MAC. 52:54:00 is QEMU's
     OUI; the last three octets encode (lab launch, node, nic) so no two fabric
-    NICs ever share a MAC (the v3.0-α gotcha — default MACs collided)."""
+    NICs ever share a MAC (the v3.0-α gotcha — default MACs collided).
+
+    A node may override this from the lab spec (LabNode.mac) when its peers expect a
+    specific source address."""
     return f"52:54:00:{lab_idx & 0xff:02x}:{node_idx & 0xff:02x}:{nic_idx & 0xff:02x}"
 
 
@@ -123,6 +127,16 @@ class RunningLab:
         self.node_links: dict[str, list[str]] = {}
         self.node_ips: dict[str, str] = {}        # node -> auto-assigned eth IP (if auto_ip)
         self.usb_socks: list[str] = []            # per-usb-link sockets (for teardown)
+        # The TIMELINE. Seconds since lab t0, measured — not the schedule we asked for.
+        # node_departures records a departure the COORDINATOR performed, which is what
+        # keeps "this node left" distinguishable from "this node died".
+        self.t0: Optional[float] = None
+        self.node_arrivals: dict[str, float] = {}
+        self.node_departures: dict[str, float] = {}
+        self._departure_tasks: list[asyncio.Task] = []
+
+    def departed(self, node: str) -> bool:
+        return node in self.node_departures
 
     @property
     def id(self) -> str:
@@ -137,6 +151,12 @@ class RunningLab:
                 "session_id": self.node_sessions.get(n.name),
                 "error": self.node_errors.get(n.name),
                 "segments": self.node_links.get(n.name, []),
+                # scheduled vs. measured, so a UI can show the timeline and — crucially —
+                # say "retired at t+120s" instead of leaving a vanished node ambiguous.
+                "start_at": n.start_at,
+                "stop_at": n.stop_at,
+                "arrived_at": self.node_arrivals.get(n.name),
+                "departed_at": self.node_departures.get(n.name),
             })
         links = []
         for link in self.lab.links:
@@ -184,9 +204,18 @@ class LabCoordinator:
 
     # --- lifecycle ---------------------------------------------------------
     async def launch(self, lab: Lab, *, owner: Optional[str] = None,
-                     minutes: Optional[int] = None, auto_ip: bool = True) -> RunningLab:
+                     minutes: Optional[int] = None, auto_ip: bool = True,
+                     on_event: Optional[Callable[[str], None]] = None) -> RunningLab:
         if lab.id in self._labs:
             raise LabError(f"lab '{lab.id}' is already running")
+
+        # A lab may force auto-IP off (a raw-L2 lab talks in ethertypes, not IP).
+        if lab.auto_ip is not None:
+            auto_ip = lab.auto_ip
+
+        def _emit(msg: str) -> None:
+            if on_event:
+                on_event(msg)
 
         self._lab_counter += 1
         running = RunningLab(lab, self._lab_counter)
@@ -196,6 +225,7 @@ class LabCoordinator:
         # 1) Allocate an isolated mcast group per eth segment.
         seg_group: dict[str, str] = {}
         node_idx = {n.name: i for i, n in enumerate(lab.nodes)}
+        node_by_name = {n.name: n for n in lab.nodes}
         try:
             for link in lab.links:
                 if link.type == "eth" and link.segment not in seg_group:
@@ -232,8 +262,11 @@ class LabCoordinator:
                     nic_i = len(node_nics[member])
                     prof = node_profiles.get(member)
                     model = getattr(prof.net, "fabric_nic_model", None) if prof else None
-                    spec = (f"socket,mcast={group}:{_MCAST_PORT},"
-                            f"mac={_mac(running.lab_idx, node_idx[member], nic_i)}"
+                    # A lab may PIN the source MAC (raw-L2 peers that identify each
+                    # other by address); otherwise the auto MAC keeps segments distinct.
+                    mac = (node_by_name[member].mac
+                           or _mac(running.lab_idx, node_idx[member], nic_i))
+                    spec = (f"socket,mcast={group}:{_MCAST_PORT},mac={mac}"
                             + (f",model={model}" if model else ""))
                     node_nics[member].append(spec)
                     fabric_dtb = getattr(prof.net, "fabric_dtb", None) if prof else None
@@ -426,12 +459,28 @@ class LabCoordinator:
                 running.node_links.setdefault(link.b, []).append(f"can<->{link.a}@{sock}")
                 can_i += 1
 
-            # 3) Launch each node as a Session with its fabric NICs.
+            # 3) Launch each node as a Session with its fabric NICs — ON SCHEDULE.
+            #
+            # Nodes arrive in start_at order and the coordinator SLEEPS between them, so
+            # a late node genuinely joins a segment that is already live and an early one
+            # genuinely broadcasts alone into an empty one. Departures are background
+            # tasks that issue a QMP quit at stop_at.
+            #
+            # Both halves matter, and the departure half is the subtle one: because WE
+            # retire the node, at a moment we chose and recorded, a node that is gone
+            # because it left is never confused with a node that is gone because it died.
+            # If the node exited itself, those two would be the same observation — which
+            # is exactly the collapsed oracle this lab exists to avoid.
+            loop = asyncio.get_running_loop()
+            t0 = loop.time()
+            running.t0 = t0
             any_ok = False
-            for node in lab.nodes:
+
+            async def _arrive(node) -> None:
+                nonlocal any_ok
                 profile = node_profiles.get(node.name)
                 if profile is None:
-                    continue  # profile load already recorded in node_errors
+                    return  # profile load already recorded in node_errors
                 try:
                     asset_dir = default_asset_dir(profile.id)
                     nics = node_nics[node.name] or None
@@ -449,9 +498,49 @@ class LabCoordinator:
                     session.lab_id = lab.id
                     session.lab_node = node.name
                     running.node_sessions[node.name] = session.id
+                    at = loop.time() - t0
+                    running.node_arrivals[node.name] = at
                     any_ok = True
+                    # getattr: a launch must never fail because its LOG LINE couldn't
+                    # read an attribute. Reporting is not allowed to break the thing
+                    # it reports on.
+                    pid = getattr(session, "pid", "?")
+                    _emit(f"  t+{at:6.1f}s  ARRIVE  {node.name} ({node.profile}) pid={pid}")
                 except Exception as exc:  # one bad node shouldn't kill the lab
                     running.node_errors[node.name] = str(exc)
+                    _emit(f"  t+{loop.time() - t0:6.1f}s  FAILED  {node.name}: {exc}")
+
+            async def _depart(node) -> None:
+                await asyncio.sleep(max(0.0, t0 + node.stop_at - loop.time()))
+                sid = running.node_sessions.get(node.name)
+                if sid is None:
+                    return  # never arrived; nothing to retire
+                # quit(), NOT destroy(). destroy() calls cleanup(), which rmtree's the
+                # session work dir — and that dir holds the node's CONSOLE LOG. Erasing
+                # the log of the node whose departure is the entire point of the lab
+                # would leave us unable to answer "did it PASS before it left?".
+                # quit() powers the board off (it genuinely leaves the wire) and stops
+                # the serial taps (flushing the log); the session and its evidence stay
+                # until the lab's own teardown reaps them.
+                try:
+                    await self.manager.get(sid).quit()
+                except SessionError:
+                    pass
+                at = loop.time() - t0
+                running.node_departures[node.name] = at
+                _emit(f"  t+{at:6.1f}s  DEPART  {node.name} "
+                      f"(scheduled — the coordinator retired it; NOT a crash)")
+
+            for node in sorted(lab.nodes, key=lambda n: n.start_at):
+                delay = t0 + node.start_at - loop.time()
+                if delay > 0:
+                    _emit(f"  ... waiting {delay:.0f}s for {node.name} to join "
+                          f"(segment is live without it)")
+                    await asyncio.sleep(delay)
+                await _arrive(node)
+                if node.stop_at is not None:
+                    running._departure_tasks.append(
+                        asyncio.create_task(_depart(node)))
         except BaseException:
             # Allocation failed wholesale: free groups + any partial sessions.
             await self._teardown(running, seg_group)
@@ -472,6 +561,11 @@ class LabCoordinator:
         return running
 
     async def _teardown(self, running: RunningLab, seg_group: dict[str, str]) -> None:
+        # Cancel any pending scheduled departure first — otherwise a task could fire
+        # mid-teardown and "retire" a node the teardown is already destroying, which
+        # would write a departure into the timeline that never happened.
+        for task in getattr(running, "_departure_tasks", []):
+            task.cancel()
         for sid in list(running.node_sessions.values()):
             try:
                 await self.manager.destroy(sid)

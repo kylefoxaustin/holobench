@@ -393,8 +393,14 @@ async def _lab_launch(args: argparse.Namespace) -> int:
     coord = LabCoordinator(mgr)
     print(f"launching lab: {lab.display_name}  ({len(lab.nodes)} nodes)")
     auto_ip = not getattr(args, "no_auto_ip", False)
+    if lab.is_staggered:
+        print(f"schedule: this lab tests TIME — horizon {lab.horizon_s:.0f}s "
+              f"(arrivals staggered; a node departs early)")
     try:
-        running = await coord.launch(lab, auto_ip=auto_ip)
+        running = await coord.launch(
+            lab, auto_ip=auto_ip,
+            on_event=lambda m: print(m, flush=True),   # arrivals/departures, live
+        )
     except LabError as exc:
         _print_err(str(exc))
         return 1
@@ -414,11 +420,20 @@ async def _lab_launch(args: argparse.Namespace) -> int:
         print("no auto-IP (--no-auto-ip): eth nodes come up with link-up but NO address —")
         print("  assign one in-console, e.g.  ip addr add 10.0.0.1/24 dev eth0 && ip link set eth0 up")
     rc = 0
+    # A staggered lab observed for less than its horizon has not been RUN — it has been
+    # INTERRUPTED. The scheduled departure is the last event and the whole point, so
+    # default the hold to the remaining horizon rather than quietly exiting before it.
+    hold = args.hold
+    if not hold and lab.is_staggered and running.t0 is not None:
+        remaining = lab.horizon_s - (asyncio.get_running_loop().time() - running.t0)
+        hold = max(0, int(remaining)) + 30
+        print(f"(no --hold given; holding {hold}s to reach this lab's horizon — "
+              f"the scheduled departure is the point)")
     try:
-        if args.hold:
-            print(f"holding for {args.hold}s (Ctrl-C to stop early) ...")
+        if hold:
+            print(f"holding for {hold}s (Ctrl-C to stop early) ...")
             try:
-                await asyncio.sleep(args.hold)
+                await asyncio.sleep(hold)
             except asyncio.CancelledError:
                 pass
     finally:

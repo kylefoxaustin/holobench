@@ -1,0 +1,90 @@
+# Holobench board profile — NXP i.MX RT1180 EVK as an ETHERNET (NETC) lab node.
+#
+# The rt1180's second face. imxrt1180-evk-uart-device onboarded it as a UART peer;
+# this profile puts it on a shared L2 segment as the 0x88B6 node of the fleet's
+# three-node raw-Ethernet lab (mcx 0x88B5 + rt1180 0x88B6 + imx95 0x88B7).
+#
+# FACTS (rt1180emulator, tools/netc-eth-lab3.sh — its own verified launch line):
+#   qemu-system-arm -M mimxrt1180-evk -display none -monitor none \
+#     -semihosting-config enable=on,target=native \
+#     -kernel node-rt1180.elf \
+#     -nic socket,mcast=<group>,mac=54:27:8d:00:00:00
+# NOTE there is NO `model=` on the -nic: the machine auto-attaches its NETC. That
+# is their line, verbatim, and it is what worked — so fabric_nic_model stays null.
+#
+# CONSOLE — CORRECTING THIS REPO'S OWN EARLIER NOTE. The uart-device profile says the
+# rt1180 "prints via ARM SEMIHOSTING". That is true of the uartlink firmware and FALSE
+# of this one. Verified by booting the ELF and reading both sinks:
+#     QEMU stdout (semihosting) ->   0 bytes
+#     LPUART   (serial_hd(0))   -> 158 bytes, incl. the ENET-LAB3 banner
+# So the NETC node's console is a NORMAL chardev on serial_hd(0), and holobench taps
+# it the ordinary way. Semihosting is left enabled only because it is in their
+# verified line. (A board fact is per-FIRMWARE, not per-board.)
+#
+# PERSISTENT — the reason this node is farm-safe. The firmware broadcasts 0x88B6
+# forever, ignores its OWN ethertype on RX (a mcast socket hands your broadcast back
+# to you; count it and you "see a peer" that is yourself), announces PASS once on
+# seeing BOTH peers, and KEEPS GOING. No SYS_EXIT. A run-once self-test that exits on
+# PASS terminates QEMU and holobench's QMP connect is refused even though the link
+# passed — that is what bit the UART onboarding.
+#
+# ARTIFACT: staged COPY at holobench-images/enet-lab3/ (see its PROVENANCE.md).
+# Verified by its own banner, not its filename:
+#   "ENET-LAB3 up: rt1180 ethertype 0x88b6, need 0x88b5 + 0x88b7"
+# It is a copy because rt1180's script builds into /tmp (wiped on reboot) and
+# holobench must never write into an emulator repo (CLAUDE.md §7). Regenerate with
+# rt1180emulator's `tools/netc-eth-lab3.sh` (needs the MCUXpresso SDK + west).
+
+id:           imxrt1180-evk-netc
+display_name: "NXP i.MX RT1180 EVK (NETC Ethernet node, 0x88B6)"
+soc:          "NXP i.MX RT1180 (Cortex-M7 + Cortex-M33)"
+description:  "i.MX RT1180 on a shared L2 segment — beacons ethertype 0x88B6 forever, PASSes only on seeing BOTH peers."
+
+qemu:
+  binary:  /home/kyle/Documents/GitHub/rt1180emulator/build/qemu-system-arm
+  machine: mimxrt1180-evk
+  memory:  null
+  audio:   none
+  extra_args:
+    - "-semihosting-config"
+    - "enable=on,target=native"
+    - "-no-reboot"
+
+boot:
+  mode: firmware-elf
+  artifacts:
+    firmware: /home/kyle/holobench-images/enet-lab3/node-rt1180.elf
+    kernel:   null
+    dtb:      null
+    initrd:   null
+    rootfs:   null
+    disk:     null
+  append: null
+  command_template: null
+
+serial:
+  - { name: "LPUART1 console (ENET-LAB3 output lands here)", chardev: console0, role: mcu-console, default: true }
+
+display: { enabled: false, device: null, vnc: false }
+
+# The machine auto-attaches its NETC to the first -nic; rt1180's own verified launch
+# line carries no model=, so we add none. user_nics 0 = no slirp; the lab's mcast
+# socket is this board's only NIC.
+net: { user_nics: 0, fabric_nic_model: null }
+
+file_injection:
+  nine_p: { enabled: false, mount_tag: holobench }
+  tftp:   { enabled: false }
+  nfs:    { enabled: false }
+  image_swap: { enabled: false, target_drive: null }
+
+power: { warm_reset: true, cold_cycle: true, pause: true, reinstall: false }
+
+introspection:
+  qmp_events: true
+  memory_map: true
+  device_tree: true
+  gdbstub: { enabled: true }
+  snapshots: false
+
+reservation: { default_minutes: 30, max_minutes: 120 }

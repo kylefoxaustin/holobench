@@ -169,6 +169,82 @@ Further multi-node fabrics — same pattern: stock transport + per-board facts, 
 a custom device. **All six wired transports (eth, USB, UART, SPI, CAN, I2C) are now
 delivered.**
 
+## The schedule — a lab's *time* is part of its spec (2026-07-13)
+
+Every lab above is a **topology**: which boards, wired how. That was the whole model,
+and it was **half the model**. A lab also has a **timeline**, and the timeline is where
+a whole class of bug lives.
+
+The three emulator sessions (rt1180 + mcxn947 + 95emulator) built a three-node raw-L2
+segment and hit a QEMU `can_receive()` / `qemu_flush_queued_packets()` **queue stall**
+that is structurally invisible to any 2-node test **and** to any 3-node test whose nodes
+boot together. All three, independently, asked for the same thing:
+
+> **"DON'T LAUNCH THREE NODES. STAGGER THE ARRIVALS AND THE DEPARTURES, AND MAKE ONE
+> LEAVE EARLY. A lab that starts them all at once will be green forever and will never
+> find anything again."**
+>
+> **"THE BUG CLASS LIVES IN TIME, NOT TOPOLOGY."** Not N>2 — N>2 *plus asynchronous
+> arrival and departure. The segment is only as patient as its least patient member,
+> and only as durable as its shortest window.*
+
+Three synchronous self-verifying rehearsals passed. The staggered co-launch found four
+bugs. So `LabNode` grew two fields, and they are **first-class, not convenience knobs**:
+
+```yaml
+nodes:
+  - { name: imx95,  profile: imx95-evk-enet-lab3, start_at: 0   }               # broadcasts ALONE into an empty segment
+  - { name: mcx,    profile: mcxn947-enet-lab3,   start_at: 150, stop_at: 420 } # joins live; LEAVES while others run
+  - { name: rt1180, profile: imxrt1180-evk-netc,  start_at: 210 }               # joins later still
+```
+
+* `start_at` — the node joins a segment **already in progress** (or, at 0, shouts into a
+  void and must not mind: a peer that is not here *yet* is not a failure).
+* `stop_at` — the node **departs while the others keep running**. The wire loses a member
+  and must not stall.
+
+Defaults (`0` / `None`) preserve the old behaviour exactly: every pre-existing lab still
+launches all nodes at once and never retires one.
+
+### Departure is the coordinator's, never the node's
+
+**The coordinator issues a QMP `quit` at a moment it chose and recorded.** This is not an
+implementation detail — it is the only thing that makes an early departure a *fact*:
+
+> **A node that exits itself makes "it left" and "it crashed" THE SAME OBSERVATION.**
+
+That collapsed oracle is what the whole fleet spent the week hunting, and holobench has
+already been bitten by it once: onboarding the RT1180 over UART, a firmware that called
+semihosting `SYS_EXIT` after PASS **terminated QEMU**, so the coordinator's QMP connect
+was refused *even though the link had passed*. Holobench is a persistent board **farm** —
+it holds every board over QMP for that board's whole life. Two consequences, both enforced:
+
+1. **Lab firmware must be PERSISTENT** — beacon/echo forever, WFI idle, never self-exit.
+2. **A scheduled departure `quit()`s the node; it does NOT `destroy()` the session.**
+   `destroy()` calls `cleanup()`, which `rmtree`s the work dir — *and that dir holds the
+   node's console log*. Destroying it would erase the evidence of the one node whose
+   departure is the entire point ("did it PASS before it left?"). The board leaves the
+   wire; its log survives until the lab itself is torn down. (Guarded by
+   `test_departure_quits_the_node_but_does_NOT_destroy_its_session`.)
+
+### Scoring a scheduled lab
+
+* **Grep the TOKEN, not the substring.** The only evidence is the literal PASS line in a
+  node's **own** console, printed by its **own** firmware. rt1180's monitor once matched
+  its own `need 0x88b7` *banner* and shouted PASS twelve times at an empty wire.
+* **A timeout is INCONCLUSIVE, never a FAILURE** (mcxn947's rule). A killed run is not a
+  caught bug.
+* **A staggered lab observed for less than its `horizon_s` has not been run — it has been
+  interrupted.** `holobench lab launch` therefore defaults its hold to the remaining
+  horizon rather than exiting before the last scheduled event.
+* Any lab asserting a *timing* property must run under **`-icount`**, or it is measuring
+  host load rather than the guest.
+
+Reference lab: **`labs/mcx-rt1180-95-l2.yaml`** — MCXN947 (M33, bare metal) + i.MX RT1180
+(M33, bare metal) + i.MX 95 (A55, Linux) on one stock `-nic socket,mcast=` wire; three
+SoCs, two QEMU binaries, two instruction sets, distinct ethertypes (0x88B5/B6/B7), each
+node PASSing only on **observing both others**.
+
 ## Architecture
 
 ```

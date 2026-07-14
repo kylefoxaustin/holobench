@@ -1,0 +1,95 @@
+# Holobench board profile — NXP i.MX 95 EVK as the 0x88B7 node of the 3-node L2 lab.
+#
+# The Linux peer. mcx (0x88B5) and rt1180 (0x88B6) are bare-metal Cortex-M33s that hit
+# the wire in milliseconds; this one is a Cortex-A55 booting a real kernel and needs
+# ~90s to get its interface up. THAT ASYMMETRY IS THE LAB — see labs/mcx-rt1180-95-l2.yaml.
+#
+# FACTS (95emulator, tests/enet-lab3/run.sh — its own verified launch line):
+#   qemu-system-aarch64 -M imx95-19x19-evk -m 2G \
+#     -kernel Image -dtb <enetc fixed-link dtb> -initrd lab3.cpio.gz \
+#     -device loader,file=<SM elf>,cpu-num=6 \
+#     -nic socket,mcast=<group>,model=fsl-enetc,mac=02:49:4d:58:95:01
+#     -append "... rdinit=/init lab_et=0x88B7 lab_peers=0x88B5,0x88B6 ..."
+#
+# TWO THINGS THE 95 SESSION LEARNED THE HARD WAY, BOTH ENCODED HERE:
+#  1. fabric_dtb. The stock EVK dtb points ENETC at external PHYs that aren't modeled,
+#     so the port deferred-probes and there is NO netdev. The fixed-link dtb makes
+#     enetc4_pf bind and carry traffic. Without it this node is silently deaf.
+#  2. The init resolves its interface by PCI ADDRESS (0002:00:00.0), never by the name
+#     "eth0" — probe order makes the name unreliable.
+#
+# THE ONE PLACE THIS PROFILE DEPARTS FROM THEIR TEST, AND WHY.
+# Their init runs the tool and then `poweroff -f`; the tool itself exits after PASS +
+# LAB_POST_PASS_MS. Correct for a self-contained test, WRONG for a board farm:
+#   * holobench holds every board over QMP for the board's whole life — a node that
+#     powers itself off is a session that vanishes underneath the coordinator; and
+#   * "this node left" and "this node crashed" would become the SAME OBSERVATION.
+# So holobench builds its own initramfs (tools/make-enet-lab3-initramfs.sh) that uses
+# the 95's tool VERBATIM (compiled from their source, read-only — CLAUDE.md §7) and
+# HOLDS afterwards. Persistence is bought with the tool's OWN env knobs, not a patch:
+# lab_postpass keeps it beaconing as a real peer for 24h (a node that stops
+# transmitting the moment it is satisfied is a drive-by, not a peer — mcx and rt1180
+# both beacon forever). DEPARTURE IS THE COORDINATOR'S TO SCHEDULE, over QMP, at a
+# known time. That is the only thing that makes an early departure a fact instead of
+# an inference.
+#
+# lab_deadline=600000 (10 min) is a real, finite failure bound: it must comfortably
+# exceed the lab's whole arrival schedule (a peer that has not arrived YET is not a
+# failure), while still letting a genuinely-deaf node say so rather than hang.
+
+id:           imx95-evk-enet-lab3
+display_name: "NXP i.MX 95 EVK (ENETC 3-node L2 lab, 0x88B7)"
+soc:          "NXP i.MX 95"
+description:  "i.MX 95 Linux node on a shared L2 segment — beacons ethertype 0x88B7, PASSes only on seeing BOTH peers, then HOLDS."
+
+qemu:
+  binary:  /home/kyle/Documents/GitHub/95emulator/build/qemu-system-aarch64
+  machine: imx95-19x19-evk
+  memory:  "2G"
+  audio:   none
+  extra_args:
+    # LOAD-BEARING M33 System Manager (serves SCMI; the A55 will not boot without it).
+    - "-device"
+    - "loader,file={asset_dir}/m33_image_M2.elf,cpu-num=6"
+
+boot:
+  mode: direct-kernel
+  artifacts:
+    flash_bin: null
+    kernel:    Image
+    dtb:       imx95-19x19-evk.dtb          # net.fabric_dtb swaps this on an eth segment
+    initrd:    lab3.cpio.gz                 # busybox + the 95's enet-lab3 tool + our holding init
+    rootfs:    null
+    disk:      null
+  append: "console=ttyLP0,115200 cpuidle.off=1 rdinit=/init lab_et=0x88B7 lab_peers=0x88B5,0x88B6 lab_deadline=600000 lab_postpass=86400000"
+  command_template: null
+
+serial:
+  - { name: "A-core console (ENET-LAB3 output lands here)", chardev: console0, role: a-core, default: true }
+  # M33 System Manager debug console = serial_hd(1). Quiet under the M=2 idle
+  # firmware, but it speaks on SM faults — an SCMI -ETIMEDOUT at boot means read THIS.
+  - { name: "M33 System Manager", chardev: smconsole, role: m-core, default: false }
+
+display: { enabled: false, device: null, vnc: false }
+
+net:
+  user_nics: 0                                   # no slirp; the lab's mcast socket is the only NIC
+  fabric_nic_model: fsl-enetc                    # bind the ENETC port, not a convenience NIC
+  fabric_dtb: imx95-19x19-evk-enetc.dtb          # fixed-link, else ENETC deferred-probes and there is no netdev
+
+file_injection:
+  nine_p: { enabled: false, mount_tag: holobench }
+  tftp:   { enabled: false }
+  nfs:    { enabled: false }
+  image_swap: { enabled: false, target_drive: null }
+
+power: { warm_reset: true, cold_cycle: true, pause: true, reinstall: false }
+
+introspection:
+  qmp_events: true
+  memory_map: true
+  device_tree: true
+  gdbstub: { enabled: true }
+  snapshots: false
+
+reservation: { default_minutes: 30, max_minutes: 120 }

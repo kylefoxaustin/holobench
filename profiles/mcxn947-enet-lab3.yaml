@@ -1,0 +1,84 @@
+# Holobench board profile — NXP MCXN947 (FRDM) as the 0x88B5 node of the 3-node L2 lab.
+#
+# Distinct from mcxn947-enet (which boots the TWO-node 0x88B5 emitter for mcx93-eth):
+# this firmware is the THREE-node lab node — it requires BOTH peers (0x88B6 rt1180 +
+# 0x88B7 imx95) before it declares PASS. An emitter that just shouts is not the same
+# as a node that must OBSERVE two distinct peers, and only the latter can fail.
+#
+# FACTS (mcxn947qemu, tests/mcxn-enet-lab3/run.sh — its own verified launch line):
+#   qemu-system-arm -M frdm-mcxn947 -display none -monitor none \
+#     -kernel node-mcx.elf -no-reboot \
+#     -nic socket,mcast=<group>,model=mcxn-enet,mac=02:4d:43:58:00:01
+#
+# MAC PROVENANCE — do not "fix" this to what the bus says. mcxn947qemu posted
+# "54:27:8d:00:00:01" on 2026-07-13 19:47. That contradicts its OWN main.c:95
+# (`static const uint8_t MY_MAC[6] = { 0x02,0x4D,0x43,0x58,0x00, MY_MAC_LSB }`),
+# its own run.sh, 95's run.sh and rt1180's script — four files, one answer:
+# 02:4d:43:58:00:01. And 54:27:8d is rt1180's OUI, not the MCX's. The committed
+# artifact wins over the recollection; queried on the bus. (It does not gate PASS
+# either way — the firmware writes its src MAC into the frame itself and the
+# assertions key on ETHERTYPE — but an unprovenanced number travels on credence
+# alone, even a friendly one.)
+#
+# PERSISTENT — confirmed by mcxn947qemu on the bus (2026-07-13 19:47) AND by reading
+# main.c: it beacons forever and, on PASS, RE-ARMS its seen-flags ("keep the segment
+# alive") rather than stopping. It also refuses to satisfy itself: `if (!mine)` drops
+# its own echoed broadcast, because a mcast socket hands your own frame back to you.
+# mcxn's offer, verbatim: "make me the one that leaves early — I will hold the
+# segment until you kill me."
+#
+# ARTIFACT: staged COPY at holobench-images/enet-lab3/ (see its PROVENANCE.md) —
+# their run.sh REBUILDS node-mcx.elf into their tree on every run, so pointing a farm
+# profile at that path would make a lab launch depend on when someone last ran a test.
+# Verified by its own banner, not its filename:
+#   "ENET-LAB3 up: broadcasting ethertype 0x88b5, waiting for BOTH peers"
+# Regenerate with mcxn947qemu's tests/mcxn-enet-lab3/run.sh (arm-none-eabi-gcc).
+
+id:           mcxn947-enet-lab3
+display_name: "NXP MCXN947 (FRDM, ENET 3-node L2 lab, 0x88B5)"
+soc:          "NXP MCXN947"
+description:  "MCXN947 on a shared L2 segment — beacons ethertype 0x88B5 forever, PASSes only on seeing BOTH peers."
+
+qemu:
+  binary:  /home/kyle/Documents/GitHub/mcxn947qemu/build/qemu-system-arm
+  machine: frdm-mcxn947
+  memory:  null
+  audio:   none
+  extra_args:
+    - "-no-reboot"
+
+boot:
+  mode: firmware-elf
+  artifacts:
+    firmware: /home/kyle/holobench-images/enet-lab3/node-mcx.elf
+    kernel:   null
+    dtb:      null
+    initrd:   null
+    rootfs:   null
+    disk:     null
+  append: null
+  command_template: null
+
+serial:
+  - { name: "LPUART4 console (ENET-LAB3 output lands here)", chardev: console0, role: mcu-console, default: true }
+
+display: { enabled: false, device: null, vnc: false }
+
+net: { user_nics: 0, fabric_nic_model: mcxn-enet }   # ENET-QoS
+
+file_injection:
+  nine_p: { enabled: false, mount_tag: holobench }
+  tftp:   { enabled: false }
+  nfs:    { enabled: false }
+  image_swap: { enabled: false, target_drive: null }
+
+power: { warm_reset: true, cold_cycle: true, pause: true, reinstall: false }
+
+introspection:
+  qmp_events: true
+  memory_map: true
+  device_tree: true
+  gdbstub: { enabled: true }
+  snapshots: false
+
+reservation: { default_minutes: 30, max_minutes: 120 }
