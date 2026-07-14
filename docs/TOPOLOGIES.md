@@ -287,6 +287,55 @@ back to requiring all peers, forever. **A re-arming assertion is an oracle that 
 expire** — its PASS line stops being a one-shot verdict and becomes a *heartbeat with the
 wire in the loop*. This is the cheapest guard in the whole design.
 
+### 🔴 The verdict is too weak: presence is not content
+
+rt1180 ran this schedule against an instrumented NETC and measured, **inside the model at
+the DMA**, frames written to *guest physical address 0*:
+
+| node's arrival | frames DMA'd to address 0 |
+|---|---|
+| into an **empty** segment | 0 |
+| joining **second** | 8 |
+| joining **last, into live traffic** | **88** ← rt1180's slot in this lab |
+
+Its RX ring never reads the consumer index, the writeback clobbers the buffer address the
+driver posted, and the 9th frame of a burst does `dma_memory_write(as, 0, frame, 1000)`
+while the descriptor still reads READY — so the driver copies a stale buffer and believes
+it. The burst is delivered by `qemu_flush_queued_packets()`: **the fix for the stall this
+lab was built to find fired the next bug.**
+
+**So the first green run was almost certainly green *on corrupted frames*.**
+
+> ⭐ **The verdict keys on `ethertype`. A frame whose body is garbage has the same
+> ethertype as a good one. "I saw 0x88B5" is a statement about a FIELD, not about a
+> FRAME** — and so "delivered" and "delivered corrupt" are, in this lab, *the same
+> observation*. In the very repo whose `stop_at` feature exists so that "left" and
+> "crashed" would not be.
+
+And the inconsistency is ours, in black and white:
+
+| lab | asserts |
+|---|---|
+| `uart-link-91`, `i2c-link-91`, `spi-link-*`, `can-link-*` | **byte-exact** |
+| `mcx-rt1180-95-l2` | *"I saw an ethertype."* |
+
+**Five transports prove the DATA crossed. The sixth — the only one whose purpose is to
+find bugs, on the only fabric where a burst can outrun a ring — proves a NUMBER ARRIVED.**
+Ethernet was held to a weaker standard than I2C, and nobody noticed because Ethernet was
+the one we were proud of.
+
+**Fix ③ (asked of the node owners):** put a checkable body in the beacon — magic, the
+sender's ethertype **echoed in the payload** (a frame that disagrees with *itself* is a
+stale/clobbered buffer, exactly what the writeback bug produces), a per-sender sequence,
+and a fixed `0x5A` pattern. On mismatch the node prints `ENET-LAB3 CORRUPT:` and **does
+not count it as seeing a peer**; the runner treats CORRUPT as a hard fail. Sequence *gaps*
+are logged, not failed — **corruption is the assertion; loss is a statistic.**
+
+> ⭐ **A finding read from the SUBJECT survives a bug in the OBSERVER. A finding read from
+> the OBSERVER does not.** *(rt1180 — it retracted a MAC claim that came from its console
+> and kept the DMA count that came from inside the model. That is the argument for putting
+> the assertion in the firmware rather than in the runner.)*
+
 rt1180 documented the same hole from its own side rather than assuming it away: *"what
 the surviving peers do when a beacon they were counting on stops is completely
 unexercised."* Every node still on the segment had already found its peers and stopped

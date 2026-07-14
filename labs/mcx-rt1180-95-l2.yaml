@@ -117,6 +117,48 @@
 #   ② the 4th node (91emulator, 0x88B8) arrives AFTER the departure — the only oracle
 #     that cannot be pre-satisfied, because it still needs something from the wire.
 #
+# ─────────────────────────────────────────────────────────────────────────────────────
+# 🔴 AND THE THIRD, WHICH IS THE WORST, BECAUSE THE VERDICT ITSELF IS TOO WEAK
+#
+# rt1180 ran this schedule against an instrumented NETC (2026-07-13 21:02/21:36) and
+# measured, INSIDE THE MODEL at the DMA, frames written to GUEST PHYSICAL ADDRESS 0:
+#
+#     node into an EMPTY segment    ->   0
+#     node joining SECOND           ->   8
+#     node joining LAST, live wire  ->  88      <-- rt1180's slot in THIS lab, at t+210
+#
+# Cause: the RX ring never reads its consumer index, the 16-byte writeback CLOBBERS the
+# buffer address the driver posted, and the 9th frame of a burst hits an un-re-armed BD,
+# reads addr=0, and does dma_memory_write(as, 0, frame, 1000). The BD still says READY,
+# so the driver copies a stale buffer and believes it. The burst is delivered by
+# qemu_flush_queued_packets() — THE FIX FOR THE STALL THIS LAB WAS BUILT TO FIND. The fix
+# fired the next bug.
+#
+# SO THE FIRST GREEN RUN WAS ALMOST CERTAINLY GREEN *ON CORRUPTED FRAMES*, AND SAID PASS.
+#
+# ⭐ THE VERDICT KEYS ON `ethertype`. A frame whose body is garbage — or whose buffer was
+#   DMA'd to address 0 and read back stale — HAS THE SAME ETHERTYPE AS A GOOD ONE.
+#   "I saw 0x88B5" is a statement about a FIELD. It is not a statement about a FRAME.
+#   "Delivered" and "delivered corrupt" are, in this lab, THE SAME OBSERVATION — in the
+#   very repo whose whole stop_at feature exists so that "left" and "crashed" would not be.
+#
+# ⭐ AND THE INCONSISTENCY IS OURS, IN BLACK AND WHITE:
+#       uart-link-91  byte-exact     i2c-link-91      byte-exact
+#       spi-link-*    byte-exact     can-link-*       byte-exact, both directions
+#       THIS LAB      "I saw an ethertype."
+#   Five transports prove the DATA crossed. The sixth — the only one whose PURPOSE is to
+#   find bugs, on the only fabric where a burst can outrun a ring — proves A NUMBER
+#   ARRIVED. Ethernet was held to a weaker standard than I2C, and nobody noticed because
+#   Ethernet was the one we were proud of.
+#
+#   ③ ASKED OF THE NODE OWNERS: put a CHECKABLE BODY in the beacon and verify it on RX —
+#     magic + the sender's ethertype ECHOED IN THE PAYLOAD (a frame that disagrees with
+#     ITSELF is a stale/clobbered buffer, which is exactly what the writeback bug
+#     produces) + a per-sender sequence + a fixed 0x5A pattern. On mismatch: print
+#     "ENET-LAB3 CORRUPT:" and DO NOT count it as seeing a peer. The runner then treats
+#     CORRUPT as a hard fail. Sequence GAPS are logged, not failed — corruption is the
+#     assertion; loss is a statistic.
+#
 # THE FIX, AND IT IS THE NEXT SCHEDULE TO RUN: a node must ARRIVE **AFTER** THE DEPARTURE
 # and be SEEN. That is the only assertion that can distinguish "the segment absorbed the
 # loss" from "the segment quietly stalled and nobody was left to notice" — because every
