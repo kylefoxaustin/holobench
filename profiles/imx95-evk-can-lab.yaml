@@ -1,0 +1,112 @@
+# Holobench board profile — NXP i.MX 95 EVK as the LINUX RESPONDER of the CAN link lab.
+#
+# ⭐ WHY THIS PROFILE HAD TO EXIST: THE LAB COULD NOT PASS, AND NOTHING SAID SO.
+#
+# labs/can-link-95-mcx.yaml pointed at `imx95-evk-sd` — the full Yocto SD image: systemd, a
+# login prompt, and NOTHING LISTENING ON can0. The MCX node transmits std ID 0x321 forever
+# and waits for a 0x322 reply that nobody was ever going to send. So the lab wired the CAN
+# bus correctly, booted both boards, and COULD NEVER PASS. Its MCX console read
+# `CAN LINK test` — the banner — and never `CAN LINK PASS`.
+#
+#   ⭐ A LAB THAT CANNOT PASS IS NOT A FAILING LAB. IT IS A LAB NOBODY EVER RAN TO THE END.
+#     It sat in labs/ for weeks looking exactly like the ones that work.
+#
+# And the repo's own note misdiagnosed it — "can0 missing, rootfs lacks the .ko". Wrong
+# twice: the .ko IS in the golden rootfs, and even loaded, there is still no responder.
+#
+#   ⭐ A PLAUSIBLE DIAGNOSIS NOBODY RE-DERIVED, SITTING ON TOP OF A LAB NOBODY RAN.
+#
+# WHAT THE 95'S OWN PASSING TEST DOES (tests/interconnect-imx95/xcheck-can-mcx.sh) — and it
+# is NOT the SD image: it boots a busybox initramfs, insmods the four CAN modules, and runs
+# `canlink respond can0`. This profile reproduces exactly that, the holobench way:
+# tools/make-can-lab-initramfs.sh compiles THEIR canlink.c verbatim and read-only (§7) and
+# wraps it in an init WE own.
+#
+# THE KERNEL AND ITS MODULES ARE ONE BUILD, AND THAT IS LOAD-BEARING. The initramfs insmods
+# .ko files straight out of $KBUILD, so this profile MUST boot that same tree's Image —
+# vermagic is the version string and a mismatch is refused outright.
+#
+#   THIS IS THE BUG THAT HID EVERYTHING ELSE. imx95-evk-sd booted a LOCAL kernel
+#     6.12.49-gdf24f9428e38
+#   against a Yocto golden rootfs whose modules live in
+#     /lib/modules/6.12.49-lts-next-gdf24f9428e38
+#   Same source. Same git hash (df24f9428e). ONE `CONFIG_LOCALVERSION` APART. `modprobe`
+#   looks up `uname -r`, finds no such directory, and says nothing at all. The kernel and
+#   the rootfs were a MISMATCHED PAIR, and the only symptom was an interface that never
+#   appeared. (imx95-evk-sd now boots the Yocto kernel that matches its own rootfs — a
+#   kernel whose modules are not on its rootfs is a bug for every consumer of that profile.)
+#
+# WHY THE NODE HOLDS INSTEAD OF POWERING OFF. Their init ends in `poweroff -f`. Correct for
+# a self-contained test, WRONG for a farm: a node that powers itself off is a session that
+# vanishes underneath the coordinator, and it makes "this node left" and "this node crashed"
+# THE SAME OBSERVATION. Departure is the coordinator's, over QMP, at a time it chose and
+# recorded. (91emulator, on the 95's exiting enet node: a node that exits on its own writes
+# a departure that never happened into EVERY OTHER NODE'S data.)
+
+id:           imx95-evk-can-lab
+display_name: "NXP i.MX 95 EVK (Linux FlexCAN responder — CAN link lab)"
+soc:          "NXP i.MX 95"
+description:  "i.MX 95 Linux node that brings up can0 and REPLIES 0x322 to the MCX's 0x321 — the responder the CAN lab never had."
+
+qemu:
+  binary:  /home/kyle/Documents/GitHub/95emulator/build/qemu-system-aarch64
+  machine: imx95-19x19-evk
+  memory:  "2G"
+  audio:   none
+  extra_args:
+    # LOAD-BEARING M33 System Manager (serves SCMI; the A55 will not boot without it).
+    - "-device"
+    - "loader,file={asset_dir}/m33_image_M2.elf,cpu-num=6"
+
+boot:
+  mode: direct-kernel
+  artifacts:
+    kernel:  Image                        # MUST be the build the initramfs's .ko came from
+    dtb:     imx95-19x19-evk-canlink.dtb  # can.link.attach_dtb re-applies this; kept as the base
+    initrd:  can-lab.cpio.gz              # busybox + 4 CAN modules + the 95's canlink responder
+    rootfs:  null
+    disk:    null
+  append: "console=ttyLP0,115200 cpuidle.off=1 rdinit=/init"
+  command_template: null
+
+  # md5 PIN — a mismatch REFUSES TO LAUNCH. Regenerate with tools/make-can-lab-initramfs.sh.
+  pin:
+    initrd: "bdcf7912ff5bda2a70dfc2519d6b0eda"
+
+serial:
+  - { name: "A-core console (CAN-LAB output lands here)", chardev: console0, role: a-core, default: true }
+  - { name: "M33 System Manager", chardev: smconsole, role: m-core, default: false }
+
+display: { enabled: false, device: null, vnc: false }
+
+net: { user_nics: 0 }
+
+# CAN: FlexCAN -> can0. Same flexcan1=can@443a0000 / flexcan2=can@425b0000 pair as the
+# i.MX93; the canlink overlay enables both plus a dummy transceiver. Wire BOTH can-buses.
+# (Verified by parsing the dtb, not by trusting its filename: stock has can@443a0000
+# DISABLED and the canlink dtb flips it to okay.)
+can:
+  link:
+    bus:           "can-bus,id=cb"
+    chardev:       "socket,id={id},path={path}"    # coordinator adds server=on/off,reconnect-ms=1000
+    host:          "can-host-chardev,id=canh,canbus=cb,chardev={id}"
+    machine_extra: "canbus0=cb,canbus1=cb"
+    attach_dtb:    imx95-19x19-evk-canlink.dtb
+    dev:           "can0"
+
+file_injection:
+  nine_p: { enabled: false, mount_tag: holobench }
+  tftp:   { enabled: false }
+  nfs:    { enabled: false }
+  image_swap: { enabled: false, target_drive: null }
+
+power: { warm_reset: true, cold_cycle: true, pause: true, reinstall: false }
+
+introspection:
+  qmp_events: true
+  memory_map: true
+  device_tree: true
+  gdbstub: { enabled: true }
+  snapshots: false
+
+reservation: { default_minutes: 30, max_minutes: 120 }

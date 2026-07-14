@@ -7,8 +7,14 @@
 id:           can-link-95-mcx
 display_name: "CAN link — i.MX95 <-> MCXN947 (mixed-SoC)"
 description:  "Cross-SoC CAN: i.MX95 (Linux FlexCAN can0) bridged to an MCXN947 (bare-metal M33 FlexCAN0) over the can-host-chardev socket transport."
+# board95 was `imx95-evk-sd` — the full Yocto SD image, which boots to a LOGIN PROMPT and
+# has NOTHING LISTENING ON can0. The MCX transmits 0x321 forever waiting for a 0x322 reply
+# that nobody was ever going to send, so this lab COULD NOT PASS and never had. Its console
+# said `CAN LINK test` (the banner) and never `CAN LINK PASS`.
+#   ⭐ A LAB THAT CANNOT PASS IS NOT A FAILING LAB — IT IS ONE NOBODY RAN TO THE END.
+# imx95-evk-can-lab actually runs the responder (see that profile for the whole story).
 nodes:
   - { name: mcx,     profile: mcxn947-can-device }
-  - { name: board95, profile: imx95-evk-sd }
+  - { name: board95, profile: imx95-evk-can-lab }
 links:
   - { type: can, a: mcx, b: board95 }

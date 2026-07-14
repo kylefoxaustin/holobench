@@ -884,3 +884,60 @@ def test_every_lab3_profile_pins_its_INVOCATION_as_well_as_its_binary():
     for pid in ("imx91-evk-enet-lab3", "imx95-evk-enet-lab3",
                 "imxrt1180-evk-netc", "mcxn947-enet-lab3"):
         assert load_profile(pid).qemu.argv_pin, f"{pid} pins its binary but not its RUNNER"
+
+
+# --- the CAN lab could not pass, and nothing said so ------------------------------------
+#
+# labs/can-link-95-mcx booted `imx95-evk-sd` -- the full Yocto SD image: systemd, a login
+# prompt, and NOTHING LISTENING ON can0. The MCX transmits std 0x321 forever waiting for a
+# 0x322 reply nobody was ever going to send. The lab wired the bus correctly, booted both
+# boards, and COULD NEVER PASS. Its MCX console read "CAN LINK test" -- the banner -- and
+# never "CAN LINK PASS".
+#
+#   ⭐ A LAB THAT CANNOT PASS IS NOT A FAILING LAB. IT IS A LAB NOBODY EVER RAN TO THE END.
+#     It sat in labs/ looking exactly like the ones that work.
+
+def test_the_can_lab_boots_a_node_that_actually_RESPONDS():
+    """The 95 side must run the responder, not just own a CAN interface.
+
+    Guarding the shape, not the bytes: if someone points this lab back at a general-purpose
+    image, the MCX goes back to transmitting into silence and the lab goes back to being
+    decoration.
+    """
+    lab = load_lab("can-link-95-mcx")
+    by = {n.name: n.profile for n in lab.nodes}
+    assert by["board95"] == "imx95-evk-can-lab", (
+        "the 95 side of the CAN lab must run the responder profile; a login-prompt image "
+        "has nothing listening on can0 and the MCX waits forever"
+    )
+    prof = load_profile("imx95-evk-can-lab")
+    assert prof.can and prof.can.link and prof.can.link.dev == "can0"
+    assert prof.boot.artifacts.initrd == "can-lab.cpio.gz"   # busybox + modules + responder
+    assert prof.boot.pin.get("initrd")                       # and it is pinned
+
+
+def test_the_can_responder_kernel_and_its_modules_are_ONE_BUILD():
+    """vermagic is the version string: insmod refuses a module from another build.
+
+    This is the bug that hid the whole thing. imx95-evk-sd booted a LOCAL kernel
+        6.12.49-gdf24f9428e38
+    against a Yocto rootfs whose modules live in
+        /lib/modules/6.12.49-lts-next-gdf24f9428e38
+    Same source, same git hash, ONE CONFIG_LOCALVERSION APART. modprobe looks up `uname -r`,
+    finds no such directory, and says NOTHING AT ALL -- the only symptom is an interface that
+    never appears, which reads exactly like a missing driver.
+    """
+    import subprocess
+
+    prof = load_profile("imx95-evk-can-lab")
+    from holobench.profiles.loader import default_asset_dir
+
+    image = default_asset_dir(prof.id) / prof.boot.artifacts.kernel
+    krel = subprocess.run(
+        ["strings", "-a", str(image)], capture_output=True, text=True, check=True
+    ).stdout
+    # the initramfs's .ko come from linux-imx95-build; the kernel we boot must be that build
+    assert "6.12.49-gdf24f9428e38" in krel, (
+        "the CAN lab's kernel is not the build its staged modules came from -- insmod will "
+        "refuse them on vermagic and can0 will never appear"
+    )
