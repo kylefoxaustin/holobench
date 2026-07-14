@@ -25,7 +25,37 @@ set -euo pipefail
 
 REPO="$(cd "$(dirname "$0")/.." && pwd)"
 OUT_DIR="${1:-$REPO/assets/imx95-evk-enet-lab3}"
-SRC="${SRC:-$HOME/Documents/GitHub/95emulator/tests/enet-lab3/enet-lab3.c}"
+
+# COMPILE THE COMMIT, NEVER THE WORKTREE.
+#
+# ⭐ A PATH IN A LIVE WORKTREE IS NOT AN ARTIFACT — and that is just as true of SOURCE as of a
+# binary. This script's output is only as trustworthy as the .c it compiled, and 95emulator's
+# worktree is a live tree that its own test runs rewrite. If the file is dirty we are building
+# a node from code that is in no commit, that nobody announced, and that their next edit
+# destroys — and the resulting lab would go green about a firmware nobody chose.
+#
+# rt1180 found the sharpest form of this in its own tree: "this firmware's source is a patch
+# inside a shell script, applied to an SDK file OUTSIDE THE REPO. The ELF was committed; the
+# code that produced it was committed NOWHERE."
+#   ⭐ AN ARTIFACT WITH NO SOURCE IN THE TREE CANNOT GO STALE — IT WAS NEVER FRESH.
+#
+# And both halves are needed, which 91emulator established by retracting a credit for having
+# shipped only one: a PIN WITHOUT A SOURCE GATE blesses a binary nobody compiled; a SOURCE
+# GATE WITHOUT A PIN blesses a binary nobody announced.
+SRC_REPO="${SRC_REPO:-$HOME/Documents/GitHub/95emulator}"
+SRC_PATH="${SRC_PATH:-tests/enet-lab3/enet-lab3.c}"
+SRC_REF="${SRC_REF:-HEAD}"
+
+_SRC_TMP="$(mktemp -d)"; trap 'rm -rf "$_SRC_TMP"' EXIT
+git -C "$SRC_REPO" show "$SRC_REF:$SRC_PATH" > "$_SRC_TMP/enet-lab3.c" 2>/dev/null || {
+    echo "error: cannot read $SRC_PATH at $SRC_REF in $SRC_REPO" >&2; exit 1; }
+SRC="${SRC:-$_SRC_TMP/enet-lab3.c}"
+echo "== source: $SRC_REPO $SRC_PATH @ $(git -C "$SRC_REPO" rev-parse --short "$SRC_REF")"
+echo "== source md5: $(md5sum "$SRC" | cut -d' ' -f1)   <- the OTHER half of the pin"
+if ! git -C "$SRC_REPO" diff --quiet -- "$SRC_PATH" 2>/dev/null; then
+    echo "== WARNING: $SRC_PATH is DIRTY in their worktree — building from the COMMIT anyway," >&2
+    echo "==          which is the point. Their uncommitted edits are not a firmware." >&2
+fi
 BUSYBOX_CPIO="${BUSYBOX_CPIO:-$HOME/Documents/GitHub/95emulator/tests/busybox-initramfs/busybox-initramfs.cpio.gz}"
 CC="${CC:-aarch64-linux-gnu-gcc}"
 
@@ -33,7 +63,7 @@ CC="${CC:-aarch64-linux-gnu-gcc}"
 [ -f "$BUSYBOX_CPIO" ] || { echo "error: busybox initramfs not found at $BUSYBOX_CPIO" >&2; exit 1; }
 command -v "$CC" >/dev/null || { echo "error: no $CC" >&2; exit 1; }
 
-WORK="$(mktemp -d)"; trap 'rm -rf "$WORK"' EXIT
+WORK="$(mktemp -d)"; trap 'rm -rf "$WORK" "$_SRC_TMP"' EXIT   # BOTH: a second trap REPLACES the first
 mkdir -p "$OUT_DIR"
 
 "$CC" -static -O2 -Wall "$SRC" -o "$WORK/enet-lab3"

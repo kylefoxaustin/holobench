@@ -42,7 +42,10 @@ from .isolation import SessionCgroup, memory_max_bytes
 DEFAULT_BASE_DIR = Path(tempfile.gettempdir()) / "holobench"
 
 
-def _make_qemu_preexec(cgroup_procs: Optional[str] = None):  # pragma: no cover
+def _make_qemu_preexec(
+    cgroup_procs: Optional[str] = None,
+    reap_with_parent: bool = True,
+):  # pragma: no cover
     """Build the preexec_fn for a QEMU child (runs after fork, before exec).
 
     Joins the per-session cgroup (if one was created) by writing its own pid to
@@ -52,17 +55,57 @@ def _make_qemu_preexec(cgroup_procs: Optional[str] = None):  # pragma: no cover
     NOT capped via RLIMIT_AS — QEMU/TCG reserves tens of GB of (unbacked) virtual
     address space, so an RLIMIT_AS sized to guest RAM kills it; hard memory caps
     come from the cgroup's RSS-based memory.max (session/isolation.py, DEPLOY.md).
+
+    ⭐ AND IT SETS PR_SET_PDEATHSIG, BECAUSE A KILL THAT REACHES THE WRAPPER AND NOT
+    THE PROCESS IS NOT A KILL. (mcxn947 lost five departure runs to this: SIGKILL hit
+    `timeout`, not QEMU, so the suite scored a departure that never happened.)
+
+    IT HAPPENED HERE, AND IT PRODUCED A FALSE RED THAT ACCUSED TWO INNOCENT SESSIONS.
+    A lab runner was killed; asyncio reaped the Python process and ORPHANED ITS QEMU
+    CHILDREN, which kept beaconing on the multicast group. And the group is allocated
+    from an empty per-coordinator set, so the NEXT run lands on THE SAME WIRE — this is
+    not a race, it is a GUARANTEE. The following run was a 4-node lab sharing a segment
+    with a ghost of the previous one, still speaking the OLD protocol. Every node
+    rejected every other node, and the scorer faithfully reported that rt1180's
+    self-ethertype field was broken and imx95 was still emitting ASCII — about two
+    sessions that had, hours earlier, fixed exactly those bugs.
+
+      ⭐ AN ORPHANED PROCESS ON A SHARED BUS IS NOT A LEAK. IT IS A LIAR THAT OUTLIVED
+        THE RUN THAT CREATED IT — and its testimony is indistinguishable from a peer's.
+
+    So a board dies with the session that owns it. The parent-death signal is delivered
+    on the death of the *thread* that forked, which is the one holding the Session, and
+    it survives execve (QEMU is not setuid). The getppid() re-check closes the race where
+    the parent dies between fork and prctl — without it, the very orphan we are
+    preventing is the one that slips through.
+
+    `reap_with_parent=False` is the deliberate detach (`holobench launch --keep`), which
+    promises the board outlives the CLI. That promise must stay true.
     """
 
     def _pre() -> None:
+        import ctypes
         import os
         import resource
+        import signal
 
         if cgroup_procs:
             try:
                 with open(cgroup_procs, "w") as f:
                     f.write(str(os.getpid()))
             except OSError:
+                pass
+        if reap_with_parent:
+            try:
+                ppid_before = os.getppid()
+                PR_SET_PDEATHSIG = 1
+                libc = ctypes.CDLL("libc.so.6", use_errno=True)
+                libc.prctl(PR_SET_PDEATHSIG, signal.SIGKILL, 0, 0, 0)
+                # The parent may have died between fork() and prctl(); the signal is
+                # only armed for FUTURE deaths, so that window would orphan us anyway.
+                if os.getppid() != ppid_before:
+                    os._exit(1)
+            except Exception:
                 pass
         try:
             resource.setrlimit(resource.RLIMIT_CORE, (0, 0))
@@ -118,6 +161,51 @@ class SessionError(Exception):
     pass
 
 
+def live_orphan_boards(base_dir: Optional[Path] = None,
+                       owned: Optional[set[str]] = None) -> list[Path]:
+    """Work dirs under base_dir whose QEMU is STILL ALIVE but which nobody owns.
+
+    ⭐ AN ORPHANED PROCESS ON A SHARED BUS IS NOT A LEAK. IT IS A LIAR THAT OUTLIVED THE
+    RUN THAT CREATED IT — and on a multicast segment its testimony is indistinguishable
+    from a peer's.
+
+    This is not hypothetical. A killed lab runner orphaned its QEMU children; the mcast
+    group is allocated from an empty per-coordinator set, so the next run landed on the
+    SAME WIRE (a guarantee, not a race). The result was a 4-node lab quietly sharing a
+    segment with a ghost of the previous run still speaking the OLD protocol. Every node
+    rejected every other node, and the scorer faithfully reported that two peer sessions
+    had shipped broken firmware — hours after they had fixed exactly those bugs.
+
+    A false red is not the safe kind of wrong: it spends someone else's attention on a
+    phantom, and it teaches them to distrust the one signal that was telling the truth.
+
+    Liveness is decided by CONNECTING to the QMP socket — not by scraping `ps`, which
+    would also match the peer emulator sessions' own QEMUs and is a pattern match, not
+    an identity. A socket that accepts a connection has a process behind it.
+    """
+    base = base_dir or DEFAULT_BASE_DIR
+    if not base.is_dir():
+        return []
+    owned = owned or set()
+    out: list[Path] = []
+    for d in sorted(base.iterdir()):
+        if not d.is_dir() or d.name in owned:
+            continue
+        sock = d / "qmp.sock"
+        if not sock.exists():
+            continue
+        s = socket.socket(socket.AF_UNIX, socket.SOCK_STREAM)
+        s.settimeout(0.5)
+        try:
+            s.connect(str(sock))
+            out.append(d)          # someone answered: a board is alive in there
+        except OSError:
+            pass                   # stale socket, no process behind it
+        finally:
+            s.close()
+    return out
+
+
 class Session:
     """One emulated board instance."""
 
@@ -141,7 +229,11 @@ class Session:
         append_extra: Optional[str] = None,
         dtb_override: Optional[str] = None,
         qemu_binary: Optional[str] = None,
+        reap_with_parent: bool = True,
     ) -> None:
+        # A board dies with the session that owns it (PR_SET_PDEATHSIG). False = the
+        # deliberate detach (`holobench launch --keep`), whose promise is the opposite.
+        self.reap_with_parent = reap_with_parent
         self.profile = profile
         # Boot with the attachable display panel (display.attach_dtb) so the DPU
         # scans out. Carried across reinstall/relaunch so the LCD stays attached.
@@ -294,7 +386,7 @@ class Session:
         try:
             self._proc = await asyncio.create_subprocess_exec(
                 *self.argv, stdout=log, stderr=asyncio.subprocess.STDOUT,
-                preexec_fn=_make_qemu_preexec(procs),
+                preexec_fn=_make_qemu_preexec(procs, self.reap_with_parent),
             )
         except FileNotFoundError as exc:
             self.state = SessionState.FAILED

@@ -44,12 +44,35 @@
 #   ⭐ A COMMENT ABOUT A HASH IS A HASH NOBODY CHECKS. The pin below is the same claim, made to
 #     the LAUNCHER instead of the reader — and a mismatch REFUSES TO LAUNCH.
 #
-# Current pin = rt1180emulator HEAD (clean worktree, verified with `git show HEAD:<path>`).
-# Verified by its own banner, not its filename:
-#   "ENET-LAB3 up: rt1180 ethertype 0x88b6, need 0x88b5 + 0x88b7"
-# Note that banner is `up:` LOWERCASE — it is NOT the `ENET-LAB3 UP:` contract line imx91
-# prints. There is no agreed declaration format yet; the scorer treats this node's contract as
-# UNDECLARED rather than inferring it. (See tools/run-enet-lab3.py §2.)
+# Current pin = the COMMITTED blob at rt1180emulator 5b38f62852, staged (never their worktree).
+#
+# ⭐ AND THIS NODE IS NOW FIXED ON ALL THREE COUNTS THE 4-NODE LAB FOUND (2026-07-14):
+#   1. THE MAGIC. It spoke `"LB3!"` where mcx and 91 both speak 0xB5B6B7C0 at [14..17], so it
+#      rejected EVERY peer and every peer rejected it. Their own diagnosis of why nothing they
+#      owned could catch it is the sharpest thing in this repo's history:
+#        ⭐ "A REHEARSAL WHOSE OTHER ACTORS ARE COPIES OF YOU CANNOT DISCOVER THAT YOU DISAGREE
+#          WITH ANYONE. IT CAN ONLY DISCOVER THAT YOU DISAGREE WITH YOURSELF."
+#      Their self-check built three stand-ins from the same patch. All three spoke "LB3!". All
+#      three agreed. Green for weeks, on a wire the node only APPEARED to be sharing.
+#   2. IPv6. Its detector cried CORRUPT at Linux NDP frames. It now judges only the ethertypes
+#      it contracted to observe; imx91's 0x88B8 is a fleet node but not ITS peer, and is
+#      therefore none of its business.
+#   3. SELF-ARMING. It enforced the body unconditionally and deadlocked to zero. It now degrades
+#      to PRESENCE for a peer that has never emitted the body, and only condemns one that has
+#      PROVEN it can — so its CORRUPT is trustworthy and its scorer entry is enforceable.
+#
+# AND IT NOW DECLARES ITS CONTRACT in the ratified grammar (the `up:` lowercase banner is gone):
+#   ENET-LAB3 UP: ethertype=0x88B6 peers=2 body=emit enforce=self-arming if=netc0 mac=...
+# so the emit-status board is DERIVED from the wire and nobody maintains one.
+#
+# ⚠️  AND THEY CORRECTED AN INSTRUMENT OF MINE, WHICH IS THE PART TO REMEMBER. To prove the
+# magic mismatch I grepped their ELF for 0xB5B6B7C0 in both endiannesses and found nothing.
+# THAT CHECK CANNOT WORK: the compiler emits the constant as four byte-immediates
+# (`movs r3,#0xB5` ...), so the word never appears in the binary AT ALL — A CORRECT NODE WOULD
+# ALSO FAIL THAT GREP. My conclusion was right by luck; the instrument would have lied to me in
+# the other direction the moment they fixed it.
+#   ⭐ A FINDING READ FROM THE SUBJECT SURVIVES A BUG IN THE OBSERVER. ONE READ FROM THE
+#     OBSERVER DOES NOT. The magic must be asserted OFF THE WIRE, never out of the binary.
 
 id:           imxrt1180-evk-netc
 display_name: "NXP i.MX RT1180 EVK (NETC Ethernet node, 0x88B6)"
@@ -69,12 +92,12 @@ qemu:
   # PIN THE INVOCATION, not just the binary (tools/argv-pin.py). A RUNNER IS PART OF THE
   # ARTIFACT: every artifact hash can still match while a flag appears, vanishes or moves,
   # and the run goes green about a command nobody chose. A mismatch REFUSES TO LAUNCH.
-  argv_pin: "fa1ddfb634bdde8aaa3f309758bb7b01"
+  argv_pin: "15c951dd824d64894862c2ca4ceb7b09"
 
 boot:
   mode: firmware-elf
   artifacts:
-    firmware: /home/kyle/Documents/GitHub/rt1180emulator/tests/imxrt1180-netc-lab3/netc-lab3-0x88B6.elf
+    firmware: /home/kyle/holobench-images/enet-lab3/netc-lab3-0x88B6.elf
     kernel:   null
     dtb:      null
     initrd:   null
@@ -87,7 +110,7 @@ boot:
   # these; it consumes them from repos it does not own. It cannot obey the fleet's
   # "never test a binary you did not just build" — it can only refuse to be SURPRISED.
   pin:
-    firmware: "8c3e02e36ea09d230cfa3c0e90a547bd"
+    firmware: "b08372f9542612001355feedfec0dad5"
 
 serial:
   - { name: "LPUART1 console (ENET-LAB3 output lands here)", chardev: console0, role: mcu-console, default: true }

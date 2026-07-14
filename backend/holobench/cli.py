@@ -87,7 +87,8 @@ async def _launch(args: argparse.Namespace) -> int:
         return 1
 
     asset_dir = _resolve_assets(profile.id, args.assets)
-    session = Session(profile, asset_dir=asset_dir)
+    # --keep promises the board OUTLIVES the CLI, so it must NOT be reaped with the parent.
+    session = Session(profile, asset_dir=asset_dir, reap_with_parent=not args.keep)
     if asset_dir:
         print(f"assets:    {asset_dir}")
     print(f"launching: {profile.display_name}  (session {session.id})")

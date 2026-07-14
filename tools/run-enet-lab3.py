@@ -51,7 +51,10 @@ sys.path.insert(0, str(Path(__file__).resolve().parent.parent / "backend"))
 from holobench.labs.coordinator import LabCoordinator          # noqa: E402
 from holobench.labs.loader import load_lab                      # noqa: E402
 from holobench.profiles.loader import load_profile              # noqa: E402
-from holobench.session.manager import SessionManager            # noqa: E402
+from holobench.session.manager import (                          # noqa: E402
+    SessionManager,
+    live_orphan_boards,
+)
 
 LAB_ID = "mcx-rt1180-95-l2"
 
@@ -207,6 +210,31 @@ def _peer_et(line: str) -> str:
 
 
 async def main() -> int:
+    # ── PREFLIGHT: REFUSE A WIRE THAT IS NOT EMPTY ───────────────────────────────────────
+    # ⭐ AN ORPHANED PROCESS ON A SHARED BUS IS NOT A LEAK. IT IS A LIAR THAT OUTLIVED THE
+    #   RUN THAT CREATED IT — and its testimony is indistinguishable from a peer's.
+    #
+    # This check exists because the alternative already happened. A killed runner orphaned
+    # its QEMU children; the mcast group comes from an empty per-coordinator set, so the
+    # next run landed on the SAME WIRE (a guarantee, not a race). That run was a 4-node lab
+    # sharing a segment with a GHOST of the previous one, still speaking the OLD protocol.
+    # Every node rejected every other node, and this scorer faithfully reported that
+    # rt1180's self-ethertype field was broken and imx95 was still emitting ASCII — about
+    # two sessions that had fixed exactly those bugs hours earlier.
+    #
+    # A false red is the expensive kind of wrong. It spends someone else's night on a
+    # phantom and teaches them to distrust the one signal that was telling the truth.
+    orphans = live_orphan_boards()
+    if orphans:
+        print("REFUSING TO RUN: a board from an earlier run is STILL ALIVE and it is on "
+              "this lab's multicast segment.\n", file=sys.stderr)
+        for d in orphans:
+            print(f"    {d}", file=sys.stderr)
+        print("\nIts frames are indistinguishable from a real peer's, so this run would "
+              "score a segment\nit is not actually testing — and would blame the nodes. "
+              "Reap them, then re-run.", file=sys.stderr)
+        return 3
+
     lab = load_lab(LAB_ID)
     mgr = SessionManager()
     coord = LabCoordinator(mgr)
