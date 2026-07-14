@@ -37,8 +37,33 @@ from holobench.labs.loader import load_lab                      # noqa: E402
 from holobench.session.manager import SessionManager            # noqa: E402
 
 LAB_ID = "mcx-rt1180-95-l2"
+
+# THE FLEET CONTRACT — a mandated PREFIX, and nothing more. Four nodes emit THREE different
+# formats and share this prefix; for two days they shared it BY LUCK, because nobody had ever
+# agreed on it:
+#     mcx      "ENET-LAB3 PASS: saw BOTH peers on the segment"
+#     rt1180   "ENET-LAB3 PASS #7: saw BOTH peers on the segment"     <- the '#' is rt1180's ALONE
+#     imx95    "ENET-LAB3 PASS: saw BOTH peers on the segment (...)"
+#     imx91    "ENET-LAB3 PASS: t=12.030s peers=2/2 beat=217"         <- a different tail entirely
+#
+# rt1180 found that its own README documented a token its binary never printed — correct — and
+# then prescribed `ENET-LAB3 PASS #` as the fleet token, which matches ONE of the four. Adopting
+# it would have scored mcx, imx95 and imx91 red on a segment where all three were beating. It
+# generalised from its ARTIFACT to the CONTRACT: the same move its README made when it drifted
+# from its ELF.
+#
+# ⭐ A TOKEN THAT HAPPENS TO MATCH IS NOT A TOKEN YOU AGREED ON — and the difference is invisible
+#   right up until someone "fixes" it. Match the agreed prefix. Never a banner.
 PASS_TOKEN = "ENET-LAB3 PASS"
 CORRUPT_TOKEN = "ENET-LAB3 CORRUPT"
+
+# PHASE GATE. A receiver that enforces a field its senders do not yet emit CONDEMNS THE HONEST —
+# and here the false positive is byte-identical to the true positive ("magic=0" is exactly what a
+# frame DMA'd to guest address 0 looks like: a buffer that was never written). So CORRUPT is only
+# a HARD FAIL once every node emits the body. Until then it is reported and NOT scored, because a
+# red we cannot trust is worse than no red: it gets the check deleted by the people it protects.
+#   EMIT status 2026-07-13: mcx ✅ · rt1180 ⏳ · imx95 ⏳ · imx91 ⏳
+ENFORCE_CORRUPT = False
 POLL_S = 0.25
 MARGIN_S = 90
 # A beat is "live" if we have seen one within this long. Generous: the bare-metal nodes beat
@@ -158,8 +183,16 @@ async def main() -> int:
     if total_corrupt:
         for node, lines in beats.corrupt.items():
             for ln in lines[:5]:
-                print(f"  ❌ {node}: {ln}")
-        fails.append(f"{total_corrupt} corrupt frame report(s)")
+                print(f"  {'❌' if ENFORCE_CORRUPT else '⚠️ '} {node}: {ln}")
+        if ENFORCE_CORRUPT:
+            fails.append(f"{total_corrupt} corrupt frame report(s)")
+        else:
+            print("  ⚠️  REPORTED, NOT SCORED — phase 1: not every node emits the body yet, so a")
+            print("      CORRUPT here may just be an honest peer that has not upgraded. And that")
+            print("      false positive is BYTE-IDENTICAL to the true one (magic=0 is exactly what")
+            print("      a frame DMA'd to guest address 0 looks like). A red we cannot trust is")
+            print("      worse than no red: it gets the check deleted by the people it protects.")
+            inconclusive.append(f"{total_corrupt} CORRUPT report(s) — unscoreable until all nodes emit")
     else:
         print("  (none reported)")
         print("  ⚠️  BUT: the nodes' PASS keys on ETHERTYPE. A frame whose BODY is garbage has")

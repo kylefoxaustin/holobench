@@ -336,6 +336,71 @@ are logged, not failed — **corruption is the assertion; loss is a statistic.**
 > and kept the DMA count that came from inside the model. That is the argument for putting
 > the assertion in the firmware rather than in the runner.)*
 
+### The lab contract — the tokens, and the order they may be turned on
+
+**A PASS token is an INTERFACE, and until 2026-07-13 this fleet did not have one.** Four
+nodes, three formats, sharing a prefix *by luck*:
+
+```
+mcx      ENET-LAB3 PASS: saw BOTH peers on the segment
+rt1180   ENET-LAB3 PASS #7: saw BOTH peers on the segment          <- the '#' is rt1180's alone
+imx95    ENET-LAB3 PASS: saw BOTH peers on the segment (0x88B5,0x88B6)
+imx91    ENET-LAB3 PASS: t=12.030s peers=2/2 beat=217              <- a different tail entirely
+```
+
+rt1180 (rightly) found that its own README documented a token its binary never printed, and
+(wrongly) prescribed `ENET-LAB3 PASS #` as the fix. **That token matches exactly one of the
+four nodes; adopting it would have scored the other three red on a segment where they were
+all beating.** It generalised from its artifact to the contract — the same move its README
+made when it drifted from its ELF.
+
+**The contract, therefore:**
+
+| | |
+|---|---|
+| **mandatory, verbatim** | `ENET-LAB3 PASS` — everything after it is the node's own business |
+| **mandatory on a bad frame** | `ENET-LAB3 CORRUPT` |
+| **forbidden** | either string in a *banner* — rt1180's monitor matched its own `need 0x88b7` banner and shouted PASS twelve times at an empty wire. *The observer put itself in the set it was observing.* |
+
+> ⭐ **A token that happens to match is not a token you agreed on** — and the difference is
+> invisible right up until someone "fixes" it.
+
+### The checkable body, and the flag day
+
+The nodes now carry a verifiable payload (mcxn947 shipped it first, mutation-verified):
+
+```
+[12..13] ethertype        the routing key — all it ever was
+[14..17] magic 0xB5B6B7C0 "a beacon was written here at all"
+[18..19] the sender's OWN ethertype, REPEATED IN THE BODY
+[20..23] per-sender monotonic sequence
+[24..63] 0x5A — the same known byte the SPI and I2C labs already assert on
+```
+
+The self-referential ethertype is the sharpest field: **a frame that disagrees with *itself*
+cannot be explained by anything benign.** A drop is a gap; a delay is a gap; a reorder is a
+gap. But a header saying `0x88B6` over a body saying `0x88B5` means *the header came from one
+frame and the body from another* — a stale buffer, a write-back that never landed, a ring
+index that wrapped. Magic catches "nothing was written"; self-consistency catches "**the
+wrong thing was written**," which is the harder and more dangerous case.
+
+**Corruption is the assertion; loss is a statistic.** Sequence *gaps* are logged, never failed.
+
+**⚠️ ROLLOUT ORDER IS PART OF THE SPEC.** A receiver that enforces a field its senders do not
+yet emit **will condemn the honest** — and here that is worse than an ordinary false alarm:
+
+> ⭐ **The false positive of this detector is INDISTINGUISHABLE from its true positive.**
+> `CORRUPT, magic=0` is exactly what a frame DMA'd to guest address 0 looks like: *a buffer
+> that was never written.* Someone hitting it cannot tell "my peers haven't upgraded" from
+> "the RX ring is writing to address zero" — so they go hunting a QEMU bug that isn't there,
+> or, far worse, **conclude the check is broken and delete it.** That is how a good assertion
+> gets removed by the very people it was protecting.
+
+So: **Phase 1 — every sender EMITS, nobody ENFORCES** (emitting is harmless to a peer that
+ignores the body, so Phase 1 cannot break anything; enforcement ships gated, default off).
+**Phase 2 — once all four emit, every receiver enforces on the same run**, and the runner
+treats `ENET-LAB3 CORRUPT` as a hard fail.
+
 rt1180 documented the same hole from its own side rather than assuming it away: *"what
 the surviving peers do when a beacon they were counting on stops is completely
 unexercised."* Every node still on the segment had already found its peers and stopped
