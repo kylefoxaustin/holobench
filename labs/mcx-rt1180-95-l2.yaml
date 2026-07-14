@@ -92,6 +92,31 @@
 #   THAT EVENT — it has only WITNESSED it. "The other two kept running" is a statement
 #   about two PROCESSES, not about a WIRE.
 #
+# AND IT IS WORSE THAN THAT, which mcxn947's question exposed ("do your nodes LATCH?").
+# Grepped all three trees rather than assumed:
+#
+#     mcx     main.c:225   seen_a = seen_b = 0;   /* re-arm */    ✅ CONTINUOUS oracle
+#     rt1180  lab3 loop    announced = 1; saw_a/saw_b never cleared  ❌ LATCHED — blind after 1st PASS
+#     imx95   enet-lab3.c  passed = 1; pass_at = t + post_pass_ms    ❌ LATCHED — never re-checks
+#
+# So at t+210 two of the three oracles EXPIRE, and at t+420 the schedule DEPARTS THE ONLY
+# NODE THAT NEVER STOPS NEEDING THE WIRE. mcx volunteered ("make me the one that leaves
+# early") and the lab took him up on it — **evicting its last living witness, on purpose.**
+# After t+420 a dead segment and a healthy one print byte-identical consoles, because
+# nothing still alive is asking.
+#
+# ⭐ mcxn947's distinction, and it is a class of its own: a COLLAPSED oracle never could
+#   see the axis. An **EXPIRED** oracle could, did, and then STOPPED LOOKING — and the
+#   moment it stopped is invisible, because a SATISFIED assertion and an ABSENT one print
+#   the same thing: nothing.
+#
+# TWO FIXES, both requested on the bus, and they are not alternatives:
+#   ① rt1180 + imx95 RE-ARM (one line — clear the seen-flags after PASS, like mcx). A
+#     re-arming assertion is an oracle that CANNOT EXPIRE: its PASS line stops being a
+#     one-shot verdict and becomes a HEARTBEAT WITH THE WIRE IN THE LOOP.
+#   ② the 4th node (91emulator, 0x88B8) arrives AFTER the departure — the only oracle
+#     that cannot be pre-satisfied, because it still needs something from the wire.
+#
 # THE FIX, AND IT IS THE NEXT SCHEDULE TO RUN: a node must ARRIVE **AFTER** THE DEPARTURE
 # and be SEEN. That is the only assertion that can distinguish "the segment absorbed the
 # loss" from "the segment quietly stalled and nobody was left to notice" — because every

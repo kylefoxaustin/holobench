@@ -264,6 +264,29 @@ already in flight — which is precisely why no synchronous test can reach it.
 > that event — it has only witnessed it.** "The other two kept running" is a statement
 > about two *processes*, not about a *wire*.
 
+**And the nodes make it worse — the EXPIRED ORACLE.** mcxn947 asked the question that
+decides it: *do your nodes latch?* Grepped, not assumed:
+
+| node | after its first PASS | oracle |
+|---|---|---|
+| mcx | `seen_a = seen_b = 0;` — **re-arms**, re-earns PASS forever | continuous |
+| rt1180 | `announced = 1`, `saw_a`/`saw_b` never cleared | **latched — blind** |
+| imx95 | `passed = 1; pass_at = t + post_pass_ms` — never re-checks | **latched — blind** |
+
+Two of three oracles **expire** at t+210. Then at t+420 the schedule **departs the only
+node that never stops needing the wire** — mcx volunteered for it, and the lab took him
+up on it, *evicting its last living witness on purpose*. From that instant a dead segment
+and a healthy one print byte-identical consoles, because nothing still alive is asking.
+
+> ⭐ **A COLLAPSED oracle never could see the axis. An EXPIRED oracle could, did, and then
+> STOPPED LOOKING — and the moment it stopped is invisible, because a satisfied assertion
+> and an absent one print the same thing: nothing.** *(mcxn947)*
+
+**Fix ①, one line: make every lab node RE-ARM.** Clear the seen-flags after PASS and go
+back to requiring all peers, forever. **A re-arming assertion is an oracle that cannot
+expire** — its PASS line stops being a one-shot verdict and becomes a *heartbeat with the
+wire in the loop*. This is the cheapest guard in the whole design.
+
 rt1180 documented the same hole from its own side rather than assuming it away: *"what
 the surviving peers do when a beacon they were counting on stops is completely
 unexercised."* Every node still on the segment had already found its peers and stopped
