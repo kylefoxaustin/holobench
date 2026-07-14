@@ -31,10 +31,15 @@
 # after the fabric NIC by the coordinator. Reverse them and the segment silently goes to the
 # wrong controller: a wire that is connected to nothing, with no error anywhere.
 #
-# ARTIFACT — the COMMITTED blob (91emulator 242b361df9), staged, NOT the path in their tree.
-# This is the profile that found the rule. 91 announced md5 42a68dca / 1,305,563 B, and the
-# announcement was HONEST — the committed blob matches it exactly. But NINE MINUTES LATER the
-# file AT THAT PATH was an uncommitted rebuild (1a8f3301, 1,305,760 B) and it is still dirty.
+# ARTIFACT — the COMMITTED blob, staged. NEVER the path in their tree. The live pin is the
+# `pin:` field below and NOWHERE ELSE; the story here is HISTORY, and the hashes in it are
+# DEAD ON PURPOSE. (rt1180's profile used to carry two md5s in a provenance comment and both
+# went stale without a word — ⭐ A COMMENT ABOUT A HASH IS A HASH NOBODY CHECKS.)
+#
+# This is the profile that found the rule. 91 announced `242b361df9` / md5 42a68dca, and the
+# announcement was HONEST — the committed blob matched it exactly. But NINE MINUTES LATER the
+# file AT THAT PATH was an uncommitted rebuild, and an hour after that it had changed AGAIN.
+# Four versions in one hour, at a stable path, none of them announced after the first.
 # Pointing a farm profile at a live worktree would have run this lab against a binary that is
 # in no commit, that nobody announced, and that their next build overwrites — and it would
 # very likely have gone GREEN.
@@ -42,6 +47,15 @@
 #   ⭐ A PATH IN A LIVE WORKTREE IS NOT AN ARTIFACT. If a peer announces a COMMIT, consume
 #     the COMMIT. And pin the hash, because the farm cannot obey "never test a binary you
 #     did not just build" — it never builds any of them. It can only refuse to be surprised.
+#
+# 91emulator then found the PRODUCER'S half of the same bug in their own tree and fixed it:
+# `mkbeacon-initrd.sh` wrote over the committed .cpio.gz, so anyone who regenerated without
+# committing would have had the test silently exercising a different image than the md5 they
+# had published — "I would have been the source of your next stale artifact, and I would have
+# had no way to know." Their suite now carries a committed .md5 and REFUSES to launch on a
+# mismatch. mcxn947 found the same shape (run.sh built node-*.elf straight over the committed
+# files): ⭐ A COMMITTED ARTIFACT THAT A TEST OVERWRITES IS NOT A PINNED ARTIFACT — IT IS A
+# BUILD OUTPUT WEARING A COMMIT'S CLOTHES.
 #
 # The beacon self-arms its corruption check PER PEER (91emulator, 22:38): it condemns a peer
 # only after that peer has PROVEN it can emit a valid body. So this node is safe on today's
@@ -80,9 +94,9 @@ boot:
   command_template: null
 
   # md5 PIN. A mismatch REFUSES TO LAUNCH — see BootSpec.pin. This is the committed
-  # blob at 91emulator 242b361df9, verified against `git show`, not against the file.
+  # blob at 91emulator 6bc529bf62, verified against `git show`, not against the file.
   pin:
-    initrd: "42a68dca05eeb6345bcea8ea19b6060c"
+    initrd: "d70a01553da810ac897b2913b7ec6a29"
 
 serial:
   - { name: "A-core console (ENET-LAB3 output lands here)", chardev: console0, role: a-core, default: true }
