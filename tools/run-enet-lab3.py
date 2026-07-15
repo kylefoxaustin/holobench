@@ -352,7 +352,9 @@ async def main() -> int:
                     "arrival": running.node_arrivals.get(n.name),
                     "departure": running.node_departures.get(n.name),
                     "rejoin": running.node_rejoins.get(n.name),
+                    "wall_t0": wall_t0,   # so gbeats (epoch) can be mapped to lab-relative later
                     "beats": [round(b, 2) for b in beats.beats.get(n.name, [])],
+                    "gbeats": [round(b, 3) for b in beats.gbeats.get(n.name, [])],
                     "corrupt_sample": beats.corrupt.get(n.name, [])[:20],
                 }) + "\n")
         print(f"\n(beat timestamps persisted to {dump} — a completed run stays diagnosable)")
