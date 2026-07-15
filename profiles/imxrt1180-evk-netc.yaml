@@ -110,7 +110,7 @@ boot:
   # these; it consumes them from repos it does not own. It cannot obey the fleet's
   # "never test a binary you did not just build" — it can only refuse to be SURPRISED.
   pin:
-    firmware: "d1cf250723331204be09125f9293b9cb"
+    firmware: "2976d379ad64e513e6ab8191decc1a1f"
 
 serial:
   - { name: "LPUART1 console (ENET-LAB3 output lands here)", chardev: console0, role: mcu-console, default: true }

@@ -300,6 +300,30 @@ async def main() -> int:
         line += f"   [{len(beats.beats.get(n.name, []))} heartbeats]"
         print(line)
 
+    # ── PERSIST THE BEAT TIMESTAMPS, so a completed run stays DIAGNOSABLE ────────────────
+    # ⭐ THE EVIDENCE MUST OUTLIVE THE RUN. On the v2-cutover run the survivor analysis was
+    # anomalous — §0 (dense 0.4s beating) disagreed with §4 (no beat before the departure) —
+    # and I could not tell a real finding from a scorer bug, because coord.stop() reaps the
+    # console logs and the beat timestamps vanished WITH the verdict. A scorer that keeps only
+    # its conclusion and not its evidence cannot be audited, and an unauditable RED is worth as
+    # little as an unauditable GREEN. So dump every beat, per node, BEFORE we tear anything down.
+    dump = Path(__file__).resolve().parent.parent / "scratchpad-beats.jsonl"
+    try:
+        import json
+        with dump.open("w") as fh:
+            for n in lab.nodes:
+                fh.write(json.dumps({
+                    "node": n.name,
+                    "arrival": running.node_arrivals.get(n.name),
+                    "departure": running.node_departures.get(n.name),
+                    "rejoin": running.node_rejoins.get(n.name),
+                    "beats": [round(b, 2) for b in beats.beats.get(n.name, [])],
+                    "corrupt_sample": beats.corrupt.get(n.name, [])[:20],
+                }) + "\n")
+        print(f"\n(beat timestamps persisted to {dump} — a completed run stays diagnosable)")
+    except Exception as exc:
+        print(f"\n(could not persist beats: {exc})")
+
     fails: list[str] = []
     inconclusive: list[str] = []
 
