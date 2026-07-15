@@ -584,9 +584,37 @@ async def main() -> int:
                 continue
             g = beats.gap_around(s, d_at, r_at)
             if g is None:
-                print(f"  ❌ {s:7} was beating up to the departure and NEVER RESUMED "
-                      f"(last beat {_fmt(max(bs))}) — the wire did not recover for it")
-                fails.append(f"{s}: heartbeat never resumed after the rejoin")
+                # gap_around needs a beat BEFORE d_at and a beat AFTER r_at. Which side is
+                # empty changes the meaning completely, and the first cut of this branch got
+                # the polarity WRONG — it called BOTH cases "never resumed" and failed a
+                # healthy node. (The 6th observer bug this lab found, and it was in the scorer.)
+                has_before = any(b <= d_at for b in bs)
+                has_after = any(b >= r_at for b in bs)
+                if has_before and not has_after:
+                    # Beat up to the departure, then STOPPED and never came back. The real fail.
+                    print(f"  ❌ {s:7} was beating up to the departure and NEVER RESUMED "
+                          f"(last beat {_fmt(max(bs))}) — the wire did not recover for it")
+                    fails.append(f"{s}: heartbeat never resumed after the rejoin")
+                    continue
+                # No beat BEFORE the departure, but plenty AFTER: this node came up (or was
+                # first observed) DURING/AFTER the window and then beat continuously. It did
+                # not stop — it never had a pre-departure baseline to bracket against.
+                #
+                # ⭐ THE GAP METHOD ONLY WORKS ON A SURVIVOR THAT GOES SILENT. A node that
+                #   beacons straight through a peer's departure produces no gap to bracket, and
+                #   the arrival-stamped timestamps (we stamp on READ, not on guest-emit) cluster
+                #   its first-seen beats at the moment its console was first drained — which on
+                #   the unanimous run was t+450, every survivor identical to 0.1s, i.e. an
+                #   instrument artifact, not a boot time. So the gap method is UNSCOREABLE for
+                #   this node — INCONCLUSIVE, never FAIL — and the departure verdict rests on the
+                #   sound oracle below: the post-departure JOINER, plus §6's no-unscheduled-gap.
+                within = [b for b in bs if d_at <= b <= r_at]
+                note = ("beat straight through the window" if within
+                        else "was first observed after the departure")
+                print(f"  ⚠️  {s:7} no pre-departure baseline ({note}); the heartbeat-GAP method")
+                print(f"           cannot see a departure on a node that never goes silent.")
+                print(f"           INCONCLUSIVE by this method — the joiner (§5) is the oracle.")
+                inconclusive.append(f"{s}: beacons continuously — gap method cannot score its departure")
                 continue
             last_before, first_after = g
             gap = first_after - last_before
