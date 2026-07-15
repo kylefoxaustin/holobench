@@ -42,6 +42,7 @@ ANYWHERE ELSE is a wire fault, and nobody but us is in a position to tell them a
 from __future__ import annotations
 
 import asyncio
+import re
 import statistics
 import sys
 from pathlib import Path
@@ -123,8 +124,13 @@ class Beats:
     sound here ONLY because the interval we assert on (tens of seconds) dwarfs both host
     scheduling jitter and our own 0.25s poll; a finer timing claim would need `-icount`."""
 
+    # A guest-emitted timestamp in a PASS line: "t=1784128250.910" or "t=...s". This is the
+    # ONE measurement the arrival-stamped `self.beats` cannot make — see gbeats below.
+    _T_RE = re.compile(r"\bt=([0-9]+(?:\.[0-9]+)?)s?\b")
+
     def __init__(self) -> None:
-        self.beats: dict[str, list[float]] = {}
+        self.beats: dict[str, list[float]] = {}      # ARRIVAL-stamped (when WE read the line)
+        self.gbeats: dict[str, list[float]] = {}     # GUEST-emitted epoch (when the node earned it)
         self.corrupt: dict[str, list[str]] = {}
         self.banner: dict[str, str] = {}
         self._seen: dict[str, int] = {}
@@ -141,11 +147,34 @@ class Beats:
         for ln in lines[start:]:
             if PASS_TOKEN in ln:
                 self.beats.setdefault(node, []).append(t)
+                # ⭐ IF THE NODE STAMPS ITS OWN CLOCK, KEEP THAT TOO. Our arrival stamp `t` is
+                # when we READ the line; a node emitting 90 beats/sec gets its whole early
+                # backlog read in one batch and arrival-clustered at a single instant — which
+                # is why every survivor's first arrival-beat lands identically (an artifact of
+                # our reader, not a boot time). The guest `t=` is stamped INSIDE the node at
+                # the moment the beat was earned, so a GAP in it is a real departure window.
+                m = self._T_RE.search(ln)
+                if m:
+                    self.gbeats.setdefault(node, []).append(float(m.group(1)))
             elif CORRUPT_TOKEN in ln:
                 self.corrupt.setdefault(node, []).append(ln.strip())
             elif UP_TOKEN in ln and node not in self.banner:
                 self.banner[node] = ln.strip()
         self._seen[node] = len(lines)
+
+    def gap_around_guest(self, node: str, lo: float, hi: float) -> tuple[float, float] | None:
+        """gap_around, but on the node's OWN guest-emitted timestamps (epoch seconds).
+
+        Returns None if the node emits no guest `t=` at all — the caller then falls back to
+        the arrival-stamped method and reports it as unscoreable, honestly."""
+        bs = self.gbeats.get(node) or []
+        if not bs:
+            return None
+        before = [b for b in bs if b <= lo]
+        after = [b for b in bs if b >= hi]
+        if not before or not after:
+            return None
+        return (max(before), min(after))
 
     def quiet_period(self, node: str, exclude: tuple[float, float] | None) -> float | None:
         """This node's LONGEST normal gap between beats, ignoring the departure window.
@@ -263,6 +292,12 @@ async def main() -> int:
     running = await coord.launch(lab, on_event=lambda m: print(m, flush=True))
     t0 = running.t0
     loop = asyncio.get_running_loop()
+    # The wall-clock epoch of the lab's monotonic t0, computed now (both clocks read ~now, so
+    # their difference is the elapsed since t0). This maps a lab-relative time `rel` to the
+    # epoch a GUEST would stamp for it: epoch = wall_t0 + rel. It is how the coordinator's
+    # departure/rejoin times (lab-relative) line up with the nodes' guest `t=` (epoch).
+    import time as _time
+    wall_t0 = _time.time() - (loop.time() - t0)
 
     async def watch() -> None:
         while True:
@@ -563,6 +598,33 @@ async def main() -> int:
         pass    # already recorded; scoring a non-departure is worse than not scoring
     else:
         for s in survivors:
+            # ── GUEST-CLOCK PATH: if the node stamps its own `t=`, measure the departure
+            # DIRECTLY, off its clock, in epoch space — the one thing the arrival-stamped
+            # method cannot do. 91/rt1180/imx95 added `t=` precisely to close this hole; the
+            # lab found it, the nodes filled it. (91's caveat rides with it: trust the GAP to
+            # ~beat/100ms, not a sub-100ms absolute claim without -icount — and a GAP is exactly
+            # all we assert.) A node WITHOUT `t=` falls through to the arrival-stamp path below.
+            gg = beats.gap_around_guest(s, wall_t0 + d_at, wall_t0 + r_at)
+            if gg is not None:
+                lb, fa = gg
+                gap = fa - lb
+                window = r_at - d_at
+                # went quiet within a beat of the departure, resumed within a beat of the rejoin
+                ok = (lb <= wall_t0 + d_at + BEAT_TIMEOUT_S
+                      and fa <= wall_t0 + r_at + BEAT_TIMEOUT_S
+                      and gap >= window * 0.5)
+                print(f"  {'✅' if ok else '❌'} {s:7} [guest t=] last beat before departure, "
+                      f"first after rejoin: GUEST GAP {gap:5.1f}s  (window {window:.0f}s)")
+                if ok:
+                    print(f"           → measured off {s}'s OWN clock: it went silent when "
+                          f"{dep.name} left and RESUMED when it returned. The wire absorbed the")
+                    print(f"             loss AND recovered — and this time it is not an inference.")
+                else:
+                    fails.append(f"{s}: guest-clock heartbeat gap {gap:.1f}s does not bracket "
+                                 f"the {window:.0f}s departure window")
+                continue
+            # gbeats present but no bracket, OR no gbeats at all → fall back to arrival-stamp,
+            # which is honest about being unable to score a continuous survivor.
             if s in unscoreable:
                 print(f"  ⚠️  {s:7} SKIPPED — §0 could not honestly score this node.")
                 continue
