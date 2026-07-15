@@ -101,7 +101,7 @@ boot:
   # md5 PIN. A mismatch REFUSES TO LAUNCH — see BootSpec.pin. This is the committed
   # blob at 91emulator fa74a6bb15, verified against `git show`, not against the file.
   pin:
-    initrd: "09d2236789771777597691c5ecae9409"
+    initrd: "daa7889793b3f4373a41bf02995e2eac"
 
 serial:
   - { name: "A-core console (ENET-LAB3 output lands here)", chardev: console0, role: a-core, default: true }
