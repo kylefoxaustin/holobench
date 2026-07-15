@@ -73,7 +73,7 @@ boot:
   # these; it consumes them from repos it does not own. It cannot obey the fleet's
   # "never test a binary you did not just build" — it can only refuse to be SURPRISED.
   pin:
-    initrd: "bf7e7e0b442903c225723f1d9b7548ff"
+    initrd: "a46918b6357f2c71a4850d63148532e4"
 
 serial:
   - { name: "A-core console (ENET-LAB3 output lands here)", chardev: console0, role: a-core, default: true }
