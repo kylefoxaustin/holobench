@@ -979,3 +979,35 @@ def test_the_spi_frame_is_the_one_the_MCX_IS_WAITING_FOR():
     assert 0x00 not in frame, "a NUL would truncate spilink's C-string payload mid-frame"
     assert 0xFF not in frame, "0xFF is the MCX's IDLE byte -- it would be skipped"
     assert 0xA5 not in frame[1:], "a second MARKER would resync the MCX mid-frame"
+
+
+def test_guest_clock_handles_both_epoch_and_1970_based():
+    """The scorer measures a survivor's departure off the node's OWN clock — and must handle
+    BOTH a real host Unix epoch (rt1180's semihosting SYS_TIME) AND a 1970-based one (a fresh
+    TCG Linux guest's unsynced CLOCK_REALTIME, e.g. imx95). A timestamp in the right field can
+    still be on the wrong clock; rejecting the 1970 one would drop a healthy node to unscoreable.
+    Import-by-path since the scorer lives in tools/, not the package."""
+    import importlib.util
+    from pathlib import Path
+
+    spec = importlib.util.spec_from_file_location(
+        "runlab", Path(__file__).resolve().parents[2] / "tools" / "run-enet-lab3.py")
+    m = importlib.util.module_from_spec(spec)
+    spec.loader.exec_module(m)
+
+    b = m.Beats()
+    wall_t0, arrival = 1_784_134_284.6, 0.2
+    # host-epoch node: went quiet [420,480], resumed just after
+    b.gbeats["hs"] = [wall_t0 + t for t in (410, 419, 486, 495)]
+    assert b.guest_clock_base("hs") == "host-epoch"
+    gg = b.gap_around_guest("hs", 420, 480, arrival, wall_t0)
+    assert gg and abs((gg[1] - gg[0]) - 67) < 5
+
+    # 1970-based node: clock starts ~0 at its boot (~arrival), same real gap
+    b.gbeats["bt"] = [t for t in (410, 419, 486, 495)]   # tiny values = boot-relative
+    assert b.guest_clock_base("bt") == "boot-relative"
+    gg = b.gap_around_guest("bt", 420, 480, arrival, wall_t0)
+    assert gg and abs((gg[1] - gg[0]) - 67) < 5   # anchored to arrival, same bracket
+
+    # no guest t= at all -> None (falls back to the arrival-stamp path, honestly)
+    assert b.gap_around_guest("none", 420, 480, arrival, wall_t0) is None

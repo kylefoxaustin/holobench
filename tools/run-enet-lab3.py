@@ -162,12 +162,43 @@ class Beats:
                 self.banner[node] = ln.strip()
         self._seen[node] = len(lines)
 
-    def gap_around_guest(self, node: str, lo: float, hi: float) -> tuple[float, float] | None:
-        """gap_around, but on the node's OWN guest-emitted timestamps (epoch seconds).
+    def guest_clock_base(self, node: str) -> str | None:
+        """Which clock does this node's `t=` speak? None if it emits no guest timestamp.
 
-        Returns None if the node emits no guest `t=` at all — the caller then falls back to
-        the arrival-stamped method and reports it as unscoreable, honestly."""
+        ⭐ A TIMESTAMP IN THE RIGHT FIELD CAN STILL BE ON THE WRONG CLOCK. Two of the four
+        nodes stamp a real host Unix epoch (semihosting SYS_TIME reads the host; imx91's
+        gettimeofday under a synced guest). But a fresh TCG Linux guest with no RTC battery
+        and no NTP has CLOCK_REALTIME anchored at 1970 — so its "absolute epoch" is really
+        elapsed-since-boot wearing an epoch's clothes (imx95: first t= = 213.3 = 1970-01-01
+        00:03:33). Measured, with the bytes, not assumed. We handle BOTH rather than reject
+        the 1970 clock — a boot-relative monotonic clock is still a real duration, and a GAP
+        in it is still a departure window."""
         bs = self.gbeats.get(node) or []
+        if not bs:
+            return None
+        # A plausible recent Unix epoch is ~1.7e9 (2023+). Anything near zero is boot-relative.
+        return "host-epoch" if bs[0] > 1e9 else "boot-relative"
+
+    def guest_lab_beats(self, node: str, arrival: float, wall_t0: float) -> list[float]:
+        """The node's guest `t=` beats, mapped to LAB-RELATIVE seconds regardless of clock base.
+
+        host-epoch   -> subtract wall_t0 (the host epoch of lab t0).
+        boot-relative-> add the node's arrival (its monotonic clock started at ~0 at its boot,
+                        which is ~when the coordinator launched it). A few seconds of bootloader
+                        skew is well inside the beat resolution 91's caveat already bounds us to."""
+        base = self.guest_clock_base(node)
+        bs = self.gbeats.get(node) or []
+        if base == "host-epoch":
+            return sorted(b - wall_t0 for b in bs)
+        if base == "boot-relative":
+            return sorted(b + (arrival or 0.0) for b in bs)
+        return []
+
+    def gap_around_guest(self, node: str, lo: float, hi: float,
+                         arrival: float, wall_t0: float) -> tuple[float, float] | None:
+        """gap_around on the node's OWN clock, mapped to LAB-RELATIVE time (lo/hi are the
+        departure/rejoin in lab-relative seconds). None if it emits no guest `t=`."""
+        bs = self.guest_lab_beats(node, arrival, wall_t0)
         if not bs:
             return None
         before = [b for b in bs if b <= lo]
@@ -606,24 +637,36 @@ async def main() -> int:
             # lab found it, the nodes filled it. (91's caveat rides with it: trust the GAP to
             # ~beat/100ms, not a sub-100ms absolute claim without -icount — and a GAP is exactly
             # all we assert.) A node WITHOUT `t=` falls through to the arrival-stamp path below.
-            gg = beats.gap_around_guest(s, wall_t0 + d_at, wall_t0 + r_at)
+            s_arrival = running.node_arrivals.get(s) or 0.0
+            gg = beats.gap_around_guest(s, d_at, r_at, s_arrival, wall_t0)
             if gg is not None:
                 lb, fa = gg
                 gap = fa - lb
                 window = r_at - d_at
-                # went quiet within a beat of the departure, resumed within a beat of the rejoin
-                ok = (lb <= wall_t0 + d_at + BEAT_TIMEOUT_S
-                      and fa <= wall_t0 + r_at + BEAT_TIMEOUT_S
-                      and gap >= window * 0.5)
-                print(f"  {'✅' if ok else '❌'} {s:7} [guest t=] last beat before departure, "
-                      f"first after rejoin: GUEST GAP {gap:5.1f}s  (window {window:.0f}s)")
-                if ok:
+                clock = beats.guest_clock_base(s)
+                resume_lag = fa - r_at    # how long AFTER the rejoin it took to beat again
+                # It SURVIVED if it went quiet near the departure and resumed after the rejoin.
+                # The resume-lag is reported separately: a node that recovers slowly still
+                # recovered — that is a latency finding for its owner, not a wire failure.
+                went_quiet = lb <= d_at + BEAT_TIMEOUT_S
+                came_back = fa >= r_at - 1.0                 # resumed at or after the rejoin
+                survived = went_quiet and came_back and gap >= window * 0.5
+                print(f"  {'✅' if survived else '❌'} {s:7} [guest {clock}] silent t+{lb:.1f} → "
+                      f"resumed t+{fa:.1f}  GAP {gap:.1f}s  (window {window:.0f}s, "
+                      f"resume-lag {resume_lag:+.1f}s)")
+                if survived:
                     print(f"           → measured off {s}'s OWN clock: it went silent when "
-                          f"{dep.name} left and RESUMED when it returned. The wire absorbed the")
-                    print(f"             loss AND recovered — and this time it is not an inference.")
+                          f"{dep.name} left and RESUMED after it returned. Not an inference.")
+                    if resume_lag > BEAT_TIMEOUT_S:
+                        print(f"           ⚠️  but SLOW to recover: resumed {resume_lag:.0f}s after "
+                              f"the rejoin (a healthy peer next to it recovered in seconds).")
+                        print(f"              The wire recovered — this is a RE-ACQUISITION LATENCY")
+                        print(f"              for {s}'s owner to weigh, NOT a wire failure.")
+                        inconclusive.append(
+                            f"{s}: survived but recovered slowly ({resume_lag:.0f}s after rejoin)")
                 else:
-                    fails.append(f"{s}: guest-clock heartbeat gap {gap:.1f}s does not bracket "
-                                 f"the {window:.0f}s departure window")
+                    fails.append(f"{s}: guest-clock gap {gap:.1f}s does not bracket the "
+                                 f"{window:.0f}s departure window (silent t+{lb:.0f}, resumed t+{fa:.0f})")
                 continue
             # gbeats present but no bracket, OR no gbeats at all → fall back to arrival-stamp,
             # which is honest about being unable to score a continuous survivor.
