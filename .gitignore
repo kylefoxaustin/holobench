@@ -24,3 +24,7 @@ Image
 *.dtb
 dist/
 qemu-builds/
+
+# ephemeral lab-run diagnostic output (not source)
+scratchpad-beats.jsonl
+scratchpad-consoles/

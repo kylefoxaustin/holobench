@@ -349,6 +349,30 @@ async def main() -> int:
     await asyncio.sleep(max(0.0, deadline - (loop.time() - t0)))
     w.cancel()
 
+    # PRESERVE EACH NODE'S CONSOLE before coord.stop() reaps its work dir. The beat/gbeat
+    # dump captures PASS and CORRUPT, but a departure investigation needs the node's OTHER
+    # lines too — rt1180's `ENET-LAB3 rx: peer ... REBOOTED` fires on the first new-incarnation
+    # frame and its POSITION (during the silent gap vs adjacent to the resumed PASS) splits
+    # "PASS-emission delayed" from "loop stalled". That line is neither PASS nor CORRUPT, so it
+    # lived only in the console — which teardown deletes. ⭐ THE EVIDENCE MUST OUTLIVE THE RUN.
+    import shutil as _sh
+    cons_dir = Path(__file__).resolve().parent.parent / "scratchpad-consoles"
+    try:
+        cons_dir.mkdir(exist_ok=True)
+        for n in lab.nodes:
+            sid = running.node_sessions.get(n.name)
+            if not sid:
+                continue
+            try:
+                clog = mgr.get(sid).console_log()
+                if clog and clog.exists():
+                    _sh.copy(clog, cons_dir / f"{n.name}.log")
+            except Exception:
+                pass
+        print(f"(consoles preserved to {cons_dir})")
+    except Exception:
+        pass
+
     d_at = running.node_departures.get(dep.name)
     r_at = running.node_rejoins.get(dep.name)
     dep_window = (d_at, r_at) if (d_at is not None and r_at is not None) else None
