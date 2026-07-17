@@ -115,7 +115,7 @@ QEMU i.MX SoC models, through stock interfaces only.
 | 6 | Hardening — auth (token expiry, login throttle, WS-origin, persistent key), **per-session cgroup v2 caps** (memory/pids/cpu), asset-path lockdown, audit log, [deploy guide](docs/DEPLOY.md) | ◐ optional netns/mount-ns next |
 | 6+ | **Accounts & admin** — self-service register / first-run onboarding, user management (add / remove / set-role), and an **admin fleet view**: every running board across all users with per-board CPU (per-core + % of host) / RAM / disk / idle + one-click **kill** | ✅ |
 | 🧰 | **Build me a board** — build the real NXP BSP in a container (you accept the EULA; Holobench hosts/accepts nothing): pick the **image depth** (core / multimedia / full, per SoC), **pre-cache** sources for offline & restart-safe builds, SSD-backed. All 3 SoCs × 3 depths build clean. | ✅ |
-| 🔗 | **Connect boards — multi-board labs (v3.0)** — wire 2+ boards over a real bus and message-pass between them: **eth / USB / UART / SPI / CAN / I2C**, all stock QEMU sockets (no host `vcan`/root/custom device), all validated byte-exact — *including mixed-SoC, cross-arch* (a Linux i.MX ↔ a bare-metal MCXN947). See *[Connect two boards](#connect-two-boards-multi-board-labs)*. | ✅ |
+| 🔗 | **Connect boards — multi-board labs (v3.0)** — wire 2+ boards over a real bus and message-pass between them: **eth / USB / UART / SPI / CAN / I2C**, all stock QEMU sockets (no host `vcan`/root/custom device), all validated byte-exact — *including mixed-SoC, cross-arch* (a Linux i.MX ↔ a bare-metal MCXN947), and a **4-SoC staggered segment with scheduled departures**. See *[Connect boards](#connect-boards-multi-board-labs)*. | ✅ |
 
 Boards: **i.MX 91 / 93 / 95**, each in two flavors — a quick **busybox** profile
 and a **full BSP distro** (`-sd`) profile that boots the real NXP `.wic`. All
@@ -196,11 +196,11 @@ Golden distro images live at `assets/<profile-id>/disk.wic` (the BSP `.wic`);
 mechanism. Want it fully self-contained? `docker/build.sh imx95-evk-sd` bakes the
 forked QEMU + M33 firmware + the distro image into one runnable container (below).
 
-## Connect two boards: multi-board labs
+## Connect boards: multi-board labs
 
-A single board is the start. Holobench also wires **2+ boards together over a real
-bus** and lets them message-pass — the thing a physical bench needs cables and a
-second EVK to do. A **lab** is a small YAML topology (`labs/*.yaml`): board nodes +
+A single board is the start. Holobench also wires **2, 3, or more boards together over a
+real bus** and lets them message-pass — the thing a physical bench needs cables and more
+EVKs to do. A **lab** is a small YAML topology (`labs/*.yaml`): board nodes +
 the links between them. The coordinator launches every node and bridges each link
 over a **stock QEMU socket** — no host `vcan`, no root, no custom device.
 
@@ -213,7 +213,7 @@ holobench lab launch gateway-lab       # boot the lab + wire the boards together
 
 | Link | How it's bridged | Guest sees | Example lab (boards) |
 |---|---|---|---|
-| **eth** | mcast socket = a virtual switch | `eth0` (any pair or group) | `lan-trio` (**i.MX93 ↔ i.MX95**), `eth-pair` |
+| **eth** | mcast socket = a virtual switch | `eth0` (any pair, or an **N-node segment**) | `lan-trio` (**i.MX93 ↔ i.MX95**), `mcx-rt1180-95-l2` (**4 SoCs, staggered** — below) |
 | **USB** | usbredir, host ↔ CDC gadget | `/dev/ttyACM0` (USB serial) | `gateway-lab` (i.MX93 ↔ MCXN947) |
 | **UART** | LPUART ↔ socket ↔ LPUART | `/dev/ttyLP1` | `uart-link-imx-mcx` (**i.MX91 ↔ MCXN947**) |
 | **SPI** | `spi-link` SSI bridge over a socket | `/dev/spidev0.0` | `spi-link-91-mcx` (**i.MX91 ↔ MCXN947**) |
@@ -226,6 +226,46 @@ SPI, UART, and CAN (bidirectional, byte-exact) are all validated *between* them 
 different SoCs, different instruction sets, different worlds (Linux ↔ bare-metal
 firmware), one stock backend. A physical bench would need two dev boards and a
 jumper harness; here it's `holobench lab launch can-link-91-mcx`.
+
+### A lab has a *timeline* — and that beats the hardware
+
+A physical bench can wire boards together. What it **cannot** do is hot-remove a board
+mid-test, bring it back, and measure whether the wire survived — reliably, on a schedule,
+a hundred times. A Holobench lab is not just a topology; it's a topology **over time**.
+Nodes have `start_at` / `stop_at` / `rejoin_at`, the coordinator stages arrivals and issues
+departures over QMP, and *when* a board joins or leaves is part of the spec.
+
+The flagship is **`mcx-rt1180-95-l2`** — **four SoCs, two instruction sets, two QEMU
+binaries, one raw-L2 segment**, on a staggered schedule:
+
+```
+  t+0     i.MX95   (Linux A55, ENETC)      boots first, beacons alone into an empty wire
+  t+150   MCXN947  (bare-metal M33)         joins a segment already live
+  t+210   RT1180   (bare-metal M33, NETC)   joins later still — only now can anyone PASS
+  t+420   MCXN947  DEPARTS  (coordinator kills it; the wire loses a member)
+  t+450   i.MX91   (Linux A55, FEC)         arrives AFTER the departure — the one oracle
+                                            that cannot be pre-satisfied
+  t+480   MCXN947  REJOINS  (fresh boot, new identity)
+```
+
+Each node broadcasts a distinct ethertype and declares PASS only after its own firmware has
+**verified the frame body** of every peer — a magic word, the sender's ethertype echoed
+inside the payload, a monotonic sequence, and a **per-boot incarnation nonce**. And the
+schedule earns its keep by finding bugs no synchronous, all-boot-together test can reach:
+
+- **Why you stagger at all** — a QEMU `can_receive` / `qemu_flush_queued_packets` queue stall
+  that only bites a node joining traffic *already in flight*. Boot every node at once and it
+  never fires. *The bug class lives in time, not topology.*
+- **Why the incarnation nonce exists** — the *rejoin* exposed a firmware bug the whole fleet
+  then fixed: a sequence check alone condemns a peer that **rebooted** (its counter restarts
+  from 1) as if it had **replayed** a stale frame. A departing-and-returning board is the only
+  way to tell those two apart, so it's the only place that bug lives.
+
+That is the "beat the hardware" thesis made concrete: a departure is a *scheduled fact* (the
+coordinator recorded when it killed the node, so "it left" and "it crashed" are never the
+same observation), a rejoin re-tests the segment for a member that just went away, and a
+node arriving *after* the loss proves the wire still works for someone who wasn't there for
+it. None of that is doable on a bench.
 
 **Want two boards to message-pass? Match the transport to what's available:**
 - **Ethernet works for any pair today — including i.MX95 ↔ i.MX93** (`lan-trio`).
@@ -499,6 +539,11 @@ companion forks and point each profile's `qemu.binary` at the result:
 | `kylefoxaustin/qemu-imx95` | `imx95-netc` | `imx95-19x19-evk` |
 | `kylefoxaustin/qemu-imx93` | `imx93-dev`  | `imx93-11x11-evk` |
 | `kylefoxaustin/qemu-imx91` | —            | `imx91-11x11-evk` |
+| `kylefoxaustin/qemu-imxrt1180` | `imxrt1180-dev` | `mimxrt1180-evk` |
+| `kylefoxaustin/mcxn947qemu` | `mcxn947` | `frdm-mcxn947` |
+
+The last two are **bare-metal MCU** models (Cortex-M33), not Linux SoCs — they join the
+multi-board labs above as firmware nodes (SPI/UART/CAN/USB gadgets, and the raw-L2 segment).
 
 These are the source of truth for each board's machine type, serial topology,
 display device, and boot flow. Holobench consumes them via profiles. It never
