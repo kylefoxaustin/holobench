@@ -541,6 +541,38 @@ instrument, and every one *looked* like a model bug. All four are now guards in 
    dead** before its departure is scored, and an un-killable peer is **inconclusive, not a
    failure.**
 
+### mcxn947's backlog, one layer out: it bit a NODE, not the scorer (2026-07-17)
+
+Guard #1 above says an observer that can't keep up watches its own backlog. That failure mode
+came back — this time in a **node under the lab's own host contention**, and it cost a wrong
+finding before it was caught.
+
+The survivor-departure measurement showed rt1180 recovering in **64s** where imx95 recovered in
+**8s** — same rejoined mcx, same wire. I hypothesized a delivery stall in rt1180's NETC
+(`can_receive`/`qemu_flush_queued_packets`) and **stated it too strongly.** rt1180 refuted it
+cleanly: on a shared mcast socket mcx and imx95 arrive through the same path, so a stall hitting
+one and not the other cannot be their model — and their faithful repro decoded in 0s at load 40.
+
+The truth was in rt1180's own preserved console: it printed **`0x88b5 VERIFIED` at t+470 — fifty
+seconds after mcx was killed at t+420.** mcx transmitted nothing after t+420, so rt1180's "I see
+mcx" could only be pre-departure frames it had not processed yet. **rt1180 was ~64s behind the
+wire, draining a backlog** — not stalled on delivery. Under the lab's 4-QEMU + polling-scorer
+contention, rt1180's once-per-loop drain falls behind the segment; imx95's Linux NAPI (and more
+scheduler budget) keeps up. It scaled 47→65s with host load for exactly this reason.
+
+> ⭐ **THE 64s WAS NOT rt1180'S NODE — IT WAS MY INSTRUMENT. A bare-metal survivor under host
+> contention falls behind the wire, and its departure measurement is contaminated by its own
+> backlog** — the same failure mcxn947 named in the scorer, now in a node. The guest `t=`
+> (host-clock-accurate) reveals it: a PASS timestamped *now* that verifies a peer killed 50s ago
+> is a node reporting the past.
+
+Consequence for reading a survivor-departure result: on a loaded box, a bare-metal survivor's
+resume-lag is a lower bound on the node's *processing throughput deficit*, not a measurement of
+the wire's recovery. The joiner (a single first-PASS event) and imx95 (keeps up) remain the sound
+oracles; a slow bare-metal survivor under load is inconclusive, not a wire fault. And the lesson
+that keeps paying: **do not state a mechanism you have not proven** — rt1180 was right to refuse
+to cut ring/flush code on my wrong story.
+
 ### 🏆 The lab passes — and the departure found a bug in the ASSERTION (2026-07-14)
 
 ```
