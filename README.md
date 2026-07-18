@@ -514,16 +514,20 @@ holobench/
   docs/        ARCHITECTURE.md  BOARD_PROFILES.md  TOPOLOGIES.md (multi-board labs)
   profiles/    imx9{1,3,5}-evk.yaml (busybox initramfs)
                imx9{1,3,5}-evk-sd.yaml (full BSP distro, disk boot)
-               mcxn947-*.yaml (USB/SPI gadget nodes)  virt-smoke.yaml
-  labs/        *.yaml — multi-board topologies (eth/USB/UART/SPI/CAN/I2C links)
+               mcxn947-*.yaml / imxrt1180-*.yaml (bare-metal MCU link nodes)
+               *-enet-lab3.yaml (raw-L2 segment nodes)  virt-smoke.yaml
+  labs/        *.yaml — multi-board topologies (eth/USB/UART/SPI/CAN/I2C links,
+               incl. the staggered N-node segment mcx-rt1180-95-l2)
   backend/     pyproject.toml
     holobench/ profiles/ (models+loader)  session/ (command+manager+control)
-               bridges/ (console tap)  api/ (FastAPI app)  cli.py
-    tests/     pytest (profile + command-resolver unit tests)
+               labs/ (coordinator)  bridges/ (console tap)  api/ (FastAPI app)  cli.py
+    tests/     pytest — profiles, command resolver, and the lab layer (coordinator
+               wiring, artifact/invocation pins, guest-clock + backlog scoring)
   frontend/    index.html (React+htm+Tailwind+xterm.js)  vendor/ (offline deps)
   vendor/      camera/ (GPL-2.0 ISI capture helpers: source + static aarch64 bin)
   tools/       make-initramfs.sh  make-golden-disk.sh  build-capture-helpers.sh
-               init-shell  init-busybox
+               make-{enet-lab3,can-lab,spi-lab}-initramfs.sh  build-nxp-bsp.sh
+               run-enet-lab3.py (lab runner + scorer)  argv-pin.py  init-shell
   assets/      <profile-id>/ boot artifacts (gitignored)
   LICENSE      GPL-2.0-or-later
 ```
