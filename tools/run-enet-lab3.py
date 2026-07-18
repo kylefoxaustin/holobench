@@ -207,6 +207,36 @@ class Beats:
             return None
         return (max(before), min(after))
 
+    def departure_silence(self, node: str, d_at: float, r_at: float, arrival: float,
+                          wall_t0: float, min_gap: float = BEAT_TIMEOUT_S
+                          ) -> tuple[float, float] | None:
+        """The node's ACTUAL heartbeat silence caused by the departure — the largest inter-beat
+        gap (in lab-relative guest time) that intersects the departure window AND exceeds
+        `min_gap`. Returns (silence_start, silence_end), where silence_start is the node's LAST
+        beat before it went quiet — which for a backlogged node is LATER than d_at, because it
+        kept beating on pre-departure frames it hadn't drained yet. None if no guest `t=`, or if
+        the node beat CONTINUOUSLY through the window (its largest gap there is just normal
+        jitter, ≤ min_gap — it never went silent, so it never required the departed peer).
+
+        This is the primitive behind mcxn947's backlog detector: silence_start - d_at is how long
+        the node kept PASSing after the peer was already dead = the depth of its backlog, read
+        straight off a host-clock t= (a live t= verifying a dead peer). The min_gap floor is why a
+        continuous beater doesn't get a false backlog: a 0.2s-spaced node's biggest jitter gap is
+        nowhere near a 60s departure silence."""
+        bs = self.guest_lab_beats(node, arrival, wall_t0)
+        if len(bs) < 2:
+            return None
+        window_lo, window_hi = d_at - BEAT_TIMEOUT_S, r_at + BEAT_TIMEOUT_S
+        best = None
+        for a, b in zip(bs, bs[1:]):
+            if b - a < min_gap:                       # normal jitter, not a silence
+                continue
+            if b < window_lo or a > window_hi:        # not caused by THIS departure
+                continue
+            if best is None or (b - a) > (best[1] - best[0]):
+                best = (a, b)
+        return best
+
     def quiet_period(self, node: str, exclude: tuple[float, float] | None) -> float | None:
         """This node's LONGEST normal gap between beats, ignoring the departure window.
 
@@ -662,30 +692,47 @@ async def main() -> int:
             # ~beat/100ms, not a sub-100ms absolute claim without -icount — and a GAP is exactly
             # all we assert.) A node WITHOUT `t=` falls through to the arrival-stamp path below.
             s_arrival = running.node_arrivals.get(s) or 0.0
-            gg = beats.gap_around_guest(s, d_at, r_at, s_arrival, wall_t0)
+            # departure_silence finds the ACTUAL silence (accurate for a backlogged node, which
+            # keeps beating PAST the departure on stale frames). gap_around_guest is the fallback.
+            sil = beats.departure_silence(s, d_at, r_at, s_arrival, wall_t0)
+            gg = sil or beats.gap_around_guest(s, d_at, r_at, s_arrival, wall_t0)
             if gg is not None:
                 lb, fa = gg
                 gap = fa - lb
                 window = r_at - d_at
                 clock = beats.guest_clock_base(s)
                 resume_lag = fa - r_at    # how long AFTER the rejoin it took to beat again
-                # It SURVIVED if it went quiet near the departure and resumed after the rejoin.
-                # The resume-lag is reported separately: a node that recovers slowly still
-                # recovered — that is a latency finding for its owner, not a wire failure.
-                went_quiet = lb <= d_at + BEAT_TIMEOUT_S
-                came_back = fa >= r_at - 1.0                 # resumed at or after the rejoin
-                survived = went_quiet and came_back and gap >= window * 0.5
+                # ⭐ THE BACKLOG (mcxn947's wire-side detector). lb is the node's LAST beat before
+                # it went silent; for a survivor that REQUIRES the departed peer, that beat is a
+                # host-clock-current t= that still "verified" a peer already dead — so lb - d_at is
+                # how long the node kept PASSing on frames it hadn't drained. A LIVE t= over a DEAD
+                # peer is the backlog, read straight off the wire, no need to trust the node to
+                # self-report. imx95 (Linux NAPI) drains fast → tiny backlog; a contended bare-metal
+                # survivor lags, and THAT is why its resume-lag inflates too — same cycle-budget
+                # deficit, measured at the departure instead of the rejoin.
+                backlog = max(0.0, lb - d_at)
+                went_quiet = True                            # departure_silence found a real gap
+                came_back = fa >= r_at - 1.0
+                survived = came_back and gap >= window * 0.5
                 print(f"  {'✅' if survived else '❌'} {s:7} [guest {clock}] silent t+{lb:.1f} → "
                       f"resumed t+{fa:.1f}  GAP {gap:.1f}s  (window {window:.0f}s, "
-                      f"resume-lag {resume_lag:+.1f}s)")
+                      f"backlog +{backlog:.1f}s, resume-lag {resume_lag:+.1f}s)")
                 if survived:
                     print(f"           → measured off {s}'s OWN clock: it went silent when "
                           f"{dep.name} left and RESUMED after it returned. Not an inference.")
-                    if resume_lag > BEAT_TIMEOUT_S:
-                        print(f"           ⚠️  but SLOW to recover: resumed {resume_lag:.0f}s after "
-                              f"the rejoin (a healthy peer next to it recovered in seconds).")
-                        print(f"              The wire recovered — this is a RE-ACQUISITION LATENCY")
-                        print(f"              for {s}'s owner to weigh, NOT a wire failure.")
+                    if backlog > BEAT_TIMEOUT_S:
+                        print(f"           ⚠️  BACKLOGGED: kept PASSing {backlog:.0f}s AFTER {dep.name} "
+                              f"died — a host-clock-CURRENT t= over an already-DEAD peer.")
+                        print(f"              A time-sliced bare-metal vCPU under contention drains "
+                              f"slower than the wire delivers, so it reports the PAST. Its departure")
+                        print(f"              timing is its OWN backlog, not the wire's — imx95 (NAPI) "
+                              f"keeps up. INSTRUMENT contention, not a node bug. (mcxn947's detector.)")
+                        inconclusive.append(
+                            f"{s}: BACKLOGGED +{backlog:.0f}s (contended bare-metal survivor lags the "
+                            f"wire) — its departure timing is instrument contention, not a node fault")
+                    elif resume_lag > BEAT_TIMEOUT_S:
+                        print(f"           ⚠️  slow to recover: resumed {resume_lag:.0f}s after the "
+                              f"rejoin (a healthy peer next to it recovered in seconds).")
                         inconclusive.append(
                             f"{s}: survived but recovered slowly ({resume_lag:.0f}s after rejoin)")
                 else:

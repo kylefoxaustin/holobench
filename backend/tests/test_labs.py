@@ -1011,3 +1011,46 @@ def test_guest_clock_handles_both_epoch_and_1970_based():
 
     # no guest t= at all -> None (falls back to the arrival-stamp path, honestly)
     assert b.gap_around_guest("none", 420, 480, arrival, wall_t0) is None
+
+
+def test_backlog_detector_reads_a_live_t_over_a_dead_peer():
+    """mcxn947's wire-side backlog detector: a survivor that keeps PASSing AFTER the departed
+    peer is dead is draining stale frames it hasn't gotten to yet — and how long it keeps
+    PASSing past the departure (its last beat before it finally goes silent, minus the
+    departure time) is the backlog depth, read off a host-clock t=.
+
+    A Linux NAPI survivor drains fast (tiny backlog); a contended bare-metal survivor lags.
+    A node that does NOT require the departed peer never goes silent, so there is no
+    departure-silence gap and no false backlog flag.
+    """
+    import importlib.util
+    from pathlib import Path
+
+    spec = importlib.util.spec_from_file_location(
+        "runlab2", Path(__file__).resolve().parents[2] / "tools" / "run-enet-lab3.py")
+    m = importlib.util.module_from_spec(spec)
+    spec.loader.exec_module(m)
+
+    b = m.Beats()
+    wall_t0, arr = 1_784_000_000.0, 0.0
+    d_at, r_at = 420.0, 480.0
+
+    # BACKLOGGED bare-metal survivor: beats densely to t+457 (50s past the t+420 death, still
+    # "verifying" a peer that's gone), then silent until it resumes at t+527.
+    b.gbeats["slow"] = [wall_t0 + t for t in
+                        ([410, 415, 419, 430, 445, 457] + [527, 528, 529])]
+    sil = b.departure_silence("slow", d_at, r_at, arr, wall_t0)
+    assert sil is not None
+    lb, fa = sil
+    assert abs(lb - 457) < 1 and abs(fa - 527) < 1
+    assert abs((lb - d_at) - 37) < 1        # backlog ≈ 37s past the departure
+
+    # FAST Linux survivor: goes silent ~6s after the departure, resumes promptly.
+    b.gbeats["fast"] = [wall_t0 + t for t in ([410, 419, 426] + [487, 488])]
+    lb, fa = b.departure_silence("fast", d_at, r_at, arr, wall_t0)
+    assert abs((lb - d_at) - 6) < 1         # tiny backlog
+
+    # A node that never goes silent through the window (doesn't require the departed peer):
+    # no departure-silence gap → nothing to flag.
+    b.gbeats["indep"] = [wall_t0 + t for t in range(410, 500, 1)]  # 1s beats, no gap
+    assert b.departure_silence("indep", d_at, r_at, arr, wall_t0) is None
