@@ -49,7 +49,7 @@ imx95-evk-sd:
 
 Pinned commits (verified 2026-06-16, public fork tip == local model tip):
 imx91 `qemu-imx91@imx91-dev f816301c5e`, imx93 `qemu-imx93@imx93-dev cc125f516d`,
-imx95 `qemu-imx95@imx95-netc 25223218cd`, mcxn947 `mcxn947qemu@mcxn947 f6831ff3aa`.
+imx95 `qemu-imx95@main 25223218cd`, mcxn947 `mcxn947qemu@mcxn947 f6831ff3aa`.
 (Source of truth is each emulator session; reconfirm on the bus before a release.)
 
 ## Build engine (the foundation — both CLI and the wizard call it)

@@ -540,7 +540,7 @@ companion forks and point each profile's `qemu.binary` at the result:
 
 | Repo | Branch | `-M` machine type |
 |---|---|---|
-| `kylefoxaustin/qemu-imx95` | `imx95-netc` | `imx95-19x19-evk` |
+| `kylefoxaustin/qemu-imx95` | `main` | `imx95-19x19-evk` |
 | `kylefoxaustin/qemu-imx93` | `imx93-dev`  | `imx93-11x11-evk` |
 | `kylefoxaustin/qemu-imx91` | —            | `imx91-11x11-evk` |
 | `kylefoxaustin/qemu-imxrt1180` | `imxrt1180-dev` | `mimxrt1180-evk` |

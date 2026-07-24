@@ -1,7 +1,7 @@
 # Holobench board profile — i.MX 95 EVK
 #
 # Values confirmed 2026-06-09 by the 95 emulator session on the message bus.
-# Source of truth: kylefoxaustin/qemu-imx95 (branch imx95-netc). Fully verified.
+# Source of truth: kylefoxaustin/qemu-imx95 (branch main). Fully verified.
 #
 # 95-SPECIFIC LANDMINE encoded below: the `-device loader,file=<m33_image.elf>,
 # cpu-num=6` is LOAD-BEARING. The Cortex-M33 System Manager (CPU#6, max_cpus=7)
