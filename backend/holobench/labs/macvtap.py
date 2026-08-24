@@ -84,7 +84,18 @@ class MacvtapError(Exception):
 
 
 def _run(argv: list[str], *, sudo: bool) -> subprocess.CompletedProcess:
-    cmd = (["sudo", "-n"] + argv) if sudo else argv
+    """Run a command, escalating ONLY if we are not already root.
+
+    Unconditionally prefixing `sudo -n` was wrong in the one case that matters:
+    when the lab is launched from a session that ALREADY has privilege, `sudo -n`
+    adds nothing and the preflight's own passwordless-sudo check would refuse a
+    run that could plainly have succeeded. A privilege helper that cannot notice
+    it already has privilege turns a working setup into a refusal.
+    """
+    if sudo and os.geteuid() != 0:
+        cmd = ["sudo", "-n"] + argv
+    else:
+        cmd = argv
     return subprocess.run(cmd, capture_output=True, text=True)
 
 
@@ -186,8 +197,9 @@ class MacvtapPool:
         if probe.returncode != 0:
             raise MacvtapError(f"cannot inspect '{wire}': {probe.stderr.strip()}")
         # The sudo check is LAST and explicit, so its failure message is about
-        # privilege rather than being mistaken for a missing interface.
-        if _run(["true"], sudo=True).returncode != 0:
+        # privilege rather than being mistaken for a missing interface. Skipped
+        # entirely when we are already root — see _run().
+        if os.geteuid() != 0 and _run(["true"], sudo=True).returncode != 0:
             raise MacvtapError(
                 "passwordless sudo is not available, and creating a macvtap needs root. "
                 "REFUSING TO LAUNCH. Run the lab from a shell where `sudo -n` works, or "
@@ -229,7 +241,15 @@ class MacvtapPool:
                 f"macvtap '{name}' exists but {dev} does not. Without the character "
                 f"device there is nothing to hand QEMU.")
         # QEMU runs as the invoking user; the char device is created root-owned.
-        _run(["chown", f"{os.getuid()}:{os.getgid()}", dev], sudo=True)
+        # Hand the char device to the user QEMU will actually run as. Under sudo,
+        # os.getuid() is 0 and chowning to root would leave an unprivileged QEMU
+        # unable to open its own backend — so prefer SUDO_USER when present. (Same
+        # family as the other three sudo-environment bugs this lab has produced:
+        # root's ssh keys, root's ssh config, root's $HOME. Sudo changes who you
+        # are, and every user-scoped identity moves with it.)
+        _owner = os.environ.get("SUDO_UID") or str(os.getuid())
+        _group = os.environ.get("SUDO_GID") or str(os.getgid())
+        _run(["chown", f"{_owner}:{_group}", dev], sudo=True)
 
         ep = MacvtapEndpoint(name=name, lower=wire, ifindex=ifindex, dev=dev, mac=mac)
         self.endpoints.append(ep)
