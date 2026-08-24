@@ -117,15 +117,43 @@ scp_b()  { as_user scp  -o BatchMode=yes -o ConnectTimeout=5 "$@"; }
 # privileged side runs in one session").
 # The redirect happens in the LOGIN shell, before sudo, so the log is owned by the
 # ssh user and readable back without a second privileged round-trip.
+# ⚠️ ssh -t CANNOT PROMPT FROM A BACKGROUND JOB. A backgrounded process under a
+# sudo'd script has no controlling terminal, so `sudo` on the far end returns
+# "a terminal is required to read the password" and the beacon NEVER RUNS. That
+# happened on 2026-08-23 and both directions were then scored as wire FAILURES —
+# the fourth time in this lab that a step which never executed was reported as a
+# result. So: ask ONCE, here, in the foreground where a tty still exists, and feed
+# it to `sudo -S` on stdin. Nothing is written to disk and nothing persists past
+# the run. (setcap on the peer's python3 would grant CAP_NET_RAW to every python
+# invocation by any user; a NOPASSWD rule on a /tmp path would be a root hole.)
+PEER_PW=""
+peer_pw_prompt() {
+    [ "$PEER_SUDO" = "1" ] || return 0
+    [ -z "$PEER_PW" ] || return 0
+    printf '   sudo password for %s (the %s peer, NOT skippy): ' "$FRDM_HOST" "$LEG" >&2
+    read -rs PEER_PW < /dev/tty; echo >&2
+}
+
 peer_beacon() {   # <logfile> <runtime> <extra-args>
     local log="$1" rt="$2" extra="$3"
     local cmd="python3 /tmp/l2beacon.py --runtime $rt $FRDM_IF $FRDM_ET $extra"
     if [ "$PEER_SUDO" = "1" ]; then
-        say "     (the $LEG peer needs root — sudo will prompt on YOUR terminal now)"
-        as_user ssh -t -o ConnectTimeout=5 "$FRDM_HOST" \
-            "sudo -p '   [%p@%h sudo] password: ' $cmd > $log 2>&1" >/dev/null 2>&1 &
+        printf '%s\n' "$PEER_PW" | as_user ssh -o BatchMode=yes -o ConnectTimeout=5 \
+            "$FRDM_HOST" "sudo -S -p '' nohup $cmd > $log 2>&1 & sleep 2; head -2 $log" \
+            > /tmp/hb-peer-start.txt 2>&1
     else
-        ssh_b "$FRDM_HOST" "nohup $cmd > $log 2>&1 &" >/dev/null 2>&1
+        ssh_b "$FRDM_HOST" "nohup $cmd > $log 2>&1 & sleep 2; head -2 $log" \
+            > /tmp/hb-peer-start.txt 2>&1
+    fi
+    # ⭐ PROVE THE PEER STARTED. Without this, a beacon that never ran produces
+    # silence, and silence gets read as "the peer did not receive" — a claim about
+    # the wire made from a step that did not happen.
+    if grep -q 'L2BEACON UP:' /tmp/hb-peer-start.txt 2>/dev/null; then
+        PEER_STARTED=1
+        say "     peer beacon UP: $(sed -n 's/.*\(incarnation=[0-9a-fx]*\).*/\1/p' /tmp/hb-peer-start.txt | head -1)"
+    else
+        PEER_STARTED=0
+        say "     ⚠️  PEER BEACON DID NOT START: $(tail -1 /tmp/hb-peer-start.txt | cut -c1-120)"
     fi
 }
 
@@ -195,6 +223,7 @@ else
     say "     (fix ssh, or pass FRDM_HOST=..., and re-run. Not scoring these.)"
     FRDM_OK=0
 fi
+peer_pw_prompt
 say
 
 # ── Q3 FIRST: IDLE CONTROL. Can this receiver tell silence from traffic? ────
@@ -251,7 +280,10 @@ PY
   set -- $RX
   Q2_SEEN="$1"; Q2_GOOD="$2"; Q2_SRC="$3"
   # PASS REQUIRES A POSITIVE INTEGER. Never `! grep failure`.
-  if [ "${Q2_GOOD:-0}" -gt 0 ]; then
+  if [ "${PEER_STARTED:-0}" -ne 1 ]; then
+      huh "REAL -> GUEST: the peer's beacon never started, so nothing was transmitting."
+      say "     This is NOT a wire result and must not be scored as one."
+  elif [ "${Q2_GOOD:-0}" -gt 0 ]; then
       ok "REAL -> GUEST: $Q2_GOOD conformant v2 beacons of $FRDM_ET at $TAPDEV from src $Q2_SRC (of $Q2_SEEN seen)."
       say "     ⭐ A frame from physical silicon reached the guest's data path. This is the half nobody had measured."
   elif [ "${Q2_SEEN:-0}" -gt 0 ]; then
@@ -324,7 +356,10 @@ PY
   Q1_STATS="$(printf '%s' "$FRDMLOG" | sed -n 's/.*rx_peer=\([0-9]*\).*/\1/p' | tail -1)"
   [ -z "$Q1_N" ] && Q1_N="$Q1_STATS"
   Q1_CORRUPT="$(printf '%s' "$FRDMLOG" | grep -c 'L2BEACON CORRUPT' || true)"
-  if [ "${TXVERDICT:-SENDER_BROKEN}" != "SENT" ] || [ "${TXSENT:-0}" -eq 0 ]; then
+  if [ "${PEER_STARTED:-0}" -ne 1 ]; then
+      huh "GUEST -> REAL: the peer's beacon never started, so nothing was RECEIVING."
+      say "     Its log holds the startup error, not a receive count. Not a wire result."
+  elif [ "${TXVERDICT:-SENDER_BROKEN}" != "SENT" ] || [ "${TXSENT:-0}" -eq 0 ]; then
       huh "GUEST -> REAL: THE SENDER NEVER SENT (${TXSENT:-0} frames written)."
       say "     This says NOTHING about the wire and must NOT be scored as a wire"
       say "     failure. A step that did not run is not a caught bug. Fix + re-run."

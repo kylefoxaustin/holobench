@@ -38,6 +38,69 @@ from .models import Lab, LabError
 # like eth labs (no longer env-gated). See docs/TOPOLOGIES.md §USB.
 
 
+async def _start_silicon_beacon(node, lab) -> tuple[bool, str]:
+    """Stage and start tools/l2beacon.py on a REAL board, and PROVE it started.
+
+    ⭐ THE PROOF IS THE POINT. Backgrounding an ssh and assuming the beacon runs is
+    how a peer that never started gets reported as "the peer did not receive" —
+    a statement about the wire, made from a step that never executed. So this
+    waits for the board's own `L2BEACON UP:` line and returns False without it.
+
+    Returns (started, detail). It NEVER raises into the lab: one unreachable board
+    must not take down a run whose other legs are fine.
+    """
+    import shutil
+    beacon = Path(__file__).resolve().parents[3] / "tools" / "l2beacon.py"
+    if not beacon.is_file():
+        return (False, f"tools/l2beacon.py not found at {beacon}")
+    if not shutil.which("ssh"):
+        return (False, "no ssh on this host")
+
+    remote = "/tmp/holobench-l2beacon.py"
+    log = f"/tmp/holobench-{node.name}.log"
+    watch = " ".join(f"0x{w:04x}" for w in node.watch)
+    run = f"python3 {remote} {node.iface} 0x{node.ethertype:04x} {watch}"
+    # `sudo -n`: a board needing an INTERACTIVE password cannot be driven from a
+    # backgrounded launch, and pretending otherwise produces a log full of sudo
+    # errors that the scorer then reads as silence from the wire.
+    if node.sudo:
+        run = "sudo -n " + run
+
+    async def _sh(*argv: str) -> tuple[int, str]:
+        proc = await asyncio.create_subprocess_exec(
+            *argv, stdout=asyncio.subprocess.PIPE, stderr=asyncio.subprocess.STDOUT)
+        out, _ = await proc.communicate()
+        return proc.returncode, out.decode(errors="replace")
+
+    rc, out = await _sh("scp", "-o", "BatchMode=yes", "-o", "ConnectTimeout=5",
+                        str(beacon), f"{node.host}:{remote}")
+    if rc != 0:
+        return (False, f"cannot stage the beacon: {out.strip()[:160]}")
+
+    rc, out = await _sh("ssh", "-o", "BatchMode=yes", "-o", "ConnectTimeout=5",
+                        node.host, f"nohup {run} > {log} 2>&1 & sleep 2; head -3 {log}")
+    if "L2BEACON UP:" not in out:
+        hint = out.strip().splitlines()[-1][:160] if out.strip() else "no output"
+        if "password" in out or "sudo:" in out:
+            hint += "  (needs an interactive sudo password — a backgrounded launch " \
+                    "has no tty; grant it non-interactively or run the probe by hand)"
+        return (False, hint)
+    return (True, out.strip().splitlines()[0][:160])
+
+
+async def _stop_silicon_beacon(node) -> None:
+    """Reap a real board's beacon. A peer that outlives its run is not litter —
+    on a shared segment its testimony is indistinguishable from a live peer's."""
+    try:
+        proc = await asyncio.create_subprocess_exec(
+            "ssh", "-o", "BatchMode=yes", "-o", "ConnectTimeout=5", node.host,
+            "pkill -f holobench-l2beacon.py 2>/dev/null; true",
+            stdout=asyncio.subprocess.DEVNULL, stderr=asyncio.subprocess.DEVNULL)
+        await proc.communicate()
+    except Exception:
+        pass
+
+
 def _usb_args(role, cid: str, sock: str) -> list[str]:
     """Raw QEMU args for one usbredir role: a `-chardev`, plus the importer's
     `-device usb-redir` (host end) or the exporter's `-global` (device end),
@@ -543,14 +606,31 @@ class LabCoordinator:
             async def _arrive(node, *, rejoin: bool = False) -> None:
                 nonlocal any_ok
                 if node.kind == "silicon":
-                    # holobench does not launch hardware. The runner stages and starts
-                    # this node's beacon over ssh and reads its console; the lab's
-                    # load-bearing assertion comes from there, not from here.
+                    # holobench does not LAUNCH hardware, but it must still put the
+                    # board on the wire: stage the v2 beacon over ssh and start it.
+                    # Logging "not launched" and stopping there — which is what this
+                    # did on its first run — boots the emulated node onto two real
+                    # wires with NOTHING LISTENING, so the lab cannot prove a
+                    # crossing however well the transport works.
                     at = loop.time() - t0
+                    try:
+                        ok, detail = await _start_silicon_beacon(node, lab)
+                    except Exception as exc:      # never let a peer kill the lab
+                        ok, detail = False, str(exc)
                     running.node_arrivals[node.name] = at
-                    _emit(f"  t+{at:6.1f}s  SILICON {node.name} "
-                          f"({node.host} {node.iface} et=0x{node.ethertype:04x}) "
-                          f"— not launched by holobench")
+                    if ok:
+                        _emit(f"  t+{at:6.1f}s  SILICON {node.name} BEACONING "
+                              f"({node.host} {node.iface} et=0x{node.ethertype:04x}) "
+                              f"— real hardware, not launched by holobench")
+                    else:
+                        # ⚠️ A PEER THAT NEVER STARTED IS NOT A WIRE RESULT. Recorded
+                        # as a node error so the scorer reports INCONCLUSIVE rather
+                        # than reading the resulting silence as "the peer did not
+                        # receive" — the failure this lab has now made four times.
+                        running.node_errors[node.name] = (
+                            f"beacon did not start on {node.host}: {detail}")
+                        _emit(f"  t+{at:6.1f}s  SILICON {node.name} DID NOT START "
+                              f"— {detail}")
                     return
                 profile = node_profiles.get(node.name)
                 if profile is None:
@@ -656,6 +736,16 @@ class LabCoordinator:
         return running
 
     async def _teardown(self, running: RunningLab, seg_group: dict[str, str]) -> None:
+        """Reap everything this run created. MUST run on every exit path.
+
+        ⚠️ THE REASON THIS IS SAID OUT LOUD: on 2026-08-23 the CLI's summary print
+        crashed on a silicon node's None profile AFTER the lab was up. Teardown
+        never ran, and two live macvtap endpoints were left on shared physical
+        NICs — a leak caused by REPORTING code, in a lab whose whole subject is
+        not letting a green go unexamined. The real-wire reap is therefore in a
+        `finally` below: a failure anywhere else must not be able to leak a
+        physical-wire endpoint.
+        """
         # Cancel any pending scheduled departure first — otherwise a task could fire
         # mid-teardown and "retire" a node the teardown is already destroying, which
         # would write a departure into the timeline that never happened.
@@ -671,14 +761,24 @@ class LabCoordinator:
                 await self.manager.destroy(sid)
             except SessionError:
                 pass
-        pool = getattr(running, "macvtap_pool", None)
-        if pool is not None:
-            for corpse in pool.reap():
-                # RETURNING what was destroyed, rather than logging "cleaned up",
-                # is the difference between evidence and a claim.
-                print(f"  reaped macvtap {corpse}")
-        for group in seg_group.values():
-            self._free_group(group)
+        for node in running.lab.nodes:
+            if node.kind == "silicon":
+                await _stop_silicon_beacon(node)
+        try:
+            for group in seg_group.values():
+                self._free_group(group)
+        finally:
+            # LAST and in a finally: a leaked macvtap is a live endpoint on a
+            # shared physical LAN, and nothing above is allowed to prevent its
+            # removal. RETURNING what was destroyed, rather than logging "cleaned
+            # up", is the difference between evidence and a claim.
+            pool = getattr(running, "macvtap_pool", None)
+            if pool is not None:
+                corpses = pool.reap()
+                for corpse in corpses:
+                    print(f"  reaped macvtap {corpse}")
+                if not corpses:
+                    print("  reaped macvtap: none (no real-wire endpoints this run)")
         for sock in getattr(running, "usb_socks", []):
             try:
                 Path(sock).unlink()

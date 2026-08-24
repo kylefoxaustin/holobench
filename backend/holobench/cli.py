@@ -407,14 +407,24 @@ async def _lab_launch(args: argparse.Namespace) -> int:
         return 1
     print(f"lab state: {running.state.value}")
     for node in lab.nodes:
+        # A silicon node has no profile and no session — it is real hardware on a
+        # real wire. Formatting it like a launched board crashed the summary
+        # (`{None:16}`) AFTER the lab was already up, which then skipped teardown
+        # and leaked two live macvtap endpoints onto shared NICs. Reporting must
+        # never be able to break the thing it reports on.
+        if node.kind == "silicon":
+            print(f"  {node.name:8} {'(silicon)':16} {node.host} {node.iface} "
+                  f"et=0x{node.ethertype:04x} — not launched by holobench")
+            continue
         sid = running.node_sessions.get(node.name)
+        label = node.profile or "(no profile)"
         if sid:
             s = mgr.get(sid)
             ip = running.node_ips.get(node.name)
             iptag = f"  ip={ip}" if ip else ""
-            print(f"  {node.name:8} {node.profile:16} pid={s.pid} {s.state.value}{iptag}")
+            print(f"  {node.name:8} {label:16} pid={s.pid} {s.state.value}{iptag}")
         else:
-            print(f"  {node.name:8} {node.profile:16} FAILED: {running.node_errors.get(node.name)}")
+            print(f"  {node.name:8} {label:16} FAILED: {running.node_errors.get(node.name)}")
     if running.node_ips:
         print("auto-IP: eth nodes are pre-configured on their segment (kernel ip=), ready to ping.")
     elif any(l.type == "eth" for l in lab.links):
