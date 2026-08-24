@@ -1,0 +1,158 @@
+# SPDX-License-Identifier: GPL-2.0-or-later
+#
+# THE EMULATED HALF OF THE FLEET'S FIRST REAL-SILICON LAB.
+#
+# Every interconnect result this fleet has is QEMU-to-QEMU. This profile is the
+# emulated endpoint of the first one where the OTHER END IS SILICON:
+#
+#     emulated i.MX 95  (this profile, macvtap on skippy enp6s0)   0x88B7
+#     REAL i.MX 95 FRDM (10.0.1.181, eth1, tools/l2beacon.py)      0x88B9   <- LAN
+#     REAL Jetson AGX Orin (l4tbr0, over the cdc_ncm USB gadget)   0x88BA   <- USB
+#
+# ⭐ THE CLAIM THIS BUYS is not "our models talk to each other." It is
+#   **"the model is indistinguishable from the silicon, TO THE SILICON."** That is
+#   a materially stronger statement, and it is the one a skeptical audience
+#   actually wants. It is also the one nobody in this fleet has been able to make.
+#
+# ─────────────────────────────────────────────────────────────────────────────
+# WHY TWO NICs, AND WHY NOT ONE INSTANCE WATCHING BOTH PEERS
+#
+# holobench's first draft of this was `enet-lab3 eth0 0x88B7 0x88B9 0x88BA` — one
+# node watching both real boards. That is WRONG, and 95emulator's own source says
+# why: enet-lab3.c:285 takes ONE ifname. One instance watches ONE interface.
+#
+# But the two real peers are on two PHYSICALLY DIFFERENT wires — the FRDM is out
+# on the LAN, the Orin is behind a USB gadget. A merged peer list would gate on a
+# peer that is structurally unreachable on that interface: a criterion that can
+# never be satisfied no matter how well the wire works. (Exactly the shape of
+# 95emulator's CATCH 1, which caught the same class one layer down: the originally
+# proposed ethertypes 0x88C1/0x88C2 sit outside the beacon block, so the sniffer
+# would have dropped them and criterion B would have been impossible.)
+#
+# So: TWO legs, two beacons, two INDEPENDENT assertions. A failure then LOCALISES
+# to a transport. One merged red could not tell a dead USB gadget from a dead LAN.
+#
+# ─────────────────────────────────────────────────────────────────────────────
+# ⚠️ THE LEG BINDING IS POSITIONAL. THAT IS THE HAZARD TO WATCH.
+#
+#     1st -nic  ->  PF 0002:00:00.0  ->  beacon `0x88B7 0x88B9`  (FRDM / LAN)
+#     2nd -nic  ->  PF 0002:00:08.0  ->  beacon `0x88B7 0x88BA`  (Orin / USB)
+#
+# QEMU binds modeled NICs to `-nic` backends IN ORDER, and the initramfs binds
+# each beacon to a fixed PCI address. So the wire->leg mapping is decided by ARGV
+# POSITION and nothing checks it. Swap the two fds and both legs go red with every
+# component behaving perfectly and no console saying why.
+#
+# 95emulator hit the same class INSIDE the guest and fixed it: Linux names ENETC
+# netdevs in probe-COMPLETION order, so `eth0`/`eth1` are unreliable — about one
+# boot in three named a leg after 0002:00:10.0. Their init therefore resolves by
+# PCI address and never by name. Fixing that in the guest while leaving the
+# identical ambiguity in the coordinator would be daft, so the lab spec binds each
+# leg to its wire EXPLICITLY and the coordinator refuses to launch if the leg
+# count disagrees with what this profile declares.
+#
+# ─────────────────────────────────────────────────────────────────────────────
+# PROVENANCE — transcribed from 95emulator's MANIFEST.txt, then VERIFIED HERE
+#
+# holobench never builds what it runs. It consumes artifacts from a repo it does
+# not own, so it cannot obey the fleet's "never test a binary you did not just
+# build" — it can only refuse to be SURPRISED. Every hash below was recomputed on
+# this box rather than copied from the delivery message:
+#
+#   lab3-2port.cpio.gz         0c10d5f89a0563ebc84c6ba74f14fa71   ✓ verified
+#   imx95-19x19-evk-enetc.dtb  95129afb6f837dfeb21a969e207ef259   ✓ verified
+#   enet-lab3.c @ e5671cfa     475aef05405e094ac51245e0dcfee70a   ✓ verified, and
+#                              IDENTICAL in their worktree — no drift between what
+#                              was committed and what the artifact was built from.
+#
+# ⭐ AND ONE CROSS-CHECK THAT CAME FREE: the delivered dtb is BYTE-IDENTICAL to the
+#   one holobench has had in assets/ since 2026-07-13. That independently confirms
+#   95emulator's account — the second ENETC PF was ALWAYS described in the shipped
+#   dtb, and only the initramfs changed. The story and the bytes agree.
+#
+# ⭐⭐ THE PIN IS RE-DERIVABLE, AND THAT WAS EARNED. The first delivery was NOT
+#   bit-reproducible (cpio/gzip embed mtimes, and the newc header carries per-build
+#   INODE numbers — the real leaker, since mktemp hands out fresh inodes every run).
+#   A pin on such a file proves only "this file has not changed since delivery"; it
+#   can never prove "this file is what that commit produces", which makes
+#   `built_from_commit` a claim you can record and never check. 95emulator pinned
+#   all five non-determinism sources (mtime -> epoch 0, sorted members, owner 0:0,
+#   cpio --reproducible, gzip -n) and re-delivered at e5671cfa.
+#
+#   VERIFIED HERE, NOT TAKEN ON TRUST (2026-08-23): built from a clean checkout of
+#   e5671cfa in a throwaway worktree -> md5 0c10d5f8... byte-identical to the
+#   delivered file. So this pin now answers BOTH questions, and anyone who was not
+#   in the room can re-derive it.
+#
+# ⚠️ THE CHAIN IS ONLY AS RE-DERIVABLE AS ITS WEAKEST LINK, and one link is still
+#   soft: the build consumes tests/busybox-initramfs/busybox-initramfs.cpio.gz
+#   (md5 4ef1ed3882cd2e5551f6712b1ccf7fe7 on this box), which is a BUILD PRODUCT —
+#   not in git, and not pinned in the MANIFEST. A pristine `git checkout && build`
+#   FAILS without it; the reproduction above required staging it by hand. So the
+#   2-port artifact is reproducible GIVEN that base, and the base itself is
+#   currently unpinned. Raised with 95emulator; recorded here so nobody reads this
+#   block as a stronger guarantee than it is.
+
+id:           imx95-evk-enet-lab3-2port
+display_name: "NXP i.MX 95 EVK (2-port real-wire lab, 0x88B7 on two macvtaps)"
+soc:          "NXP i.MX 95"
+description:  "Emulated i.MX 95 with TWO ENETC ports on TWO real host NICs — beacons 0x88B7 on each and independently watches the real FRDM (0x88B9, LAN) and the real Jetson Orin (0x88BA, USB)."
+
+qemu:
+  binary:  /home/kyle/Documents/GitHub/95emulator/build/qemu-system-aarch64
+  machine: imx95-19x19-evk
+  memory:  "2G"
+  audio:   none
+  extra_args:
+    # LOAD-BEARING M33 System Manager (serves SCMI; the A55 will not boot without it).
+    - "-device"
+    - "loader,file={asset_dir}/m33_image_M2.elf,cpu-num=6"
+
+boot:
+  mode: direct-kernel
+  artifacts:
+    flash_bin: null
+    kernel:    Image
+    dtb:       imx95-19x19-evk.dtb          # net.fabric_dtb swaps this on an eth segment
+    initrd:    lab3-2port.cpio.gz           # busybox + enet-lab3 + the PCI-resolving 2-leg init
+    rootfs:    null
+    disk:      null
+  # NOTE: no lab_et / lab_peers here, unlike the 1-port profile. The 2-port init
+  # HARDCODES both legs (verified by reading the delivered initramfs, not assumed):
+  #     /enet-lab3 "$IF0" 0x88B7 0x88B9 &
+  #     /enet-lab3 "$IF1" 0x88B7 0x88BA &
+  # Passing lab_* args here would be inert and would imply a configurability the
+  # artifact does not have — a comment that lies is worse than no comment.
+  append: "console=ttyLP0,115200 cpuidle.off=1 rdinit=/init"
+  command_template: null
+
+  pin:
+    initrd: "0c10d5f89a0563ebc84c6ba74f14fa71"
+
+serial:
+  - { name: "A-core console (both ENET-LAB3 legs land here)", chardev: console0, role: a-core, default: true }
+  # M33 System Manager debug console = serial_hd(1). Quiet under the M=2 idle
+  # firmware, but it speaks on SM faults — an SCMI -ETIMEDOUT at boot means read THIS.
+  - { name: "M33 System Manager", chardev: smconsole, role: m-core, default: false }
+
+display: { enabled: false, device: null, vnc: false }
+
+net:
+  user_nics: 0                                   # no slirp; the two macvtaps are the only NICs
+  fabric_nic_model: fsl-enetc                    # bind the ENETC PFs, not a convenience NIC
+  fabric_dtb: imx95-19x19-evk-enetc.dtb          # fixed-link; enables BOTH 0002:00:00.0 and 0002:00:08.0
+  # This board exposes exactly two legs on this profile. The coordinator checks a
+  # macvtap lab's declared leg count against this and REFUSES TO LAUNCH on a
+  # mismatch — the positional binding above is asserted, never assumed.
+  fabric_legs: 2
+
+file_injection:
+  nine_p: { enabled: false, mount_tag: holobench }
+  tftp:   { enabled: false }
+  nfs:    { enabled: false }
+  image_swap: { enabled: false, target_drive: null }
+
+power: { warm_reset: true, cold_cycle: true, pause: true, reinstall: false }
+
+introspection:
+  qmp_events: true

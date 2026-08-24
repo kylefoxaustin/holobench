@@ -1,0 +1,237 @@
+# SPDX-License-Identifier: GPL-2.0-or-later
+#
+# ══════════════════════════════════════════════════════════════════════════════
+#  THE FIRST LAB IN THIS FLEET WHERE THE OTHER END IS NOT EMULATED.
+# ══════════════════════════════════════════════════════════════════════════════
+#
+# Every interconnect result holobench has is QEMU-to-QEMU: mcx + rt1180 + imx95 +
+# imx91 on a shared multicast segment, RT1180's NETC as an L2 fabric, four SoCs
+# and two instruction sets. All of it real, none of it on a wire. `-nic
+# socket,mcast=` is a QEMU-INTERNAL socket — no frame in any prior lab has ever
+# left the host.
+#
+# This lab puts an emulated i.MX 95 on an ACTUAL ETHERNET SEGMENT with an ACTUAL
+# i.MX 95 FRDM board and an ACTUAL Jetson AGX Orin, over TWO PHYSICALLY DIFFERENT
+# TRANSPORTS:
+#
+#     0x88B7  imx95    EMULATED   QEMU + macvtap on skippy enp6s0        (leg 0)
+#     0x88B9  frdm95   SILICON    real i.MX 95 FRDM, eth1, 10.0.1.181    <- LAN
+#     0x88B7  imx95    EMULATED   QEMU + macvtap on enx42b8036560ca      (leg 1)
+#     0x88BA  orin     SILICON    real Jetson AGX Orin, l4tbr0           <- USB (cdc_ncm)
+#
+# ⭐ THE CLAIM. Every previous lab could say "our models talk to each other." This
+#   one says **"the model is indistinguishable from the silicon, TO THE SILICON"**
+#   — and it says it twice, over two unrelated physical media. That is a
+#   materially stronger statement and it is the one a skeptical audience wants.
+#
+# WHY IT IS CHEAP: the lab firmware speaks RAW L2 WITH CUSTOM ETHERTYPES, not IP.
+# No addressing, no DHCP, no routing to negotiate — a switch forwards an unknown
+# ethertype as an ordinary frame. The hard part of "emulated meets real" is
+# normally the plumbing, and the existing design sidesteps it entirely.
+#
+# ──────────────────────────────────────────────────────────────────────────────
+# ⚠️⚠️ THE ORACLE TRAP, AND IT IS THE WHOLE DESIGN — READ BEFORE TRUSTING A GREEN
+#
+# A macvtap CAN LOCALLY SWITCH. Two endpoints on the same lower device reach each
+# other without a frame ever touching the NIC. So on this topology:
+#
+#     ⭐ A FULLY GREEN RUN IS ACHIEVABLE WITH THE CABLE UNPLUGGED.
+#
+# The emulated node's own PASS therefore proves NOTHING about physical hardware.
+# It is not weak evidence; it is evidence about a different question. This is why
+# the lab is built the way it is:
+#
+#   • THE LOAD-BEARING ASSERTION IS THE REAL BOARD'S OWN CONSOLE saying it
+#     RECEIVED 0x88B7 — because that board is on the far end of a physical cable
+#     and cannot be fooled by local switching.
+#   • DISTINCT ETHERTYPES so no node can self-match. (rt1180's monitor once
+#     matched its own `need 0x88b7` BANNER and shouted PASS twelve times at an
+#     EMPTY WIRE. A monitor that can see its own output is not a monitor.)
+#   • THE NEGATIVE CONTROL IS MANDATORY, NOT OPTIONAL: down the FRDM, re-run, and
+#     the emulated side MUST fail. A green run with no failing counterpart proves
+#     the wire exists, not that the assertion works. IF IT CANNOT FAIL, IT HAS NOT
+#     BEEN TESTED.
+#   • `Lab` REFUSES TO VALIDATE a macvtap segment with no `kind: silicon` member,
+#     so this cannot be quietly degraded into an all-emulated run that still
+#     prints green.
+#
+# ──────────────────────────────────────────────────────────────────────────────
+# ⚠️ CRITERION C — I PREDICTED IT WAS UNSATISFIABLE. I WAS WRONG. MEASURED.
+#
+# I argued to the lead that "a capture on skippy shows the frames on the PHYSICAL
+# iface" could not be satisfied, because macvlan isolates a lower device from its
+# own macvtap children — and recommended moving the criterion. THE MEASUREMENT
+# SAYS OTHERWISE (2026-08-22, prove-macvtap-guest.sh Q3):
+#
+#     host capture on enp6s0 saw 15 frames of 0x88B7   -> criterion C HOLDS AS WRITTEN
+#
+# ⭐ WHERE MY REASONING WENT WRONG, precisely, because the correction is worth more
+#   than the retraction: macvlan's isolation is REAL but it is DIRECTIONAL. A frame
+#   arriving FOR the macvtap child is stolen from the lower device, so the host
+#   cannot receive it. But a frame TRANSMITTED BY the child egresses THROUGH the
+#   lower device and is plainly visible to a capture there. I took a property of
+#   the receive path and asserted it of the interface. "macvlan isolates the host"
+#   is true of one direction and I stated it of both.
+#
+# SO THE HONEST SCOPE, and note which half is still open:
+#   MEASURED   the guest's TRANSMIT direction IS visible to a capture on enp6s0.
+#   UNTESTED   whether the FRDM's 0x88B9 frames are visible on enp6s0 while being
+#              delivered to the macvtap child. That is the direction my argument
+#              was actually about, and nothing has measured it yet.
+# Criterion C therefore STANDS AS WRITTEN for the direction the lab scores on. The
+# runner still reports an empty host capture as INCONCLUSIVE rather than FAIL —
+# not because C is unsatisfiable, but because an empty capture cannot distinguish
+# "no frames" from "frames the host is structurally unable to see."
+#
+# The real board's console remains the load-bearing oracle regardless. Not because
+# skippy is blind — it isn't — but because skippy is on the NEAR side of the cable
+# and only the far side can refute local switching.
+#
+# ──────────────────────────────────────────────────────────────────────────────
+# WHY TWO LEGS RATHER THAN ONE NODE WATCHING BOTH PEERS
+#
+# holobench's first draft was `enet-lab3 eth0 0x88B7 0x88B9 0x88BA`. That is wrong,
+# and 95emulator's source says why: enet-lab3.c:285 takes ONE ifname — one instance
+# watches ONE interface. The two real peers are on two different cables, so a
+# merged peer list would gate on a peer STRUCTURALLY UNREACHABLE on that interface.
+# It could never pass however well the wire worked. (Same shape as 95emulator's
+# CATCH 1 one layer down: the originally proposed 0x88C1/0x88C2 sit outside the
+# beacon block 0x88B5..0x88BF, so the sniffer would have dropped them and the
+# "QEMU sees the real board" criterion was impossible as written.)
+#
+# Two legs = two INDEPENDENT assertions, and a failure LOCALISES to a transport.
+# One merged red could not tell a dead USB gadget from a dead LAN.
+#
+# ⚠️ THE LEG ORDER BELOW IS LOAD-BEARING. QEMU binds modeled NICs to `-nic`
+# backends BY POSITION, and the initramfs binds each beacon to a FIXED PCI address
+# (0002:00:00.0 -> watches 0x88B9; 0002:00:08.0 -> watches 0x88BA). So `legs:`
+# order decides which cable each beacon listens on, and swapping two lines here
+# turns both legs red with every component behaving correctly and no console
+# explaining it. It is declared explicitly, and the coordinator cross-checks the
+# count against the profile's `fabric_legs` and REFUSES TO LAUNCH on a mismatch.
+#
+# ──────────────────────────────────────────────────────────────────────────────
+# WHAT IS PROVEN AND WHAT IS NOT — WRITTEN DOWN BEFORE THE FIRST RUN
+#
+#   PROVEN (MEASURED, Kyle ran prove-paths.sh 2026-08-22, receive-side counts with
+#   idle controls):
+#     • real FRDM eth1 -> skippy enp6s0: 14 sent, 14 received, body intact, idle 0
+#     • real Orin l4tbr0 -> skippy enx42b8036560ca: 14/14, idle 0
+#       => the cdc_ncm USB gadget CARRIES RAW NON-IP ETHERNET. This was the
+#          doubtful one; many gadget stacks pass only IP. It does not.
+#   PROVEN (MEASURED, holobench, this box): macvtap creates on enp6s0, /dev/tapN
+#     appears and is readable, idle control 0 frames, teardown leaves no corpse.
+#   PROVEN (MEASURED, 95emulator): both ENETC PFs enumerate and both legs beacon,
+#     resolved BY PCI ADDRESS (ethN is unreliable — ~1 boot in 3 misnames a leg).
+#
+#   ⭐⭐ PROVEN (MEASURED, holobench, 2026-08-22 — THE ONE THAT WAS THE OPEN QUESTION):
+#     GUEST-CROSSES-THE-WIRE, BOTH DIRECTIONS, against real silicon.
+#       REAL -> GUEST   32 conformant v2 beacons of 0x88B9 arrived at /dev/tapN
+#                       from src 00:04:9f:0a:fc:6d (32 seen, 32 passing every gate)
+#       GUEST -> REAL   40 beacons written to /dev/tapN; the FRDM's OWN console:
+#                       "L2BEACON PASS #40: saw all required peers (0x88b7 rx=40)"
+#                       40 written, 40 received, 0 corrupt, and it re-armed 40 times.
+#       IDLE CONTROL    0 frames with nobody sending, same receiver, same run.
+#     This is the assertion the whole lab rests on, and it is no longer inherited
+#     from a host-side proof: a frame written to the guest's data path crossed a
+#     physical cable and was ACCEPTED BY HARDWARE THAT DOES NOT KNOW ITS PEER IS
+#     EMULATED. The far end's console is the witness, so local switching cannot
+#     account for it.
+#
+#   ⚠️ STILL NOT PROVEN, AND NOT ASSUMED:
+#     • THE USB LEG END-TO-END. Everything above is the LAN leg (enp6s0/FRDM).
+#       The Orin leg has a proven FABRIC (Kyle's 14/14 host-side, idle 0) but its
+#       GUEST-side crossing is UNMEASURED. The LAN result is a strong prior to
+#       CHECK, never a finding to INHERIT — the fleet's own rule, and the two legs
+#       are different physical media with different drivers.
+#     • THE NEGATIVE CONTROL. Nothing here has yet been shown to FAIL when it
+#       should. Down the FRDM and re-run: the guest side MUST go red. Until that
+#       runs, the green above proves the wire works, not that the oracle bites.
+#     • THE FULL LAB UNDER QEMU. The crossing was proven by writing directly to
+#       /dev/tapN — which IS the guest's data path, but the emulated ENETC in
+#       front of it has not carried these frames yet.
+#
+# ──────────────────────────────────────────────────────────────────────────────
+# HOW TO SCORE IT
+#
+#   PASS requires a POSITIVE INTEGER parsed from a RECEIVER, never `! grep failure`.
+#   (claude-connect's proof script v1 printed "paths proven: 2, failed: 0" while
+#   every step had failed — it tested for the ABSENCE of a failure string, and a
+#   step that never ran emitted none. Absence of evidence read as evidence of
+#   success, in the verification script for a lab whose entire design is about not
+#   doing that.)
+#   AN IDLE CONTROL RUNS EVERY TIME. A receiver that cannot tell silence from
+#   traffic may be reporting a constant.
+#   INCONCLUSIVE IS ITS OWN VERDICT, distinct from FAIL. A killed or unreachable
+#   run is not a caught bug.
+
+id:           imx95-real-silicon
+display_name: "Emulated i.MX 95 ⟷ REAL i.MX 95 FRDM (LAN) + REAL Jetson AGX Orin (USB)"
+description:  "The fleet's first lab with silicon on the far end — an emulated i.MX 95 on two real host NICs, beaconing to a physical FRDM over the LAN and a physical Orin over a USB gadget. The load-bearing PASS is the real boards' own consoles."
+
+# Raw L2: these nodes speak in ethertypes, not IP. A kernel `ip=` would be noise.
+auto_ip: false
+
+nodes:
+  # ── THE EMULATED NODE ──────────────────────────────────────────────────────
+  # Two ENETC PFs, one per real host NIC. Both beacon 0x88B7; each watches a
+  # different real board, because they are on different cables.
+  - name: imx95
+    profile: imx95-evk-enet-lab3-2port
+    mac: "02:49:4d:58:95:01"
+    start_at: 0
+
+  # ── THE SILICON NODES ──────────────────────────────────────────────────────
+  # holobench does NOT launch these. It stages tools/l2beacon.py on them, starts
+  # it, and READS what their consoles say they RECEIVED. Everything holobench
+  # cannot do to them is exactly why their word outweighs the emulated node's:
+  # they are the only members of this segment that local switching cannot fake.
+  #
+  # Note there is deliberately no stop_at/rejoin_at on either — the schema forbids
+  # it. holobench cannot QMP-quit a physical board, and a departure it cannot
+  # ISSUE is a departure it cannot ASSERT: "it left" and "it crashed" would be the
+  # same observation, the exact collapsed oracle stop_at was built to prevent.
+  # To test a departure here, pull the cable BY HAND and say that you did.
+  - name: frdm95
+    kind: silicon
+    host: "root@10.0.1.181"        # MEASURED: NXP OUI 00:04:9f:0a:fc:6d, Linux 6.18.20, python3.14.4
+    iface: eth1
+    ethertype: 0x88B9              # in-block; 0x88C1 would be silently dropped (enet-lab3.c:511)
+    watch: [0x88B7]                # ⭐ THE LAB'S LOAD-BEARING ASSERTION LIVES HERE
+    start_at: 30                   # after the emulated node's kernel is up and beaconing
+
+  - name: orin
+    kind: silicon
+    host: "kyle@10.0.1.124"        # MEASURED: l4tbr0 3e:c7:e7:79:f3:87, python3.10.12
+    iface: l4tbr0                  # the LINUX BRIDGE over usb0+usb1 — the USB path, not the LAN
+    ethertype: 0x88BA
+    watch: [0x88B7]                # the same assertion, over a physically different medium
+    sudo: true                     # AF_PACKET needs root there; the FRDM already logs in as root
+    start_at: 30
+
+links:
+  # ⚠️ ORDER IS THE BINDING — see the header. legs[0] -> 1st -nic -> PF 0002:00:00.0,
+  # legs[1] -> 2nd -nic -> PF 0002:00:08.0. The coordinator checks this count against
+  # the profile's `fabric_legs: 2` and refuses to launch if they disagree.
+
+  # LEG 0 — the LAN. skippy enp6s0 shares one broadcast domain with the FRDM
+  # (ip neigh: 10.0.1.181 dev enp6s0 lladdr 00:04:9f:0a:fc:6d, rtt 0.36 ms).
+  # enp6s0 is NOT skippy's default route (wlo1 is), so a botched macvtap here
+  # cannot take the box off the network — that safety property is part of the
+  # design, not a lucky fact about the first run.
+  - type: eth
+    segment: lan
+    transport: macvtap
+    wire: enp6s0
+    members: [imx95, frdm95]
+
+  # LEG 1 — the USB gadget. A SECOND, PHYSICALLY DIFFERENT transport, and the one
+  # nobody expected to work: many cdc_ncm gadget stacks pass only IP. Kyle's
+  # measurement says this one does not — 14/14 raw non-IP frames with an idle
+  # control of 0. That single fact is what makes this a two-medium claim rather
+  # than a one-medium claim with a footnote.
+  - type: eth
+    segment: usb
+    transport: macvtap
+    wire: enx42b8036560ca
+    members: [imx95, orin]
