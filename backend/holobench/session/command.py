@@ -67,6 +67,14 @@ class SessionRuntime:
     # terminal (PuTTY -serial, screen, minicom) attaches directly — the way a dev
     # consoles into a real EVK. QEMU prints the assigned /dev/pts/N per label.
     external_console: bool = False
+    # v3.1 real-wire fabric: file descriptors that must survive exec into QEMU.
+    # A macvtap backend is `-nic tap,fd=N`, where N is opened by the COORDINATOR
+    # and inherited by the child — that is what "fd=" means. Python's subprocess
+    # closes non-standard descriptors on exec unless they are named here, so
+    # forgetting this makes QEMU fail on a closed descriptor in a way that reads
+    # like a NIC bug rather than a plumbing one. None = nothing to inherit
+    # (every mcast/socket lab, unchanged).
+    inherit_fds: Optional[list[int]] = None
     # When set, add a stock user-net NIC with a host->guest :22 forward on this
     # port (SSH access), on a virtio-net-device so it works on any board with a
     # virtio-mmio bus regardless of whether the SoC's own ENET binds a netdev.

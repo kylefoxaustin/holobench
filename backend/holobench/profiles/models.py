@@ -214,6 +214,25 @@ class NetSpec(_Strict):
     # (it is the one on the segment), and the EQOS still needs something to attach to.
     # Default 0 = every existing lab's command line is byte-for-byte unchanged.
     fabric_user_nics: int = 0
+    # v3.1 real-wire fabric: how many SEPARATE wire legs this board's boot artifact
+    # is built to drive — i.e. how many `-nic` backends its initramfs expects to
+    # find and bind, in order. Default 1 = every existing profile is unchanged.
+    #
+    # ⚠️ WHY THIS IS A DECLARED NUMBER AND NOT AN INFERENCE. QEMU binds modeled NICs
+    # to `-nic` backends BY POSITION, and a multi-leg initramfs binds each of its
+    # beacons to a FIXED PCI address. So the wire->leg mapping is decided entirely by
+    # argv order, and nothing in the stack checks it: hand a 2-leg initramfs one
+    # backend and the second leg silently finds no netdev; hand a 1-leg initramfs two
+    # and the extra wire is quietly unused. Both look like a peer that "isn't
+    # answering", and both would be blamed on the wire or on the model.
+    #
+    # 95emulator hit this class INSIDE the guest — Linux names ENETC netdevs in
+    # probe-COMPLETION order, so ethN is unreliable (~1 boot in 3), and their init now
+    # resolves by PCI address instead. Fixing the ambiguity in the guest and leaving
+    # the identical one in the coordinator would be pointless, so the coordinator
+    # compares a macvtap lab's declared legs against THIS number and refuses to launch
+    # on a mismatch. Positional, but asserted rather than assumed.
+    fabric_legs: int = 1
 
 
 # --- USB inter-board link (v3.0 fabric) ------------------------------------

@@ -229,6 +229,7 @@ class Session:
         append_extra: Optional[str] = None,
         dtb_override: Optional[str] = None,
         qemu_binary: Optional[str] = None,
+        inherit_fds: Optional[list[int]] = None,
         reap_with_parent: bool = True,
     ) -> None:
         # A board dies with the session that owns it (PR_SET_PDEATHSIG). False = the
@@ -313,6 +314,7 @@ class Session:
             append_extra=append_extra,
             dtb_override=dtb_override,
             qemu_binary=qemu_binary,
+            inherit_fds=inherit_fds,
         )
         # v3.0 fabric: which lab (if any) owns this node, and its node name in it.
         self.lab_id: Optional[str] = None
@@ -384,9 +386,13 @@ class Session:
 
         log = self._log_path.open("wb")
         try:
+            # `pass_fds` is what makes `-nic tap,fd=N` mean anything: without it
+            # Python closes N on exec and QEMU is handed a dead descriptor. Empty
+            # for every socket/mcast lab, so no existing launch changes.
             self._proc = await asyncio.create_subprocess_exec(
                 *self.argv, stdout=log, stderr=asyncio.subprocess.STDOUT,
                 preexec_fn=_make_qemu_preexec(procs, self.reap_with_parent),
+                pass_fds=tuple(self.runtime.inherit_fds or ()),
             )
         except FileNotFoundError as exc:
             self.state = SessionState.FAILED
@@ -896,6 +902,7 @@ class SessionManager:
         append_extra: Optional[str] = None,
         dtb_override: Optional[str] = None,
         qemu_binary: Optional[str] = None,
+        inherit_fds: Optional[list[int]] = None,
     ) -> Session:
         if self._launch_sem is not None:
             await self._launch_sem.acquire()
@@ -909,6 +916,7 @@ class SessionManager:
                 machine_extra=machine_extra, append_extra=append_extra,
                 dtb_override=dtb_override,
                 qemu_binary=qemu_binary,
+                inherit_fds=inherit_fds,
             )
             await session.launch()
             self._sessions[session.id] = session

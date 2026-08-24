@@ -26,6 +26,7 @@ from typing import Callable, Optional
 
 from ..profiles.loader import default_asset_dir, load_profile
 from ..session.manager import DEFAULT_BASE_DIR, SessionError, SessionManager
+from .macvtap import MacvtapError, MacvtapPool
 from .models import Lab, LabError
 
 # USB inter-board links: the per-board usbredir roles live in each profile's `usb:`
@@ -236,13 +237,26 @@ class LabCoordinator:
         node_by_name = {n.name: n for n in lab.nodes}
         try:
             for link in lab.links:
-                if link.type == "eth" and link.segment not in seg_group:
+                if link.type != "eth" or link.segment in seg_group:
+                    continue
+                if link.transport == "macvtap":
+                    # A REAL wire. No multicast group exists for it — the segment
+                    # IS the host NIC. Preflight before anything is created, so a
+                    # setup that cannot work never reaches the scoring code.
+                    MacvtapPool.preflight(link.wire)
+                    _emit(f"  wire     {link.segment} -> macvtap on {link.wire} "
+                          f"(REAL — frames leave this host)")
+                else:
                     seg_group[link.segment] = self._alloc_group()
 
             # 1b) Load each node's profile once (need it for the NIC model= below
             # and the launch). A bad profile downs only that node, not the lab.
             node_profiles: dict[str, object] = {}
             for node in lab.nodes:
+                if node.kind == "silicon":
+                    # holobench does not launch real hardware. A silicon node is
+                    # beaconed on and READ, never booted — see LabNode.kind.
+                    continue
                 try:
                     node_profiles[node.name] = load_profile(node.profile)
                 except Exception as exc:

@@ -44,6 +44,13 @@ def load_lab_file(path: Path | str, *, validate_profiles: bool = True) -> Lab:
 
     if validate_profiles:
         for node in lab.nodes:
+            # A silicon node is a physical board on a real wire. holobench does not
+            # launch it and it has no profile — there is nothing here to validate,
+            # and the things that COULD be wrong about it (is the board reachable,
+            # does it speak the v2 body) are wire facts the runner's preflight must
+            # MEASURE, not schema facts a loader can assert.
+            if node.kind == "silicon":
+                continue
             try:
                 load_profile(node.profile)
             except Exception as exc:
