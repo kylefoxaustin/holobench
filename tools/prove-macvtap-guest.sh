@@ -65,10 +65,27 @@ set -uo pipefail
 
 LOWER="${LOWER:-enp6s0}"
 MACVTAP="hb-mvt0"
-GUEST_ET="0x88B7"          # the emulated i.MX 95's ethertype
-FRDM_ET="0x88B9"           # the real FRDM's (in-block, per 95emulator's CATCH 1)
+GUEST_ET="${GUEST_ET:-0x88B7}"   # the emulated i.MX 95's ethertype (same on both legs)
+# ── WHICH LEG ARE WE PROVING? ────────────────────────────────────────────────
+# The lab has two, on two physically different media, and this script proves one
+# at a time. Defaults are the LAN leg; the USB leg is the same experiment with a
+# different wire, peer and ethertype:
+#
+#   LAN (default)   LOWER=enp6s0           PEER=root@10.0.1.181  IF=eth1    ET=0x88B9
+#   USB             LOWER=enx42b8036560ca  PEER=kyle@10.0.1.124  IF=l4tbr0  ET=0x88BA
+#                   PEER_SUDO=1   (the Orin's AF_PACKET needs root; the FRDM
+#                                  already logs in as root and must NOT get sudo)
+#
+# ⚠️ THE LAN RESULT IS A STRONG PRIOR TO CHECK, NEVER A FINDING TO INHERIT. The
+# fleet's own rule, and it applies with force here: the USB leg is a cdc_ncm
+# gadget, a different driver over a different medium. "It worked on Ethernet" is
+# not evidence about USB — many gadget stacks pass only IP, and the only reason we
+# know this one does not is that it was MEASURED.
+FRDM_ET="${PEER_ET:-0x88B9}"
 FRDM_HOST="${FRDM_HOST:-root@10.0.1.181}"
 FRDM_IF="${FRDM_IF:-eth1}"
+PEER_SUDO="${PEER_SUDO:-0}"
+LEG="${LEG:-LAN}"
 SECS="${SECS:-8}"
 REPO="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
 BEACON="$REPO/tools/l2beacon.py"
@@ -90,6 +107,27 @@ as_user() {
 }
 ssh_b()  { as_user ssh  -o BatchMode=yes -o ConnectTimeout=5 "$@"; }
 scp_b()  { as_user scp  -o BatchMode=yes -o ConnectTimeout=5 "$@"; }
+
+# Start the PEER's beacon. On a board that already logs in as root (the FRDM) this
+# is a plain backgrounded ssh. On one that needs sudo (the Orin) it needs a TTY so
+# sudo can prompt — and it must be ONE ssh, not a `sudo -v` warm-up followed by a
+# second session: sudo's tty_tickets caches the credential AGAINST THAT TTY, so the
+# later session gets a cache miss and hangs. claude-connect lost a run to exactly
+# that and fixed it the same way (2026-08-22 02:22, "reversing the direction so the
+# privileged side runs in one session").
+# The redirect happens in the LOGIN shell, before sudo, so the log is owned by the
+# ssh user and readable back without a second privileged round-trip.
+peer_beacon() {   # <logfile> <runtime> <extra-args>
+    local log="$1" rt="$2" extra="$3"
+    local cmd="python3 /tmp/l2beacon.py --runtime $rt $FRDM_IF $FRDM_ET $extra"
+    if [ "$PEER_SUDO" = "1" ]; then
+        say "     (the $LEG peer needs root — sudo will prompt on YOUR terminal now)"
+        as_user ssh -t -o ConnectTimeout=5 "$FRDM_HOST" \
+            "sudo -p '   [%p@%h sudo] password: ' $cmd > $log 2>&1" >/dev/null 2>&1 &
+    else
+        ssh_b "$FRDM_HOST" "nohup $cmd > $log 2>&1 &" >/dev/null 2>&1
+    fi
+}
 
 pass=0; fail=0; incon=0
 ok()    { echo "  ✅ PASS       $*"; pass=$((pass+1)); }
@@ -113,7 +151,8 @@ echo "════════════════════════�
 echo " prove-macvtap-guest — CAN A GUEST REACH REAL SILICON?"
 echo "════════════════════════════════════════════════════════════════════"
 echo "  lower device : $LOWER ($(cat /sys/class/net/$LOWER/address))"
-echo "  real FRDM    : $FRDM_HOST if=$FRDM_IF et=$FRDM_ET"
+echo "  LEG          : $LEG"
+echo "  real peer    : $FRDM_HOST if=$FRDM_IF et=$FRDM_ET sudo=$PEER_SUDO"
 echo "  guest et     : $GUEST_ET"
 echo
 
@@ -185,9 +224,7 @@ say
 if [ "$FRDM_OK" = "1" ]; then
   # ── Q2: REAL SILICON -> GUEST ─────────────────────────────────────────────
   say "── Q2: does the REAL FRDM's beacon reach the GUEST's /dev/tapN? ───────"
-  ssh_b "$FRDM_HOST" \
-      "nohup python3 /tmp/l2beacon.py --runtime $((SECS+4)) $FRDM_IF $FRDM_ET >/tmp/l2b.log 2>&1 &" \
-      >/dev/null 2>&1
+  peer_beacon /tmp/l2b.log "$((SECS+4))" ""
   sleep 1
   RX="$(python3 - "$REPO" "$TAPDEV" "$SECS" "$FRDM_ET" <<'PY'
 import sys, time, struct
@@ -226,9 +263,7 @@ PY
 
   # ── Q1: GUEST -> REAL SILICON. The load-bearing direction. ────────────────
   say "── Q1: does a frame written to /dev/tapN reach the REAL FRDM? ─────────"
-  ssh_b "$FRDM_HOST" \
-      "nohup python3 /tmp/l2beacon.py --runtime $((SECS+4)) $FRDM_IF $FRDM_ET $GUEST_ET >/tmp/l2b2.log 2>&1 &" \
-      >/dev/null 2>&1
+  peer_beacon /tmp/l2b2.log "$((SECS+4))" "$GUEST_ET"
   sleep 1
   TXOUT="$(python3 - "$REPO" "$TAPDEV" "$GUEST_MAC" "$GUEST_ET" "$SECS" <<'PY'
 import sys, os, struct, time

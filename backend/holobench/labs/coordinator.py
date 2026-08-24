@@ -267,6 +267,12 @@ class LabCoordinator:
             # auto-assigned IP). Shared across the eth/usb/uart/spi/can loops.
             node_dtb: dict[str, str] = {}
             node_append: dict[str, str] = {}
+            # Real-wire endpoints for this run. The pool owns creation AND reaping:
+            # a leaked macvtap is not inert litter, it is a live endpoint on a shared
+            # physical LAN whose MAC may still sit in a peer's FDB.
+            macvtap_pool = MacvtapPool()
+            running.macvtap_pool = macvtap_pool
+            node_fds: dict[str, list[int]] = {}
 
             # 2) Build each node's nic_override (one socket NIC per segment it joins).
             # Append model=<fabric_nic_model> when the board needs it to bind the
@@ -279,8 +285,16 @@ class LabCoordinator:
             for link in lab.links:
                 if link.type != "eth":
                     continue
-                group = seg_group[link.segment]
+                group = seg_group.get(link.segment)
                 for member in link.members:
+                    # A SILICON node has no QEMU and therefore no -nic. It is out on
+                    # the wire already; the coordinator beacons on it and reads its
+                    # console. Skipping it here is not an omission — it is the whole
+                    # distinction the node kind exists to draw.
+                    if node_by_name[member].kind == "silicon":
+                        running.node_links.setdefault(member, []).append(
+                            f"{link.segment}@{link.wire or 'mcast'} (silicon, not launched)")
+                        continue
                     nic_i = len(node_nics[member])
                     prof = node_profiles.get(member)
                     model = getattr(prof.net, "fabric_nic_model", None) if prof else None
@@ -288,8 +302,26 @@ class LabCoordinator:
                     # other by address); otherwise the auto MAC keeps segments distinct.
                     mac = (node_by_name[member].mac
                            or _mac(running.lab_idx, node_idx[member], nic_i))
-                    spec = (f"socket,mcast={group}:{_MCAST_PORT},mac={mac}"
-                            + (f",model={model}" if model else ""))
+                    if link.transport == "macvtap":
+                        # A REAL WIRE. Create the endpoint, open its char device, and
+                        # hand QEMU the already-open fd — `-nic tap,fd=N`, stock QEMU.
+                        # The MAC is the macvtap's OWN: the real board on the far end
+                        # identifies peers by source address, and an auto MAC that did
+                        # not match the endpoint the kernel actually created would make
+                        # the guest's frames arrive from an address nothing expects.
+                        ep = macvtap_pool.create(link.wire)
+                        ep.open_fd()
+                        node_fds.setdefault(member, []).append(ep.fd)
+                        spec = ep.nic_spec(model=model)
+                        running.node_links.setdefault(member, []).append(
+                            f"{link.segment}@{link.wire} via {ep.name} ({ep.dev} fd={ep.fd})")
+                        _emit(f"  wire     {member} -> {ep.name} on {link.wire} "
+                              f"mac={ep.mac} fd={ep.fd}")
+                    else:
+                        spec = (f"socket,mcast={group}:{_MCAST_PORT},mac={mac}"
+                                + (f",model={model}" if model else ""))
+                        running.node_links.setdefault(member, []).append(
+                            f"{link.segment}@{group}:{_MCAST_PORT}")
                     node_nics[member].append(spec)
                     fabric_dtb = getattr(prof.net, "fabric_dtb", None) if prof else None
                     if fabric_dtb:
@@ -297,8 +329,6 @@ class LabCoordinator:
                     seg_members.setdefault(link.segment, [])
                     if member not in seg_members[link.segment]:
                         seg_members[link.segment].append(member)
-                    running.node_links.setdefault(member, []).append(
-                        f"{link.segment}@{group}:{_MCAST_PORT}")
 
             # 2·5) Some boards carry a SECOND modeled NIC that still needs a backend even
             # though only the first is on the segment (i.MX91: FEC on the wire, EQOS not).
@@ -512,6 +542,16 @@ class LabCoordinator:
 
             async def _arrive(node, *, rejoin: bool = False) -> None:
                 nonlocal any_ok
+                if node.kind == "silicon":
+                    # holobench does not launch hardware. The runner stages and starts
+                    # this node's beacon over ssh and reads its console; the lab's
+                    # load-bearing assertion comes from there, not from here.
+                    at = loop.time() - t0
+                    running.node_arrivals[node.name] = at
+                    _emit(f"  t+{at:6.1f}s  SILICON {node.name} "
+                          f"({node.host} {node.iface} et=0x{node.ethertype:04x}) "
+                          f"— not launched by holobench")
+                    return
                 profile = node_profiles.get(node.name)
                 if profile is None:
                     return  # profile load already recorded in node_errors
@@ -528,6 +568,11 @@ class LabCoordinator:
                         machine_extra=node_machine.get(node.name),
                         append_extra=node_append.get(node.name),
                         dtb_override=node_dtb.get(node.name),
+                        # Only passed when this node actually has a real-wire fd to
+                        # inherit. Every mcast/socket lab's launch call stays exactly
+                        # as it was — a new transport must not perturb the argv or the
+                        # call shape of labs that predate it.
+                        **({"inherit_fds": fds} if (fds := node_fds.get(node.name)) else {}),
                     )
                     session.lab_id = lab.id
                     session.lab_node = node.name
@@ -626,6 +671,12 @@ class LabCoordinator:
                 await self.manager.destroy(sid)
             except SessionError:
                 pass
+        pool = getattr(running, "macvtap_pool", None)
+        if pool is not None:
+            for corpse in pool.reap():
+                # RETURNING what was destroyed, rather than logging "cleaned up",
+                # is the difference between evidence and a claim.
+                print(f"  reaped macvtap {corpse}")
         for group in seg_group.values():
             self._free_group(group)
         for sock in getattr(running, "usb_socks", []):

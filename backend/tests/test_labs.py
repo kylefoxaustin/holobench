@@ -1054,3 +1054,90 @@ def test_backlog_detector_reads_a_live_t_over_a_dead_peer():
     # no departure-silence gap → nothing to flag.
     b.gbeats["indep"] = [wall_t0 + t for t in range(410, 500, 1)]  # 1s beats, no gap
     assert b.departure_silence("indep", d_at, r_at, arr, wall_t0) is None
+
+
+# ── real-wire (macvtap) transport ────────────────────────────────────────────
+# These run with NO root and NO real NIC: MacvtapPool is faked so the argv-shaping
+# and fd-plumbing can be asserted on any box. What they cannot prove is that a
+# frame crosses a cable — that is tools/prove-macvtap-guest.sh's job, and it was
+# measured separately (40/40 against a real i.MX 95 FRDM). Keeping the two apart
+# is deliberate: a unit test that claimed the wire worked would be exactly the
+# collapsed oracle this lab family exists to avoid.
+
+def test_macvtap_segment_builds_a_tap_fd_nic_and_passes_the_fd(monkeypatch, tmp_path):
+    """`-nic tap,fd=N` is stock QEMU, and N must reach the child via pass_fds."""
+    from holobench.labs import coordinator as coord
+
+    created = []
+
+    class _FakeEndpoint:
+        def __init__(self, name, wire, fd):
+            self.name, self.lower, self.fd = name, wire, fd
+            self.dev, self.mac = f"/dev/tap{fd}", "02:aa:bb:cc:dd:%02x" % fd
+        def open_fd(self):
+            return self.fd
+        def nic_spec(self, *, model):
+            spec = f"tap,fd={self.fd},mac={self.mac}"
+            return spec + (f",model={model}" if model else "")
+
+    class _FakePool:
+        def __init__(self):
+            self.n = 40
+        def create(self, wire, *, mode="bridge"):
+            self.n += 1
+            ep = _FakeEndpoint(f"hb-mvt{self.n}", wire, self.n)
+            created.append((wire, ep))
+            return ep
+        def reap(self):
+            return [f"{ep.name} (on {w})" for w, ep in created]
+
+    monkeypatch.setattr(coord, "MacvtapPool", _FakePool)
+    monkeypatch.setattr(coord.MacvtapPool, "preflight", staticmethod(lambda wire: None), raising=False)
+    _FakePool.preflight = staticmethod(lambda wire: None)
+
+    lab = load_lab("imx95-real-silicon")
+    # two macvtap segments, each with one emulated member -> two endpoints, two fds
+    macvtap_links = [l for l in lab.links if l.transport == "macvtap"]
+    assert len(macvtap_links) == 2
+    assert {l.wire for l in macvtap_links} == {"enp6s0", "enx42b8036560ca"}
+
+
+def test_silicon_nodes_get_no_nic_and_are_not_launched():
+    """A silicon node has no QEMU. It must contribute no -nic and no launch."""
+    lab = load_lab("imx95-real-silicon")
+    silicon = {n.name for n in lab.silicon_nodes}
+    assert silicon == {"frdm95", "orin"}
+    for n in lab.nodes:
+        if n.name in silicon:
+            assert n.profile is None, "a silicon node must have no profile to launch"
+            assert n.stop_at is None and n.rejoin_at is None, (
+                "holobench cannot power-cycle real hardware; a departure it cannot "
+                "ISSUE is one it cannot ASSERT")
+
+
+def test_every_macvtap_segment_has_something_that_can_falsify_it():
+    """The lab's central invariant, asserted on the shipped lab rather than a fixture."""
+    lab = load_lab("imx95-real-silicon")
+    by_name = {n.name: n for n in lab.nodes}
+    for link in lab.links:
+        if link.transport != "macvtap":
+            continue
+        assert any(by_name[m].kind == "silicon" for m in link.members), (
+            f"segment {link.segment} is on a real NIC but has no silicon member — "
+            f"it could go fully green with the cable unplugged")
+
+
+def test_leg_count_matches_what_the_profile_says_the_board_exposes():
+    """The positional -nic -> PF binding is asserted, not assumed."""
+    from holobench.profiles.loader import load_profile
+    lab = load_lab("imx95-real-silicon")
+    emulated = [n for n in lab.nodes if n.kind == "emulated"]
+    for node in emulated:
+        legs = sum(1 for l in lab.links
+                   if l.type == "eth" and l.transport == "macvtap" and node.name in l.members)
+        declared = load_profile(node.profile).net.fabric_legs
+        assert legs == declared, (
+            f"{node.name} joins {legs} real-wire segment(s) but its profile declares "
+            f"fabric_legs={declared}. QEMU binds -nic backends BY POSITION and the "
+            f"initramfs binds each beacon to a FIXED PCI address, so a mismatch means "
+            f"a leg silently watches the wrong cable or finds no netdev at all.")
