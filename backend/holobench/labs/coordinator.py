@@ -103,7 +103,16 @@ async def _start_silicon_beacon(node, lab) -> tuple[bool, str]:
     remote = ROOT_OWNED if node.sudo else "/tmp/holobench-l2beacon.py"
     log = f"/tmp/holobench-{node.name}.log"
     watch = " ".join(f"0x{w:04x}" for w in node.watch)
-    run = f"python3 {remote} {node.iface} 0x{node.ethertype:04x} {watch}"
+    # ⚠️ A SUDO NODE MUST NAME THE INTERPRETER THE WAY THE SUDOERS RULE DOES.
+    # The rule is `/usr/bin/python3 /usr/local/sbin/l2beacon.py *` — an ABSOLUTE
+    # path. Invoking bare `python3` relies on sudo's secure_path resolving to that
+    # same binary, which is an assumption about a board's PATH, not a fact about
+    # it: secure_path puts /usr/local/sbin and /usr/local/bin FIRST, so a python3
+    # in either would resolve elsewhere, miss the rule, and demand a password —
+    # surfacing as "peer did not start" with nothing pointing at the cause.
+    # Naming it absolutely removes the assumption instead of testing it.
+    py = "/usr/bin/python3" if node.sudo else "python3"
+    run = f"{py} {remote} {node.iface} 0x{node.ethertype:04x} {watch}"
     # `sudo -n`: a board needing an INTERACTIVE password cannot be driven from a
     # backgrounded launch, and pretending otherwise produces a log full of sudo
     # errors that the scorer then reads as silence from the wire.
