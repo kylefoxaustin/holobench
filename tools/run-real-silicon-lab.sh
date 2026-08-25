@@ -53,8 +53,24 @@ for a in "$@"; do
     esac
 done
 
+# ── EVERY RUN IS RECORDED, because a result that lives only in a terminal is one
+# copy-paste away from being lost — and this lab has already had verdicts survive
+# only because logs were written to disk before teardown. The transcript is owned
+# by the invoking user (not root) so it can be read back without privilege.
+RUNLOG_DIR="$REPO/scratchpad-consoles/runs"
+[ -n "$RUN_AS" ] && as_user() { sudo -u "$RUN_AS" -H "$@"; } || as_user() { "$@"; }
+as_user mkdir -p "$RUNLOG_DIR" 2>/dev/null || mkdir -p "$RUNLOG_DIR"
+RUNLOG="$RUNLOG_DIR/run-$(date +%Y%m%d-%H%M%S).log"
+as_user touch "$RUNLOG" 2>/dev/null || touch "$RUNLOG"
+# Redirect EVERYTHING through tee from here on: stdout and stderr both, so a
+# "command not found" or a traceback lands in the file too. Those are exactly the
+# lines that mattered when a PASS was hidden under broken reporters.
+exec > >(tee -a "$RUNLOG") 2>&1
+echo "📝 transcript: $RUNLOG"
+
 [ "$(id -u)" -eq 0 ] || { echo "🛑 needs root (macvtap). Re-run with sudo."; exit 2; }
 [ -n "$RUN_AS" ] || echo "⚠️  no \$SUDO_USER — ssh will use ROOT's keys and will probably fail."
+
 
 hr() { echo; echo "═══════════════════════════════════════════════════════════════════════"; }
 step1=SKIPPED; step2=SKIPPED; step3=SKIPPED
@@ -133,3 +149,5 @@ echo "    wrapper that summarised its children's results would be inventing a"
 echo "    judgement it never made, which is the exact failure this lab keeps"
 echo "    catching: a step's exit status is not the same as its finding."
 echo "═══════════════════════════════════════════════════════════════════════"
+echo
+echo "📝 full transcript (stdout AND stderr): $RUNLOG"

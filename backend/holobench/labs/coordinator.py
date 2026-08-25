@@ -38,6 +38,35 @@ from .models import Lab, LabError
 # like eth labs (no longer env-gated). See docs/TOPOLOGIES.md §USB.
 
 
+def _as_invoking_user(argv) -> list[str]:
+    """Wrap a command so it runs as the user who invoked sudo, not as root.
+
+    ⚠️ SEVENTH FACE OF ONE CAUSE, and it cost two runs. The lab is launched under
+    sudo because creating a macvtap needs privilege, so everything here runs as
+    root — and ROOT'S ~/.ssh has never seen these boards. Kyle's has. Result:
+
+        SILICON frdm95 DID NOT START — cannot stage the beacon:
+        Host key verification failed.
+
+    The boards were reachable the entire time; the IDENTITY was wrong. Previously:
+    root's ssh keys, root's ssh config, root's $HOME, getuid()==0 chowning a device
+    away from QEMU, sudo -n demanding passwordless when already root, root's
+    known_hosts in the scorer — and now root's known_hosts HERE.
+
+    ⭐ AND THE REASON THIS IS A HELPER RATHER THAN A THIRD PATCH: I fixed the
+    scorer's _ssh last round and left these three call sites alone, so the same
+    bug came back from a different function. Fixing one call site of N is not
+    fixing the bug; it is relocating the symptom. Every ssh/scp in this package now
+    goes through here.
+
+    SUDO CHANGES WHO YOU ARE, AND EVERY USER-SCOPED IDENTITY MOVES WITH IT.
+    """
+    sudo_user = os.environ.get("SUDO_USER")
+    if sudo_user and os.geteuid() == 0:
+        return ["sudo", "-u", sudo_user, "-H", *argv]
+    return list(argv)
+
+
 async def _start_silicon_beacon(node, lab) -> tuple[bool, str]:
     """Stage and start tools/l2beacon.py on a REAL board, and PROVE it started.
 
@@ -68,7 +97,8 @@ async def _start_silicon_beacon(node, lab) -> tuple[bool, str]:
 
     async def _sh(*argv: str) -> tuple[int, str]:
         proc = await asyncio.create_subprocess_exec(
-            *argv, stdout=asyncio.subprocess.PIPE, stderr=asyncio.subprocess.STDOUT)
+            *_as_invoking_user(argv), stdout=asyncio.subprocess.PIPE,
+            stderr=asyncio.subprocess.STDOUT)
         out, _ = await proc.communicate()
         return proc.returncode, out.decode(errors="replace")
 
@@ -93,8 +123,9 @@ async def _stop_silicon_beacon(node) -> None:
     on a shared segment its testimony is indistinguishable from a live peer's."""
     try:
         proc = await asyncio.create_subprocess_exec(
-            "ssh", "-o", "BatchMode=yes", "-o", "ConnectTimeout=5", node.host,
-            "pkill -f holobench-l2beacon.py 2>/dev/null; true",
+            *_as_invoking_user((
+                "ssh", "-o", "BatchMode=yes", "-o", "ConnectTimeout=5", node.host,
+                "pkill -f holobench-l2beacon.py 2>/dev/null; true")),
             stdout=asyncio.subprocess.DEVNULL, stderr=asyncio.subprocess.DEVNULL)
         await proc.communicate()
     except Exception:
