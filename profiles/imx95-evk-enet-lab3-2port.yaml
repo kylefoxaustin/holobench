@@ -61,7 +61,7 @@
 #
 #   lab3-2port.cpio.gz         0c10d5f89a0563ebc84c6ba74f14fa71   ✓ verified
 #   imx95-19x19-evk-enetc.dtb  95129afb6f837dfeb21a969e207ef259   ✓ verified
-#   enet-lab3.c @ e5671cfa     475aef05405e094ac51245e0dcfee70a   ✓ verified, and
+#   enet-lab3.c @ d10d314a     475aef05405e094ac51245e0dcfee70a   ✓ verified, and
 #                              IDENTICAL in their worktree — no drift between what
 #                              was committed and what the artifact was built from.
 #
@@ -77,21 +77,39 @@
 #   can never prove "this file is what that commit produces", which makes
 #   `built_from_commit` a claim you can record and never check. 95emulator pinned
 #   all five non-determinism sources (mtime -> epoch 0, sorted members, owner 0:0,
-#   cpio --reproducible, gzip -n) and re-delivered at e5671cfa.
+#   cpio --reproducible, gzip -n) and re-delivered; base provenance pinned
+#   at d10d314a. ARTIFACT BYTES UNCHANGED across both — only the manifest grew.
 #
 #   VERIFIED HERE, NOT TAKEN ON TRUST (2026-08-23): built from a clean checkout of
-#   e5671cfa in a throwaway worktree -> md5 0c10d5f8... byte-identical to the
+#   d10d314a in a throwaway worktree -> md5 0c10d5f8... byte-identical to the
 #   delivered file. So this pin now answers BOTH questions, and anyone who was not
 #   in the room can re-derive it.
 #
-# ⚠️ THE CHAIN IS ONLY AS RE-DERIVABLE AS ITS WEAKEST LINK, and one link is still
-#   soft: the build consumes tests/busybox-initramfs/busybox-initramfs.cpio.gz
-#   (md5 4ef1ed3882cd2e5551f6712b1ccf7fe7 on this box), which is a BUILD PRODUCT —
-#   not in git, and not pinned in the MANIFEST. A pristine `git checkout && build`
-#   FAILS without it; the reproduction above required staging it by hand. So the
-#   2-port artifact is reproducible GIVEN that base, and the base itself is
-#   currently unpinned. Raised with 95emulator; recorded here so nobody reads this
-#   block as a stronger guarantee than it is.
+# ⚠️ THE WEAKEST LINK — NOW RECORDED, AND MY OWN VERIFICATION WAS WEAKER THAN I
+#   CLAIMED. I reported "rebuilt from a clean checkout -> byte-identical, so the
+#   pin is re-derivable." True, but 95emulator caught what that actually rested
+#   on: the build consumes tests/busybox-initramfs/busybox-initramfs.cpio.gz,
+#   a BUILD PRODUCT not in git — and my rebuild reproduced BECAUSE I HAPPENED TO
+#   STAGE THE SAME BASE. That was luck, not method. A different base would have
+#   yielded a different initrd md5 and nothing anywhere would have explained why;
+#   it would have looked like their builder regressing, which it would not have.
+#
+#   ⭐ THE LESSON IS ABOUT VERIFICATION, NOT ABOUT THEIR BUILDER: reproducing an
+#     artifact proves nothing about determinism unless you ALSO pinned the INPUTS.
+#     I checked the output twice and never once checked what went in.
+#
+#   FIXED at their end (commit d10d314a); the manifest now carries:
+#     busybox_base_md5  4ef1ed3882cd2e5551f6712b1ccf7fe7  <- VERIFIED here, and it
+#                       is exactly the file I staged — so the reproduction above is
+#                       now reproducible ON PURPOSE rather than by coincidence
+#     busybox_bin_md5   94e67d20bf75ecf553cd4fcf8edfdb74  (the embedded member)
+#     cross_cc          aarch64-linux-gnu 11
+#   A base mismatch is now legible AS a base mismatch.
+#
+#   ⚠️ STILL NOT CLOSED, and 95emulator names it rather than papering over it:
+#   where the BASE itself comes from is unpinned. The honest description is
+#   "reproducible given a base whose provenance is recorded but not derivable" —
+#   two steps better than where this started, and not the same as reproducible.
 
 id:           imx95-evk-enet-lab3-2port
 display_name: "NXP i.MX 95 EVK (2-port real-wire lab, 0x88B7 on two macvtaps)"
