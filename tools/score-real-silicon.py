@@ -135,6 +135,34 @@ def _rx_from(log: str) -> int:
     return max(vals) if vals else 0
 
 
+def _evidence_tail(log: str, n: int = 12) -> list[str]:
+    """The raw log beside the verdict — 93emulator's refinement.
+
+    ⭐ THE HONESTY LADDER, built across this thread:
+        quiet < red < red-that-SHOWS-the-evidence < red-that-NAMES-the-cause
+
+    A verdict here is computed from COUNTS I derived using TOKENS I CHOSE. If that
+    parsing is wrong in any way — a renamed token, a truncated log, a partial ssh
+    read — then `rx=0` is wrong, and a FAIL saying "the real board did not receive"
+    would confidently accuse THE WIRE when the bug is in my grep. That is 95's
+    "red is not automatically honest": a red naming the wrong cause sends the next
+    person to the cable while the fault sits in the harness.
+
+    Naming a cause is the top of the ladder but it is also the easiest thing to get
+    WRONG, because it requires me to be right about why. Showing the evidence is
+    cheaper and more robust: I dump what I actually have, and a reader who sees
+    `rx=0` next to visible PASS lines self-corrects without me. So every non-PASS
+    verdict carries the raw log, not just my summary of it.
+    """
+    lines = [l for l in log.strip().splitlines() if l.strip()]
+    if not lines:
+        return ["      (board log is EMPTY — nothing was captured at all)"]
+    head = ["      ── raw board log (the evidence, not my summary of it) ──"]
+    if len(lines) > n:
+        head.append(f"      … {len(lines) - n} earlier line(s) elided; full copy in scratchpad-consoles/")
+    return head + [f"      | {l[:150]}" for l in lines[-n:]]
+
+
 def score_leg(node, board_log: str, guest_console: str) -> tuple[str, list[str]]:
     """Grade one leg. Returns (PASS|FAIL|INCONCLUSIVE, notes)."""
     notes: list[str] = []
@@ -145,6 +173,7 @@ def score_leg(node, board_log: str, guest_console: str) -> tuple[str, list[str]]
         tail = board_log.strip().splitlines()[-1][:140] if board_log.strip() else "(empty log)"
         notes.append(f"the board's beacon NEVER STARTED — {tail}")
         notes.append("nothing was listening, so silence here is not evidence about the wire")
+        notes.extend(_evidence_tail(board_log))
         return ("INCONCLUSIVE", notes)
 
     board_passes = board_log.count(BOARD_PASS)
@@ -156,6 +185,9 @@ def score_leg(node, board_log: str, guest_console: str) -> tuple[str, list[str]]
     if board_rx <= 0 or board_passes <= 0:
         notes.append(f"⭐ the REAL BOARD did not receive 0x{GUEST_ET:04x} — this is a "
                      f"genuine negative and the load-bearing one")
+        notes.append("   …IF my parse is right. rx/PASS are counts I derived with tokens "
+                     "I chose, so read the log below before believing the wire is at fault:")
+        notes.extend(_evidence_tail(board_log))
         return ("FAIL", notes)
 
     if board_corrupt:
@@ -174,6 +206,10 @@ def score_leg(node, board_log: str, guest_console: str) -> tuple[str, list[str]]
         notes.append(f"⚠️ guest logged {guest_console.count(GUEST_CORRUPT)} CORRUPT — "
                      f"the real board's frames arrived malformed to the model.")
 
+    if not guest_saw:
+        # One-way is a real result, but the reader must be able to see WHY the
+        # guest was silent rather than take my word that it was.
+        notes.extend(_evidence_tail(guest_console, 8))
     return ("PASS" if guest_saw else "INCONCLUSIVE", notes)
 
 
