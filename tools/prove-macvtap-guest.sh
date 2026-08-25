@@ -169,10 +169,24 @@ peer_pw_verify() {
 peer_beacon() {   # <logfile> <runtime> <extra-args>
     local log="$1" rt="$2" extra="$3"
     local cmd="python3 /tmp/l2beacon.py --runtime $rt $FRDM_IF $FRDM_ET $extra"
+    rm -f /tmp/hb-peer-start.txt
     if [ "$PEER_SUDO" = "1" ]; then
+        # ⚠️ THE BUG THIS SHAPE EXISTS TO AVOID, and it cost a run:
+        #     ssh host "sudo -S -p '' nohup $cmd > $log 2>&1 &"
+        # That `&` backgrounds SUDO ITSELF on the far side, and a background job's
+        # stdin is detached from the pipe — so a password piped in never reaches it
+        # and sudo reports "no password was provided". The identical pipe worked in
+        # peer_pw_verify because THAT sudo ran in the foreground. One character
+        # apart, and the failure text blames the credential rather than the
+        # backgrounding.
+        # ⭐ SO BACKGROUND THE **LOCAL** ssh INSTEAD. Remote sudo then runs in its
+        # session's foreground and reads the pipe normally; the & applies to the
+        # whole local pipeline, whose first member (printf) does not read stdin.
         printf '%s\n' "$PEER_PW" | as_user ssh -o BatchMode=yes -o ConnectTimeout=5 \
-            "$FRDM_HOST" "sudo -S -p '' nohup $cmd > $log 2>&1 & sleep 2; head -2 $log" \
-            > /tmp/hb-peer-start.txt 2>&1
+            "$FRDM_HOST" "sudo -S -p '' $cmd > $log 2>&1" >/dev/null 2>&1 &
+        PEER_SSH_PID=$!
+        sleep 3
+        ssh_b "$FRDM_HOST" "head -3 $log 2>/dev/null" > /tmp/hb-peer-start.txt 2>&1
     else
         ssh_b "$FRDM_HOST" "nohup $cmd > $log 2>&1 & sleep 2; head -2 $log" \
             > /tmp/hb-peer-start.txt 2>&1
@@ -188,12 +202,6 @@ peer_beacon() {   # <logfile> <runtime> <extra-args>
         say "     ⚠️  PEER BEACON DID NOT START: $(tail -1 /tmp/hb-peer-start.txt | cut -c1-120)"
     fi
 }
-
-pass=0; fail=0; incon=0
-ok()    { echo "  ✅ PASS       $*"; pass=$((pass+1)); }
-no()    { echo "  ❌ FAIL       $*"; fail=$((fail+1)); }
-huh()   { echo "  ⚠️  INCONCLUSIVE $*"; incon=$((incon+1)); }
-say()   { echo "$*"; }
 
 # ── PREFLIGHT THAT REFUSES A VERDICT ────────────────────────────────────────
 # A setup that cannot work must never reach the scoring code. This is the exact
