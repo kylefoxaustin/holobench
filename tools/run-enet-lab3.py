@@ -13,6 +13,16 @@ wiring. It does not SCORE it, and the scoring is the whole argument:
   * **Grep the TOKEN, not the substring.** rt1180's monitor once matched its own `need 0x88b7`
     BANNER and shouted PASS twelve times at an empty wire.
   * **A timeout is INCONCLUSIVE, never a FAILURE** (mcxn947). A killed run is not a caught bug.
+    ⚠️ UNTESTED-BY-ASSERTION as of 2026-08-25 (holobench). The behaviour IS implemented —
+    the calibration branch below routes to `unscoreable` + `inconclusive` and prints
+    "Unscoreable, NOT failed" — but NO TEST PINS IT. The only tests that load this file
+    exercise Beats.departure_silence (clock handling, backlog), not this rule.
+    So if it ever drifted, THIS DOCSTRING WOULD STILL SAY IT HOLDS.
+    ⭐ That matters because I cited this very line to another session as evidence that the
+    rule holds. The claim was true and the EVIDENCE was documentation — and documentation
+    is the one kind of evidence that agrees with you even when the code does not. A comment
+    is a claim somebody made once; citing it as proof of behaviour cites a claim as an
+    observation. Dated so this gap is visible AS a gap rather than expiring silently.
 
 THE FOUR THINGS THIS SCORER LEARNED FROM THE FLEET'S DEPARTURE-TEST FAILURES (mcxn947,
 2026-07-14 01:03 — six attempts, and NOT ONE failure was in the firmware):
