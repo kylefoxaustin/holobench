@@ -109,8 +109,14 @@ else
     # Recorded here so the shortcut cannot quietly become the design.
     # Asset paths resolve from the repo (not $HOME), and the venv python is called
     # by absolute path, so running as root does not misresolve either.
-    "$REPO/.venv/bin/python" -m holobench.cli lab launch imx95-real-silicon \
-        --hold 90 --no-auto-ip
+    # NOT `lab launch`. That brings the lab up and HOLDS it — it does not SCORE
+    # it, so the run would end in a console dump that somebody reads by eye. Eye-
+    # reading is how "the token appears somewhere in the output" becomes a PASS.
+    # score-real-silicon.py grades each leg on the REAL BOARD's log (fetched off
+    # the board over ssh) and treats the guest's console as corroboration only —
+    # the guest is on a macvtap where frames can be locally switched, so its own
+    # PASS is compatible with nothing leaving the NIC.
+    "$REPO/.venv/bin/python" "$REPO/tools/score-real-silicon.py"
     rc=$?
     if [ $rc -eq 0 ]; then step3=RAN; else step3="EXIT=$rc"; fi
 fi
