@@ -31,6 +31,7 @@ its own text. Search the tree you are changing FIRST.
 from __future__ import annotations
 
 import re
+import subprocess
 from pathlib import Path
 
 import pytest
@@ -40,6 +41,54 @@ L2BEACON = REPO / "tools" / "l2beacon.py"
 SCORE_RS = REPO / "tools" / "score-real-silicon.py"
 RUN_LAB3 = REPO / "tools" / "run-enet-lab3.py"
 ENET_LAB3_C = Path.home() / "Documents/GitHub/95emulator/tests/enet-lab3/enet-lab3.c"
+
+# ⚠️ SKIP ONLY WHEN THE CHECKOUT IS ABSENT — NOT WHEN THE FILE MOVED.
+# 95emulator switched to an upstream branch (imx95-v2-clean) on 2026-08-25 and
+# enet-lab3.c vanished from the worktree. These pins SKIPPED. Six of them, silently.
+#   ⭐ A DRIFT CHECK THAT GOES QUIET ON DRIFT IS NOT A DRIFT CHECK. That is exactly
+#   93emulator's quiet-vs-red distinction, in my own suite, one day after banking it.
+# The original call was right — a dev box without the sibling checkout is not a
+# broken repo. But "the repo is not here" and "the repo is here and the file is
+# gone" are DIFFERENT FACTS, and only the first is a reason to say nothing.
+ENET_LAB3_REPO = Path.home() / "Documents/GitHub/95emulator"
+# ⭐ PIN THE COMMIT, NOT THE CHECKOUT — holobench's own rule, which these tests
+# were violating. They read the WORKTREE, so when 95emulator switched to their
+# upstream branch (imx95-v2-clean) on 2026-08-25 the file vanished and six pins
+# went SILENT. A worktree is whatever someone last checked out; a commit is a
+# fact. We verified the contract at d10d314a, so that is what we compare against —
+# and a branch switch can no longer make a drift check disappear.
+PINNED_COMMIT = "d10d314a4b354f512dcc74325cd08b16ec65b92c"
+PINNED_PATH = "tests/enet-lab3/enet-lab3.c"
+
+
+def _emulator_source() -> str:
+    """The pinned contract source, read from the COMMIT. '' when unavailable."""
+    if not ENET_LAB3_REPO.is_dir():
+        return ""
+    try:
+        out = subprocess.run(
+            ["git", "-C", str(ENET_LAB3_REPO), "show",
+             f"{PINNED_COMMIT}:{PINNED_PATH}"],
+            capture_output=True, text=True, timeout=15)
+    except (OSError, subprocess.SubprocessError):
+        return ""
+    return out.stdout if out.returncode == 0 else ""
+
+
+def _require_emulator_source() -> str:
+    """Skip only when the checkout is ABSENT; fail loudly when the pinned commit
+    is present-but-unreachable, because that is drift and not absence."""
+    if not ENET_LAB3_REPO.is_dir():
+        pytest.skip("95emulator checkout not present on this box")
+    src = _emulator_source()
+    if not src:
+        pytest.fail(
+            f"{ENET_LAB3_REPO} exists but {PINNED_PATH} is not readable at pinned "
+            f"commit {PINNED_COMMIT[:12]} — the commit we VERIFIED the wire contract "
+            f"against is gone (gc'd? re-cloned?). This is drift, not absence, and it "
+            f"must not pass as a skip.")
+    return src
+
 
 
 def _consts(path: Path) -> dict[str, str]:
@@ -78,8 +127,6 @@ def test_the_up_token_gates_participation_and_must_keep_its_colon():
 
 # ── tokens produced by an emitter WE DO NOT OWN ─────────────────────────────
 
-@pytest.mark.skipif(not ENET_LAB3_C.exists(),
-                    reason="95emulator checkout not present on this box")
 @pytest.mark.parametrize("src,name", [(SCORE_RS, "GUEST_PASS"),
                                       (SCORE_RS, "GUEST_CORRUPT"),
                                       (RUN_LAB3, "PASS_TOKEN"),
@@ -91,8 +138,9 @@ def test_guest_tokens_still_exist_in_the_emulator_source(src, name):
     instead of every future run scoring INCONCLUSIVE while the lab looks quiet
     and nobody can say when it stopped asserting.
     """
+    _SRC = _require_emulator_source()
     token = _consts(src)[name]
-    assert token in ENET_LAB3_C.read_text(), (
+    assert token in _SRC, (
         f"{src.name} greps {token!r} but 95emulator's enet-lab3.c no longer emits "
         f"it. The emitter moved and our scorer did not follow — see this file's "
         f"header for why that fails silently rather than loudly.")

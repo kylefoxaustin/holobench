@@ -26,6 +26,7 @@ from __future__ import annotations
 
 import importlib.util
 import re
+import subprocess
 import struct
 from pathlib import Path
 
@@ -38,6 +39,54 @@ BEACON_PY = REPO / "tools" / "l2beacon.py"
 # skips the drift test rather than failing it — a dev box without the sibling
 # checkout is not a broken repo.
 ENET_LAB3_C = Path.home() / "Documents/GitHub/95emulator/tests/enet-lab3/enet-lab3.c"
+
+# ⚠️ SKIP ONLY WHEN THE CHECKOUT IS ABSENT — NOT WHEN THE FILE MOVED.
+# 95emulator switched to an upstream branch (imx95-v2-clean) on 2026-08-25 and
+# enet-lab3.c vanished from the worktree. These pins SKIPPED. Six of them, silently.
+#   ⭐ A DRIFT CHECK THAT GOES QUIET ON DRIFT IS NOT A DRIFT CHECK. That is exactly
+#   93emulator's quiet-vs-red distinction, in my own suite, one day after banking it.
+# The original call was right — a dev box without the sibling checkout is not a
+# broken repo. But "the repo is not here" and "the repo is here and the file is
+# gone" are DIFFERENT FACTS, and only the first is a reason to say nothing.
+ENET_LAB3_REPO = Path.home() / "Documents/GitHub/95emulator"
+# ⭐ PIN THE COMMIT, NOT THE CHECKOUT — holobench's own rule, which these tests
+# were violating. They read the WORKTREE, so when 95emulator switched to their
+# upstream branch (imx95-v2-clean) on 2026-08-25 the file vanished and six pins
+# went SILENT. A worktree is whatever someone last checked out; a commit is a
+# fact. We verified the contract at d10d314a, so that is what we compare against —
+# and a branch switch can no longer make a drift check disappear.
+PINNED_COMMIT = "d10d314a4b354f512dcc74325cd08b16ec65b92c"
+PINNED_PATH = "tests/enet-lab3/enet-lab3.c"
+
+
+def _emulator_source() -> str:
+    """The pinned contract source, read from the COMMIT. '' when unavailable."""
+    if not ENET_LAB3_REPO.is_dir():
+        return ""
+    try:
+        out = subprocess.run(
+            ["git", "-C", str(ENET_LAB3_REPO), "show",
+             f"{PINNED_COMMIT}:{PINNED_PATH}"],
+            capture_output=True, text=True, timeout=15)
+    except (OSError, subprocess.SubprocessError):
+        return ""
+    return out.stdout if out.returncode == 0 else ""
+
+
+def _require_emulator_source() -> str:
+    """Skip only when the checkout is ABSENT; fail loudly when the pinned commit
+    is present-but-unreachable, because that is drift and not absence."""
+    if not ENET_LAB3_REPO.is_dir():
+        pytest.skip("95emulator checkout not present on this box")
+    src = _emulator_source()
+    if not src:
+        pytest.fail(
+            f"{ENET_LAB3_REPO} exists but {PINNED_PATH} is not readable at pinned "
+            f"commit {PINNED_COMMIT[:12]} — the commit we VERIFIED the wire contract "
+            f"against is gone (gc'd? re-cloned?). This is drift, not absence, and it "
+            f"must not pass as a skip.")
+    return src
+
 
 
 def _load():
@@ -202,8 +251,6 @@ def test_legacy_body_is_counted_but_is_not_a_gate_satisfying_sighting():
 
 # ── the contract must not drift out from under us ───────────────────────────
 
-@pytest.mark.skipif(not ENET_LAB3_C.exists(),
-                    reason="95emulator checkout not present on this box")
 def test_transcription_matches_the_emulator_source():
     """⭐ THE PIN. The emulator repo owns this contract; we only transcribe it.
 
@@ -212,7 +259,8 @@ def test_transcription_matches_the_emulator_source():
     at 4am and the model getting blamed for it. A path is not an artifact: pin
     the value, and refuse to proceed on drift.
     """
-    src = ENET_LAB3_C.read_text()
+    _SRC = _require_emulator_source()
+    src = _SRC
 
     def cdef(name):
         m = re.search(r"^#define\s+%s\s+(0x[0-9A-Fa-f]+u?|\d+)" % name, src, re.M)
@@ -228,11 +276,10 @@ def test_transcription_matches_the_emulator_source():
             % (name, cdef(name), getattr(lb, name)))
 
 
-@pytest.mark.skipif(not ENET_LAB3_C.exists(),
-                    reason="95emulator checkout not present on this box")
 def test_the_lab_ethertypes_are_inside_the_block():
     """The FRDM and Orin ethertypes must be ones an enet-lab3 node can actually
     see. This is 95emulator's CATCH 1 as an executable assertion."""
+    _SRC = _require_emulator_source()
     for name, et in (("real FRDM", FRDM_ET), ("real Orin", ORIN_ET),
                      ("emulated i.MX 95", MY_ET)):
         assert lb.is_beacon_et(et), (
