@@ -126,12 +126,44 @@ scp_b()  { as_user scp  -o BatchMode=yes -o ConnectTimeout=5 "$@"; }
 # it to `sudo -S` on stdin. Nothing is written to disk and nothing persists past
 # the run. (setcap on the peer's python3 would grant CAP_NET_RAW to every python
 # invocation by any user; a NOPASSWD rule on a /tmp path would be a root hole.)
-PEER_PW=""
+PEER_PW="${PEER_PW:-}"
 peer_pw_prompt() {
     [ "$PEER_SUDO" = "1" ] || return 0
-    [ -z "$PEER_PW" ] || return 0
-    printf '   sudo password for %s (the %s peer, NOT skippy): ' "$FRDM_HOST" "$LEG" >&2
-    read -rs PEER_PW < /dev/tty; echo >&2
+    [ -n "$PEER_PW" ] && { say "     (peer password supplied via \$PEER_PW)"; return 0; }
+
+    # ⚠️ THE BUG THIS NOW CATCHES, and it is the lab's own recurring class committed
+    # in the credential path: `read < /dev/tty` FAILS SILENTLY when there is no
+    # controlling terminal (a wrapped/piped/`!`-prefixed invocation). The PROMPT
+    # still prints — it goes to stderr — so a human sees it, types a password into
+    # nothing, and the script carries on with PEER_PW empty. `sudo -S` then reports
+    # "no password was provided" on the far board, and every phase that follows is
+    # measuring a peer that could never have started.
+    #   A STEP THAT DID NOT WORK MUST NOT BE CARRIED ON AS IF IT HAD.
+    if [ ! -r /dev/tty ]; then
+        say "     ⚠️  no controlling terminal — cannot prompt for the $LEG peer's password."
+        return 1
+    fi
+    printf '   sudo password for %s (the %s peer, NOT skippy): ' "$FRDM_HOST" "$LEG" > /dev/tty
+    if ! read -rs PEER_PW < /dev/tty; then
+        printf '\n' > /dev/tty
+        say "     ⚠️  could not read from the terminal — password NOT captured."
+        PEER_PW=""
+        return 1
+    fi
+    printf '\n' > /dev/tty
+    [ -n "$PEER_PW" ] || { say "     ⚠️  empty password entered."; return 1; }
+    return 0
+}
+
+# ⭐ PROVE THE CREDENTIAL BEFORE ANYTHING DEPENDS ON IT. "Every participant must
+# prove it participated" applies to the password too: a credential that does not
+# work is a participant that will not show up, and discovering that four phases
+# later means four phases of measurements about a peer that was never there.
+peer_pw_verify() {
+    [ "$PEER_SUDO" = "1" ] || return 0
+    [ -n "$PEER_PW" ] || return 1
+    printf '%s\n' "$PEER_PW" | as_user ssh -o BatchMode=yes -o ConnectTimeout=5 \
+        "$FRDM_HOST" "sudo -S -p '' true" >/dev/null 2>&1
 }
 
 peer_beacon() {   # <logfile> <runtime> <extra-args>
@@ -223,7 +255,22 @@ else
     say "     (fix ssh, or pass FRDM_HOST=..., and re-run. Not scoring these.)"
     FRDM_OK=0
 fi
-peer_pw_prompt
+if [ "$PEER_SUDO" = "1" ]; then
+    if ! peer_pw_prompt || ! peer_pw_verify; then
+        say
+        say "🛑 ABORTED — NO VERDICT GIVEN: no working sudo credential for the $LEG peer"
+        say "   ($FRDM_HOST). Its AF_PACKET receiver needs root, so WITHOUT this every"
+        say "   phase below would measure a peer that could never have started — and"
+        say "   report silence that says nothing about the wire."
+        say "   Fix, in order of preference:"
+        say "     · run this from a REAL terminal (a wrapped/piped invocation has no"
+        say "       /dev/tty to prompt on — that is exactly what just happened);"
+        say "     · or pass it in:  PEER_PW='...' sudo -E bash tools/prove-macvtap-guest.sh"
+        say "     · or run the LAN leg only, which needs no peer password."
+        exit 2
+    fi
+    say "     ✅ peer credential VERIFIED against $FRDM_HOST (sudo -S true succeeded)"
+fi
 say
 
 # ── Q3 FIRST: IDLE CONTROL. Can this receiver tell silence from traffic? ────
