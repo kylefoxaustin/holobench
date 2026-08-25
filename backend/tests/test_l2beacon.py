@@ -286,3 +286,89 @@ def test_the_lab_ethertypes_are_inside_the_block():
             "%s uses 0x%04x, outside 0x%04x..0x%04x — every enet-lab3 node would "
             "silently ignore it" % (name, et, lb.BEACON_ET_LO, lb.BEACON_ET_HI))
     assert len({MY_ET, FRDM_ET, ORIN_ET}) == 3, "nodes must not share an ethertype"
+
+
+# ── the fifth rung: does the NEGATIVE CONTROL itself detect a broken oracle? ──
+#
+# qualcomm's contribution (2026-08-25), from four instances in a completely
+# different domain — a builder carrying a SyntaxError read as success, a self-test
+# passing against a regex that could never match, a checker reporting "0 ungated,
+# 0 gated" because its path resolver was wrong:
+#
+#     A CHECK THAT DID NOT RUN LOOKS EXACTLY LIKE A CHECK THAT PASSED.
+#
+# Their point lands above this lab's whole ladder: quiet < red < red-that-SHOWS <
+# red-that-NAMES all assume THE CHECK RAN. The rung above is a check with a
+# negative control — plant the fault and watch it fire — because that is the only
+# rung that survives the harness itself being broken.
+#
+# ⭐ APPLIED HERE IT IS UNCOMFORTABLE. prove-oracle-bites.sh proves the BOARD's
+# oracle can refuse. Nothing has ever proved that the CONTROL can detect a board
+# whose oracle CANNOT refuse. Its four phases would report "controls_held=4/4" if
+# they were measuring a receiver that accepts everything — provided that receiver
+# also happened to stay quiet. So: cripple the oracle deliberately and assert the
+# control notices.
+
+def _crippled_classify(buf, my_et, wanted):
+    """An oracle with its body gates removed — accepts any in-block ethertype.
+
+    This is the failure the negative control exists to catch, and until it was
+    planted, nobody had seen the control react to it.
+    """
+    if len(buf) < 14:
+        return (lb.V_FOREIGN, None, None, None, "runt")
+    et = struct.unpack("!H", buf[12:14])[0]
+    if et == my_et:
+        return (lb.V_SELF, et, None, None, None)
+    if not lb.is_beacon_et(et) or et not in wanted:
+        return (lb.V_FOREIGN, et, None, None, None)
+    return (lb.V_OK, et, 1, 0xABCD1234, None)      # <- accepts ANY body
+
+
+def test_the_negative_control_detects_an_oracle_that_cannot_refuse():
+    """Plant the fault the control exists to catch, and confirm it fires.
+
+    The control's phases are: ARMED must be accepted; WRONG-ET, CORRUPT and
+    LEGACY must be REFUSED. Against a healthy oracle, exactly one is accepted.
+    Against a crippled one, the body-based controls stop refusing — and that
+    difference is what makes `controls_held=4/4` a measurement rather than a
+    formality.
+    """
+    phases = [
+        ("ARMED",    FRDM_ET, {},                                    True),
+        ("WRONG-ET", 0x88BE,  {},                                    False),
+        ("CORRUPT",  FRDM_ET, {"magic": True},                       False),
+        ("LEGACY",   FRDM_ET, {"incarn": lb.INCARN_LEGACY},          False),
+    ]
+
+    def frame(et, mut):
+        f = bytearray(lb.build_frame(FRDM_MAC, et, 7,
+                                     mut.get("incarn", 0xA5A5A5A5)))
+        if mut.get("magic"):
+            struct.pack_into("!I", f, lb.MAGIC_OFF, 0xDEADBEEF)
+        return bytes(f)
+
+    healthy = {n: lb.classify(frame(et, m), MY_ET, {FRDM_ET}) [0] == lb.V_OK
+               for n, et, m, _ in phases}
+    crippled = {n: _crippled_classify(frame(et, m), MY_ET, {FRDM_ET})[0] == lb.V_OK
+                for n, et, m, _ in phases}
+
+    # A healthy oracle behaves exactly as the control's design requires.
+    for name, _, _, expect_accept in phases:
+        assert healthy[name] == expect_accept, (
+            f"healthy oracle got {name} wrong — the control's premise is broken")
+
+    # ⭐ THE ACTUAL ASSERTION: the crippled oracle must differ, on the body gates.
+    broke = [n for n, _, _, expect in phases if crippled[n] != expect]
+    assert broke, (
+        "PLANTED A CRIPPLED ORACLE AND THE CONTROL SAW NO DIFFERENCE. "
+        "controls_held=4/4 would then be a formality, not a measurement — the "
+        "control cannot distinguish a receiver that refuses from one that accepts "
+        "everything, and every green it has ever produced is void.")
+    assert "CORRUPT" in broke and "LEGACY" in broke, (
+        f"the control noticed {broke}, but the BODY gates (CORRUPT/LEGACY) are the "
+        f"ones that separate 'I saw a frame' from 'I saw an ethertype' — if those "
+        f"do not flip, the control is not testing what it claims to test")
+    # WRONG-ET is ethertype-level, so a body-crippled oracle still refuses it.
+    # Stated so the asymmetry is deliberate rather than an unnoticed gap.
+    assert "WRONG-ET" not in broke
