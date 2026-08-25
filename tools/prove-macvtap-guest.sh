@@ -203,6 +203,19 @@ peer_beacon() {   # <logfile> <runtime> <extra-args>
     fi
 }
 
+# ── verdict counters + reporters ────────────────────────────────────────────
+# ⚠️ These were DELETED by a careless patch on 2026-08-25: a scripted replace took
+# the whole span from `peer_beacon() {` to the preflight marker without checking
+# what else lived in it, and these sat in the middle. The script then ran with
+# `say: command not found` scattered through a live run on real hardware.
+#   ⭐ A RANGE REPLACE IS A CLAIM ABOUT EVERY LINE IN THE RANGE. Read the span
+#   before you replace it — the same act that fixes the citation faces.
+pass=0; fail=0; incon=0
+ok()    { echo "  ✅ PASS       $*"; pass=$((pass+1)); }
+no()    { echo "  ❌ FAIL       $*"; fail=$((fail+1)); }
+huh()   { echo "  ⚠️  INCONCLUSIVE $*"; incon=$((incon+1)); }
+say()   { echo "$*"; }
+
 # ── PREFLIGHT THAT REFUSES A VERDICT ────────────────────────────────────────
 # A setup that cannot work must never reach the scoring code. This is the exact
 # lesson from the proof script that printed "paths proven: 2, failed: 0" while

@@ -48,6 +48,7 @@ that keeps only its verdict has destroyed the thing that could overturn it.
 from __future__ import annotations
 
 import asyncio
+import os
 import re
 import shutil
 import subprocess
@@ -115,9 +116,30 @@ def _verify_tokens_still_exist() -> list[str]:
 
 
 def _ssh(host: str, cmd: str, timeout: float = 10.0) -> tuple[int, str]:
+    """ssh to a real board AS THE INVOKING USER, never as root.
+
+    ⚠️ THE SIXTH SUDO-IDENTITY BUG IN THIS LAB, and it aborted a whole run:
+        frdm95: cannot reach root@10.0.1.181 — Host key verification failed
+        orin:   cannot reach kyle@10.0.1.124 — Host key verification failed
+    The lab is launched under sudo (macvtap needs privilege), so this scorer runs
+    as root — and ROOT'S known_hosts has never seen these boards. Kyle's has. The
+    boards were reachable the whole time; the identity was wrong.
+
+    ⭐ SUDO CHANGES WHO YOU ARE, AND EVERY USER-SCOPED IDENTITY MOVES WITH IT.
+    Previously: root's ssh KEYS, root's ssh CONFIG, root's $HOME, os.getuid()==0
+    chowning a device away from QEMU, sudo -n demanding passwordless when already
+    root — and now root's KNOWN_HOSTS. Six faces, one cause.
+
+    The preflight caught this and refused a verdict, which is the system working:
+    it did not score a lab whose peers it could not reach.
+    """
+    argv = ["ssh", "-o", "BatchMode=yes", "-o", f"ConnectTimeout={int(timeout)}", host, cmd]
+    sudo_user = os.environ.get("SUDO_USER")
+    if sudo_user and os.geteuid() == 0:
+        argv = ["sudo", "-u", sudo_user, "-H"] + argv
     try:
         p = subprocess.run(
-            ["ssh", "-o", "BatchMode=yes", "-o", f"ConnectTimeout={int(timeout)}", host, cmd],
+            argv,
             capture_output=True, text=True, timeout=timeout + 5)
         return p.returncode, (p.stdout or "") + (p.stderr or "")
     except subprocess.TimeoutExpired:
