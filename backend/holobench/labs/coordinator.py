@@ -19,6 +19,7 @@ gadget at HIGH speed and binds /dev/ttyACM0 (docs/TOPOLOGIES.md §USB).
 from __future__ import annotations
 
 import asyncio
+import hashlib
 import os
 from enum import Enum
 from pathlib import Path
@@ -85,7 +86,21 @@ async def _start_silicon_beacon(node, lab) -> tuple[bool, str]:
     if not shutil.which("ssh"):
         return (False, "no ssh on this host")
 
-    remote = "/tmp/holobench-l2beacon.py"
+    # ⚠️ WHICH PATH WE RUN IS A SECURITY DECISION, not a convenience one.
+    #
+    # A board that needs sudo can only be driven non-interactively via a NOPASSWD
+    # rule — and a NOPASSWD rule pointing at a USER-WRITABLE path is a straight
+    # root hole: anyone who can write /tmp then chooses what runs as root. So a
+    # sudo node runs the ROOT-OWNED copy, which this code deliberately does NOT
+    # stage over (staging over it would defeat the ownership that makes it safe).
+    #
+    # The cost of that safety is DRIFT: a root-owned copy cannot be refreshed by
+    # the run, so it can silently go stale and the lab would be exercising old
+    # firmware while reporting on new. That is checked below and REFUSED, not
+    # warned about — a stale beacon produces plausible numbers, which is worse
+    # than none.
+    ROOT_OWNED = "/usr/local/sbin/l2beacon.py"
+    remote = ROOT_OWNED if node.sudo else "/tmp/holobench-l2beacon.py"
     log = f"/tmp/holobench-{node.name}.log"
     watch = " ".join(f"0x{w:04x}" for w in node.watch)
     run = f"python3 {remote} {node.iface} 0x{node.ethertype:04x} {watch}"
@@ -102,10 +117,27 @@ async def _start_silicon_beacon(node, lab) -> tuple[bool, str]:
         out, _ = await proc.communicate()
         return proc.returncode, out.decode(errors="replace")
 
-    rc, out = await _sh("scp", "-o", "BatchMode=yes", "-o", "ConnectTimeout=5",
-                        str(beacon), f"{node.host}:{remote}")
-    if rc != 0:
-        return (False, f"cannot stage the beacon: {out.strip()[:160]}")
+    if node.sudo:
+        # Do not stage: verify. The point of the root-owned path is that we cannot
+        # write it — so prove it is the same beacon we would have staged.
+        want = hashlib.md5(beacon.read_bytes()).hexdigest()
+        rc, out = await _sh("ssh", "-o", "BatchMode=yes", "-o", "ConnectTimeout=5",
+                            node.host, f"md5sum {remote} 2>/dev/null | cut -d' ' -f1")
+        got = out.strip().splitlines()[-1].strip() if out.strip() else ""
+        if rc != 0 or not got:
+            return (False, f"{remote} not present on {node.host}. A sudo node runs the "
+                           f"ROOT-OWNED beacon (a NOPASSWD rule on a user-writable path "
+                           f"would be a root hole). Install it there once, as root.")
+        if got != want:
+            return (False, f"{remote} is STALE on {node.host} (md5 {got[:12]}… vs "
+                           f"{want[:12]}… here). REFUSING to start it: a stale beacon "
+                           f"produces plausible numbers about the wrong firmware, which "
+                           f"is worse than none. Re-install it there as root.")
+    else:
+        rc, out = await _sh("scp", "-o", "BatchMode=yes", "-o", "ConnectTimeout=5",
+                            str(beacon), f"{node.host}:{remote}")
+        if rc != 0:
+            return (False, f"cannot stage the beacon: {out.strip()[:160]}")
 
     rc, out = await _sh("ssh", "-o", "BatchMode=yes", "-o", "ConnectTimeout=5",
                         node.host, f"nohup {run} > {log} 2>&1 & sleep 2; head -3 {log}")
