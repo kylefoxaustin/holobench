@@ -72,6 +72,46 @@ BOARD_UP = "L2BEACON UP:"
 BOARD_CORRUPT = "L2BEACON CORRUPT"
 
 EVIDENCE = Path(__file__).resolve().parent.parent / "scratchpad-consoles" / "real-silicon"
+L2BEACON_SRC = Path(__file__).resolve().parent / "l2beacon.py"
+ENET_LAB3_C = Path.home() / "Documents/GitHub/95emulator/tests/enet-lab3/enet-lab3.c"
+
+
+def _verify_tokens_still_exist() -> list[str]:
+    """⭐ FAIL LOUD, NOT QUIET — 93emulator's distinction, applied at RUN time.
+
+    Their token consumer ASSERTS (`die "both nodes must reach PASS"`), so a rename
+    makes it go RED. This scorer GRADES, so a rename makes it go QUIET: every leg
+    scores INCONCLUSIVE forever and the lab merely looks like nothing happened.
+    A suite that goes green is at least suspicious to a careful reader; a lab that
+    goes quiet reads as an uneventful night.
+
+    backend/tests/test_scorer_tokens.py pins these at CI time, but that is not
+    enough here: its cross-repo checks SKIP when the emulator checkout is absent,
+    and the emitter can move between a test run and a lab run. So the scorer
+    re-checks its own assumptions at the moment it is about to depend on them, and
+    REFUSES A VERDICT rather than producing a quiet one.
+
+    Returns a list of problems (empty = fine).
+    """
+    problems: list[str] = []
+    ours = L2BEACON_SRC.read_text() if L2BEACON_SRC.is_file() else ""
+    for name, tok in (("BOARD_PASS", BOARD_PASS), ("BOARD_UP", BOARD_UP),
+                      ("BOARD_CORRUPT", BOARD_CORRUPT)):
+        if not ours:
+            problems.append("tools/l2beacon.py is missing — cannot verify board tokens")
+            break
+        if tok not in ours:
+            problems.append(
+                f"{name}={tok!r} is no longer emitted by tools/l2beacon.py. This "
+                f"scorer would grade every leg INCONCLUSIVE and look like a quiet lab.")
+    if ENET_LAB3_C.is_file():
+        guest = ENET_LAB3_C.read_text()
+        for name, tok in (("GUEST_PASS", GUEST_PASS), ("GUEST_CORRUPT", GUEST_CORRUPT)):
+            if tok not in guest:
+                problems.append(
+                    f"{name}={tok!r} is no longer emitted by 95emulator's enet-lab3.c. "
+                    f"The emitter moved and this scorer did not follow.")
+    return problems
 
 
 def _ssh(host: str, cmd: str, timeout: float = 10.0) -> tuple[int, str]:
@@ -147,7 +187,10 @@ async def main() -> int:
     print("═" * 74)
 
     # ── RULE 1: PREFLIGHT THAT REFUSES A VERDICT ────────────────────────────
-    problems = []
+    # The scorer's own assumptions are checked FIRST — before the boards, before
+    # the wire. A grader whose tokens have moved cannot produce a verdict about
+    # anything else.
+    problems = _verify_tokens_still_exist()
     if not silicon:
         problems.append("no silicon node — this lab cannot make its claim without one")
     for n in silicon:
