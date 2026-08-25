@@ -409,3 +409,46 @@ def test_mcxn947_mcu_profile_no_m_firmware_elf(tmp_path):
     assert "-dtb" not in argv and "-append" not in argv
     assert argv[argv.index("-kernel") + 1].endswith(".elf")
     assert "none" in argv[argv.index("-display") + 1]
+
+
+# ── qemu.binary_pin ─────────────────────────────────────────────────────────
+
+def test_binary_pin_refuses_a_binary_it_was_not_validated_against():
+    """⭐ A PATH IS NOT AN ARTIFACT — and this one was a near-miss, not a theory.
+
+    95emulator rebuilt QEMU ~6x in a day while holobench's leg0 result (333 frames
+    accepted by physical silicon) was being quoted. Provenance survived ONLY because
+    their rebuilds landed in build-upstream/ and the lab reads build/ — a directory
+    convention with nothing enforcing it. One `ninja -C build` and the binary behind
+    a published number is replaced with nothing saying so.
+
+    boot.pin covered the initrd and dtb from the start; the BINARY — the largest
+    thing in the run — was unpinned, because pins get added to whatever feels new
+    and the binary was already there.
+    """
+    from holobench.profiles.loader import load_profile
+    from holobench.session.manager import Session, SessionError
+
+    p = load_profile("imx95-evk-enet-lab3-2port")
+    assert p.qemu.binary_pin, "the 2-port profile must pin its binary"
+
+    s = Session.__new__(Session)          # the check needs no work dir
+    s.profile, s.argv = p, [p.qemu.binary]
+    s._verify_binary_pin()                # the real binary must be accepted
+
+    p.qemu.binary_pin = "0" * 32
+    with pytest.raises(SessionError, match="THE QEMU BINARY CHANGED"):
+        s._verify_binary_pin()
+
+
+def test_binary_pin_refuses_a_binary_it_cannot_read():
+    """A pinned binary that cannot be hashed is not a passed check — the same
+    reason an unreachable peer is INCONCLUSIVE rather than a pass."""
+    from holobench.profiles.loader import load_profile
+    from holobench.session.manager import Session, SessionError
+
+    p = load_profile("imx95-evk-enet-lab3-2port")
+    s = Session.__new__(Session)
+    s.profile, s.argv = p, ["/nonexistent/qemu-system-aarch64"]
+    with pytest.raises(SessionError, match="cannot hash the QEMU binary"):
+        s._verify_binary_pin()

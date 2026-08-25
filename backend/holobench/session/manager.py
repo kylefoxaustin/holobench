@@ -371,6 +371,7 @@ class Session:
                 self.runtime.disk_overlay = None
         self._verify_pins()
         self.argv = build_command(self.profile, self.runtime)
+        self._verify_binary_pin()
         self._verify_argv_pin()
 
         # Per-session cgroup v2 caps (opt-in; no-op when disabled/unavailable).
@@ -495,6 +496,38 @@ class Session:
             a = re.sub(r"mcast=[\d.]+:\d+", "mcast=<segment>", a)
             norm.append(a)
         return hashlib.sha256("\x00".join(norm).encode()).hexdigest()[:32]
+
+    def _verify_binary_pin(self) -> None:
+        """Refuse to launch on a QEMU binary this profile was not validated against.
+
+        Checked BEFORE the argv pin deliberately: a changed binary makes every
+        other verification a statement about a different program, so it is the
+        first thing that can invalidate a run and should be the first thing that
+        stops one.
+        """
+        want = self.profile.qemu.binary_pin
+        if not want:
+            return
+        import hashlib
+        path = Path(self.argv[0]) if self.argv else Path(self.profile.qemu.binary)
+        try:
+            got = hashlib.md5(path.read_bytes()).hexdigest()
+        except OSError as exc:
+            raise SessionError(
+                f"{self.profile.id}: cannot hash the QEMU binary at {path}: {exc}. "
+                f"A pinned binary that cannot be read is not a passed check."
+            ) from exc
+        if got != want:
+            raise SessionError(
+                f"{self.profile.id}: THE QEMU BINARY CHANGED.\n"
+                f"    pinned: {want}\n"
+                f"    actual: {got}\n"
+                f"    path:   {path}\n"
+                f"This profile names a path in a repo somebody else rebuilds. Every "
+                f"artifact hash may still match and the run may still go GREEN — about "
+                f"a DIFFERENT PROGRAM than the one any prior result was measured on. "
+                f"A PATH IS NOT AN ARTIFACT. Re-validate, then update qemu.binary_pin."
+            )
 
     def _verify_argv_pin(self) -> None:
         want = self.profile.qemu.argv_pin

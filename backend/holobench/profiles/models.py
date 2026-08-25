@@ -66,6 +66,22 @@ class QemuSpec(_Strict):
     #
     # Get the current value with `holobench show <id> --argv`.
     argv_pin: Optional[str] = None
+    # md5 of the QEMU BINARY this profile was validated against. A mismatch is a
+    # REFUSAL TO LAUNCH, same as every other pin here.
+    #
+    # ⚠️ WHY THIS EXISTS, and it is a NEAR-MISS not a hypothetical. 95emulator
+    # rebuilt QEMU ~6x in one day while holobench's leg0 result (333 frames
+    # accepted by physical silicon) was being quoted. The result's provenance
+    # survived ONLY because their rebuilds landed in build-upstream/ and the lab
+    # reads build/ — a DIRECTORY CONVENTION, with nothing enforcing it. One
+    # `ninja -C build` and the binary behind a published number would have been
+    # replaced with nothing saying so. They flagged it against their own tree.
+    #
+    # ⭐ A PATH IS NOT AN ARTIFACT. The profile names a path in a repo somebody
+    # else rebuilds; only a hash makes it an identity. The initrd and dtb were
+    # pinned from the start and the BINARY — the largest thing in the run — was
+    # not, because it was already there and pins get added to what feels new.
+    binary_pin: Optional[str] = None
 
 
 # --- Boot artifacts --------------------------------------------------------

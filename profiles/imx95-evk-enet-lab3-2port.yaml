@@ -118,6 +118,11 @@ description:  "Emulated i.MX 95 with TWO ENETC ports on TWO real host NICs — b
 
 qemu:
   binary:  /home/kyle/Documents/GitHub/95emulator/build/qemu-system-aarch64
+  # PIN THE BINARY, not just the boot artifacts. 95emulator rebuilt QEMU ~6x in
+  # one day while leg0's 333/0 was being quoted; it survived only because their
+  # rebuilds landed in build-upstream/ and this reads build/ — a directory
+  # convention with nothing enforcing it. This is the md5 that produced 333/0.
+  binary_pin: "748c91ee7e1746873937f74e4269abb8"
   machine: imx95-19x19-evk
   memory:  "2G"
   audio:   none
