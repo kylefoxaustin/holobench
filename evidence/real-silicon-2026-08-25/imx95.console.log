@@ -1,0 +1,1263 @@
+[    0.000000] Booting Linux on physical CPU 0x0000000000 [0x412fd050]
+[    0.000000] Linux version 6.12.49-gdf24f9428e38 (kyle@skippy) (aarch64-linux-gnu-gcc (Ubuntu 11.4.0-1ubuntu1~22.04.3) 11.4.0, GNU ld (GNU Binutils for Ubuntu) 2.38) #5 SMP PREEMPT Fri Jul  3 19:44:04 CDT 2026
+[    0.000000] KASLR disabled due to lack of seed
+[    0.000000] Machine model: NXP i.MX95 19X19 board
+[    0.000000] efi: UEFI not found.
+[    0.000000] Reserved memory: created CMA memory pool at 0x00000000c3000000, size 960 MiB
+[    0.000000] OF: reserved mem: initialized node linux,cma, compatible id shared-dma-pool
+[    0.000000] OF: reserved mem: 0x00000000c3000000..0x00000000feffffff (983040 KiB) map reusable linux,cma
+[    0.000000] OF: reserved mem: 0x00000000a0000000..0x00000000a00fffff (1024 KiB) nomap non-reusable vpu_boot@a0000000
+[    0.000000] OF: reserved mem: 0x00000000a0100000..0x00000000a10fffff (16384 KiB) nomap non-reusable mali_protected
+[    0.000000] OF: reserved mem: 0x0000000088000000..0x0000000088007fff (32 KiB) nomap non-reusable vdev0vring0@88000000
+[    0.000000] OF: reserved mem: 0x0000000088008000..0x000000008800ffff (32 KiB) nomap non-reusable vdev0vring1@88008000
+[    0.000000] OF: reserved mem: 0x0000000088010000..0x0000000088017fff (32 KiB) nomap non-reusable vdev1vring0@88010000
+[    0.000000] OF: reserved mem: 0x0000000088018000..0x000000008801ffff (32 KiB) nomap non-reusable vdev1vring1@88018000
+[    0.000000] OF: reserved mem: 0x0000000088220000..0x0000000088220fff (4 KiB) nomap non-reusable rsc-table@88220000
+[    0.000000] Reserved memory: created DMA memory pool at 0x0000000088020000, size 1 MiB
+[    0.000000] OF: reserved mem: initialized node vdevbuffer@88020000, compatible id shared-dma-pool
+[    0.000000] OF: reserved mem: 0x0000000088020000..0x000000008811ffff (1024 KiB) nomap non-reusable vdevbuffer@88020000
+[    0.000000] NUMA: Faking a node at [mem 0x0000000080000000-0x00000000ffffffff]
+[    0.000000] NODE_DATA(0) allocated [mem 0xffb96fc0-0xffb999ff]
+[    0.000000] Zone ranges:
+[    0.000000]   DMA      [mem 0x0000000080000000-0x00000000ffffffff]
+[    0.000000]   DMA32    empty
+[    0.000000]   Normal   empty
+[    0.000000] Movable zone start for each node
+[    0.000000] Early memory node ranges
+[    0.000000]   node   0: [mem 0x0000000080000000-0x0000000087ffffff]
+[    0.000000]   node   0: [mem 0x0000000088000000-0x000000008811ffff]
+[    0.000000]   node   0: [mem 0x0000000088120000-0x000000008821ffff]
+[    0.000000]   node   0: [mem 0x0000000088220000-0x0000000088220fff]
+[    0.000000]   node   0: [mem 0x0000000088221000-0x000000009fffffff]
+[    0.000000]   node   0: [mem 0x00000000a0000000-0x00000000a10fffff]
+[    0.000000]   node   0: [mem 0x00000000a1100000-0x00000000ffffffff]
+[    0.000000] Initmem setup node 0 [mem 0x0000000080000000-0x00000000ffffffff]
+[    0.000000] psci: probing for conduit method from DT.
+[    0.000000] psci: PSCIv1.1 detected in firmware.
+[    0.000000] psci: Using standard PSCI v0.2 function IDs
+[    0.000000] psci: Trusted OS migration not required
+[    0.000000] psci: SMC Calling Convention v1.0
+[    0.000000] percpu: Embedded 23 pages/cpu s54296 r8192 d31720 u94208
+[    0.000000] Detected VIPT I-cache on CPU0
+[    0.000000] CPU features: detected: GIC system register CPU interface
+[    0.000000] CPU features: detected: Virtualization Host Extensions
+[    0.000000] CPU features: detected: ARM errata 1165522, 1319367, or 1530923
+[    0.000000] alternatives: applying boot alternatives
+[    0.000000] Kernel command line: console=ttyLP0,115200 cpuidle.off=1 rdinit=/init
+[    0.000000] Dentry cache hash table entries: 131072 (order: 8, 1048576 bytes, linear)
+[    0.000000] Inode-cache hash table entries: 65536 (order: 7, 524288 bytes, linear)
+[    0.000000] Fallback order for Node 0: 0 
+[    0.000000] Built 1 zonelists, mobility grouping on.  Total pages: 524288
+[    0.000000] Policy zone: DMA
+[    0.000000] mem auto-init: stack:off, heap alloc:off, heap free:off
+[    0.000000] software IO TLB: SWIOTLB bounce buffer size adjusted to 2MB
+[    0.000000] software IO TLB: area num 8.
+[    0.000000] software IO TLB: mapped [mem 0x00000000ff776000-0x00000000ff976000] (2MB)
+[    0.000000] SLUB: HWalign=64, Order=0-3, MinObjects=0, CPUs=6, Nodes=1
+[    0.000000] rcu: Preemptible hierarchical RCU implementation.
+[    0.000000] rcu: 	RCU event tracing is enabled.
+[    0.000000] rcu: 	RCU restricting CPUs from NR_CPUS=512 to nr_cpu_ids=6.
+[    0.000000] 	Trampoline variant of Tasks RCU enabled.
+[    0.000000] 	Tracing variant of Tasks RCU enabled.
+[    0.000000] rcu: RCU calculated value of scheduler-enlistment delay is 25 jiffies.
+[    0.000000] rcu: Adjusting geometry for rcu_fanout_leaf=16, nr_cpu_ids=6
+[    0.000000] RCU Tasks: Setting shift to 3 and lim to 1 rcu_task_cb_adjust=1 rcu_task_cpu_ids=6.
+[    0.000000] RCU Tasks Trace: Setting shift to 3 and lim to 1 rcu_task_cb_adjust=1 rcu_task_cpu_ids=6.
+[    0.000000] NR_IRQS: 64, nr_irqs: 64, preallocated irqs: 0
+[    0.000000] GIC: enabling workaround for GICv3: non-coherent attribute
+[    0.000000] GICv3: GIC: Using split EOI/Deactivate mode
+[    0.000000] GICv3: 320 SPIs implemented
+[    0.000000] GICv3: 0 Extended SPIs implemented
+[    0.000000] Root IRQ handler: gic_handle_irq
+[    0.000000] GICv3: GICv3 features: 16 PPIs
+[    0.000000] GICv3: GICD_CTRL.DS=1, SCR_EL3.FIQ=0
+[    0.000000] GICv3: CPU0: found redistributor 0 region 0:0x0000000048060000
+[    0.000000] ITS [mem 0x48040000-0x4805ffff]
+[    0.000000] GIC: enabling workaround for ITS: non-coherent attribute
+[    0.000000] ITS@0x0000000048040000: allocated 8192 Devices @84060000 (indirect, esz 8, psz 64K, shr 0)
+[    0.000000] ITS@0x0000000048040000: allocated 8192 Interrupt Collections @84070000 (flat, esz 8, psz 64K, shr 0)
+[    0.000000] ITS: using cache flushing for cmd queue
+[    0.000000] GICv3: using LPI property table @0x0000000084080000
+[    0.000000] GIC: using cache flushing for LPI property table
+[    0.000000] GICv3: CPU0: using allocated LPI pending table @0x0000000084090000
+[    0.000000] rcu: srcu_init: Setting srcu_struct sizes based on contention.
+[    0.000000] arch_timer: cp15 timer(s) running at 24.00MHz (phys).
+[    0.000000] clocksource: arch_sys_counter: mask: 0xffffffffffffff max_cycles: 0x588fe9dc0, max_idle_ns: 440795202592 ns
+[    0.000052] sched_clock: 56 bits at 24MHz, resolution 41ns, wraps every 4398046511097ns
+[    0.011338] Console: colour dummy device 80x25
+[    0.014557] Calibrating delay loop (skipped), value calculated using timer frequency.. 48.00 BogoMIPS (lpj=96000)
+[    0.014651] pid_max: default: 32768 minimum: 301
+[    0.015783] LSM: initializing lsm=capability
+[    0.018749] Mount-cache hash table entries: 2048 (order: 2, 16384 bytes, linear)
+[    0.018782] Mountpoint-cache hash table entries: 2048 (order: 2, 16384 bytes, linear)
+[    0.057872] rcu: Hierarchical SRCU implementation.
+[    0.057908] rcu: 	Max phase no-delay instances is 1000.
+[    0.059152] Timer migration: 1 hierarchy levels; 8 children per group; 1 crossnode level
+[    0.061655] EFI services will not be available.
+[    0.063396] smp: Bringing up secondary CPUs ...
+[    0.066471] Detected VIPT I-cache on CPU1
+[    0.067049] GICv3: CPU1: found redistributor 100 region 0:0x0000000048080000
+[    0.067194] GICv3: CPU1: using allocated LPI pending table @0x00000000840a0000
+[    0.067516] CPU1: Booted secondary processor 0x0000000100 [0x412fd050]
+[    0.072140] Detected VIPT I-cache on CPU2
+[    0.072316] GICv3: CPU2: found redistributor 200 region 0:0x00000000480a0000
+[    0.072785] GICv3: CPU2: using allocated LPI pending table @0x00000000840b0000
+[    0.073277] CPU2: Booted secondary processor 0x0000000200 [0x412fd050]
+[    0.074845] Detected VIPT I-cache on CPU3
+[    0.075037] GICv3: CPU3: found redistributor 300 region 0:0x00000000480c0000
+[    0.075214] GICv3: CPU3: using allocated LPI pending table @0x00000000840c0000
+[    0.075801] CPU3: Booted secondary processor 0x0000000300 [0x412fd050]
+[    0.077452] Detected VIPT I-cache on CPU4
+[    0.077625] GICv3: CPU4: found redistributor 400 region 0:0x00000000480e0000
+[    0.077794] GICv3: CPU4: using allocated LPI pending table @0x00000000840d0000
+[    0.078496] CPU4: Booted secondary processor 0x0000000400 [0x412fd050]
+[    0.079990] Detected VIPT I-cache on CPU5
+[    0.080166] GICv3: CPU5: found redistributor 500 region 0:0x0000000048100000
+[    0.080337] GICv3: CPU5: using allocated LPI pending table @0x00000000840e0000
+[    0.081155] CPU5: Booted secondary processor 0x0000000500 [0x412fd050]
+[    0.081603] smp: Brought up 1 node, 6 CPUs
+[    0.081628] SMP: Total of 6 processors activated.
+[    0.081645] CPU: All CPU(s) started at EL2
+[    0.081690] CPU features: detected: 32-bit EL0 Support
+[    0.081711] CPU features: detected: Data cache clean to the PoU not required for I/D coherence
+[    0.081739] CPU features: detected: Common not Private translations
+[    0.081742] CPU features: detected: CRC32 instructions
+[    0.081806] CPU features: detected: RCpc load-acquire (LDAPR)
+[    0.081829] CPU features: detected: LSE atomic instructions
+[    0.081833] CPU features: detected: Privileged Access Never
+[    0.081835] CPU features: detected: RAS Extension Support
+[    0.081849] CPU features: detected: Speculative Store Bypassing Safe (SSBS)
+[    0.090233] alternatives: applying system-wide alternatives
+[    0.109479] Memory: 1010880K/2097152K available (21440K kernel code, 1628K rwdata, 8024K rodata, 4096K init, 745K bss, 97612K reserved, 983040K cma-reserved)
+[    0.130967] devtmpfs: initialized
+[    0.159409] clocksource: jiffies: mask: 0xffffffff max_cycles: 0xffffffff, max_idle_ns: 7645041785100000 ns
+[    0.159860] futex hash table entries: 2048 (order: 5, 131072 bytes, linear)
+[    0.181319] 23744 pages in range for non-PLT usage
+[    0.181360] 515264 pages in range for PLT usage
+[    0.184712] pinctrl core: initialized pinctrl subsystem
+[    0.194727] DMI not present or invalid.
+[    0.220613] NET: Registered PF_NETLINK/PF_ROUTE protocol family
+[    0.231265] DMA: preallocated 256 KiB GFP_KERNEL pool for atomic allocations
+[    0.232335] DMA: preallocated 256 KiB GFP_KERNEL|GFP_DMA pool for atomic allocations
+[    0.233500] DMA: preallocated 256 KiB GFP_KERNEL|GFP_DMA32 pool for atomic allocations
+[    0.233758] audit: initializing netlink subsys (disabled)
+[    0.236010] audit: type=2000 audit(0.216:1): state=initialized audit_enabled=0 res=1
+[    0.239358] thermal_sys: Registered thermal governor 'step_wise'
+[    0.239387] thermal_sys: Registered thermal governor 'power_allocator'
+[    0.240603] hw-breakpoint: found 6 breakpoint and 4 watchpoint registers.
+[    0.241676] ASID allocator initialised with 65536 entries
+[    0.243290] Serial: AMBA PL011 UART driver
+[    0.243774] imx mu driver is registered.
+[    0.243822] imx rpmsg driver is registered.
+[    0.263098] /soc/bus@42000000/i2c@426d0000/tcpc@50: Fixed dependency cycle(s) with /soc/usb@4c010010/usb@4c100000
+[    0.263203] /soc/bus@42000000/i2c@426d0000/tcpc@50/connector: Fixed dependency cycle(s) with /soc/phy@4c1f0040
+[    0.263489] /soc/phy@4c1f0040: Fixed dependency cycle(s) with /soc/bus@42000000/i2c@426d0000/tcpc@50/connector
+[    0.263538] /soc/usb@4c010010/usb@4c100000: Fixed dependency cycle(s) with /soc/bus@42000000/i2c@426d0000/tcpc@50
+[    0.265104] /soc/bus@42000000/i2c@426d0000/tcpc@50: Fixed dependency cycle(s) with /soc/usb@4c010010/usb@4c100000
+[    0.265152] /soc/bus@42000000/i2c@426d0000/tcpc@50/connector: Fixed dependency cycle(s) with /soc/phy@4c1f0040
+[    0.268571] /soc/bus@42000000/i2c@426d0000/tcpc@50: Fixed dependency cycle(s) with /soc/usb@4c010010/usb@4c100000
+[    0.268615] /soc/bus@42000000/i2c@426d0000/tcpc@50/connector: Fixed dependency cycle(s) with /soc/phy@4c1f0040
+[    0.284775] /soc/bus@42000000/i2c@426d0000/tcpc@50/connector: Fixed dependency cycle(s) with /soc/phy@4c1f0040
+[    0.284908] /soc/phy@4c1f0040: Fixed dependency cycle(s) with /soc/bus@42000000/i2c@426d0000/tcpc@50/connector
+[    0.285232] /soc/usb@4c010010/usb@4c100000: Fixed dependency cycle(s) with /soc/bus@42000000/i2c@426d0000/tcpc@50
+[    0.301875] HugeTLB: registered 1.00 GiB page size, pre-allocated 0 pages
+[    0.301893] HugeTLB: 0 KiB vmemmap can be freed for a 1.00 GiB page
+[    0.301909] HugeTLB: registered 32.0 MiB page size, pre-allocated 0 pages
+[    0.301912] HugeTLB: 0 KiB vmemmap can be freed for a 32.0 MiB page
+[    0.301916] HugeTLB: registered 2.00 MiB page size, pre-allocated 0 pages
+[    0.301920] HugeTLB: 0 KiB vmemmap can be freed for a 2.00 MiB page
+[    0.301924] HugeTLB: registered 64.0 KiB page size, pre-allocated 0 pages
+[    0.301927] HugeTLB: 0 KiB vmemmap can be freed for a 64.0 KiB page
+[    0.311820] ACPI: Interpreter disabled.
+[    0.314385] iommu: Default domain type: Translated
+[    0.314412] iommu: DMA domain TLB invalidation policy: strict mode
+[    0.319732] SCSI subsystem initialized
+[    0.322176] usbcore: registered new interface driver usbfs
+[    0.322470] usbcore: registered new interface driver hub
+[    0.322621] usbcore: registered new device driver usb
+[    0.324268] mc: Linux media interface: v0.10
+[    0.324371] videodev: Linux video capture interface: v2.00
+[    0.324685] pps_core: LinuxPPS API ver. 1 registered
+[    0.324695] pps_core: Software ver. 5.3.6 - Copyright 2005-2007 Rodolfo Giometti <giometti@linux.it>
+[    0.324735] PTP clock support registered
+[    0.324923] EDAC MC: Ver: 3.0.0
+[    0.326444] scmi_core: SCMI protocol bus registered
+[    0.328023] FPGA manager framework
+[    0.328563] Advanced Linux Sound Architecture Driver Initialized.
+[    0.337772] Bluetooth: Core ver 2.22
+[    0.338083] NET: Registered PF_BLUETOOTH protocol family
+[    0.338095] Bluetooth: HCI device and connection manager initialized
+[    0.338213] Bluetooth: HCI socket layer initialized
+[    0.338251] Bluetooth: L2CAP socket layer initialized
+[    0.338383] Bluetooth: SCO socket layer initialized
+[    0.342858] vgaarb: loaded
+[    0.344905] clocksource: Switched to clocksource arch_sys_counter
+[    0.346569] VFS: Disk quotas dquot_6.6.0
+[    0.346672] VFS: Dquot-cache hash table entries: 512 (order 0, 4096 bytes)
+[    0.347923] pnp: PnP ACPI: disabled
+[    0.366353] NET: Registered PF_INET protocol family
+[    0.367477] IP idents hash table entries: 16384 (order: 5, 131072 bytes, linear)
+[    0.371642] tcp_listen_portaddr_hash hash table entries: 512 (order: 1, 8192 bytes, linear)
+[    0.371775] Table-perturb hash table entries: 65536 (order: 6, 262144 bytes, linear)
+[    0.371863] TCP established hash table entries: 8192 (order: 4, 65536 bytes, linear)
+[    0.372126] TCP bind hash table entries: 8192 (order: 6, 262144 bytes, linear)
+[    0.372620] TCP: Hash tables configured (established 8192 bind 8192)
+[    0.373902] UDP hash table entries: 512 (order: 2, 16384 bytes, linear)
+[    0.374168] UDP-Lite hash table entries: 512 (order: 2, 16384 bytes, linear)
+[    0.375263] NET: Registered PF_UNIX/PF_LOCAL protocol family
+[    0.379346] RPC: Registered named UNIX socket transport module.
+[    0.379399] RPC: Registered udp transport module.
+[    0.379410] RPC: Registered tcp transport module.
+[    0.379420] RPC: Registered tcp-with-tls transport module.
+[    0.379429] RPC: Registered tcp NFSv4.1 backchannel transport module.
+[    0.382694] PCI: CLS 0 bytes, default 64
+[    0.386382] Unpacking initramfs...
+[    0.389317] Initialise system trusted keyrings
+[    0.391387] workingset: timestamp_bits=42 max_order=19 bucket_order=0
+[    0.394277] squashfs: version 4.0 (2009/01/31) Phillip Lougher
+[    0.396840] NFS: Registering the id_resolver key type
+[    0.397185] Key type id_resolver registered
+[    0.397251] Key type id_legacy registered
+[    0.397556] nfs4filelayout_init: NFSv4 File Layout Driver Registering...
+[    0.397644] nfs4flexfilelayout_init: NFSv4 Flexfile Layout Driver Registering...
+[    0.398608] jffs2: version 2.2. (NAND) © 2001-2006 Red Hat, Inc.
+[    0.399650] 9p: Installing v9fs 9p2000 file system support
+[    0.425946] Freeing initrd memory: 1272K
+[    0.432999] Key type asymmetric registered
+[    0.433253] Asymmetric key parser 'x509' registered
+[    0.433538] Block layer SCSI generic (bsg) driver version 0.4 loaded (major 243)
+[    0.433746] io scheduler mq-deadline registered
+[    0.433792] io scheduler kyber registered
+[    0.434096] io scheduler bfq registered
+[    0.442950] ledtrig-cpu: registered to indicate activity on CPUs
+[    0.457353] Bus freq driver module loaded
+[    0.458014] imx9_init_soc imx95-soc: error -EINVAL: failed to register SoC device
+[    0.458202] imx9_init_soc imx95-soc: probe with driver imx9_init_soc failed with error -22
+[    0.470142] Serial: 8250/16550 driver, 4 ports, IRQ sharing enabled
+[    0.479567] arm-smmu-v3 490d0000.iommu: no translation support!
+[    0.480455] simple_protected_memory_allocator protected-memory-allocator: Protected memory allocator probed successfully
+[    0.480480] simple_protected_memory_allocator protected-memory-allocator: Protected memory region: base=(____ptrval____) num pages=4096
+[    0.507906] loop: module loaded
+[    0.511501] megasas: 07.727.03.00-rc1
+[    0.519480] MACsec IEEE 802.1AE
+[    0.524611] tun: Universal TUN/TAP device driver, 1.6
+[    0.526230] thunder_xcv, ver 1.0
+[    0.526307] thunder_bgx, ver 1.0
+[    0.526363] nicpf, ver 1.0
+[    0.528296] hns3: Hisilicon Ethernet Network Driver for Hip08 Family - version
+[    0.528307] hns3: Copyright (c) 2017 Huawei Corporation.
+[    0.528571] hclge is initializing
+[    0.528656] e1000: Intel(R) PRO/1000 Network Driver
+[    0.528663] e1000: Copyright (c) 1999-2006 Intel Corporation.
+[    0.528835] e1000e: Intel(R) PRO/1000 Network Driver
+[    0.528842] e1000e: Copyright(c) 1999 - 2015 Intel Corporation.
+[    0.528962] igb: Intel(R) Gigabit Ethernet Network Driver
+[    0.528973] igb: Copyright (c) 2007-2014 Intel Corporation.
+[    0.529040] igbvf: Intel(R) Gigabit Virtual Function Network Driver
+[    0.529047] igbvf: Copyright (c) 2009 - 2012 Intel Corporation.
+[    0.529305] sky2: driver version 1.30
+[    0.530279] usbcore: registered new device driver r8152-cfgselector
+[    0.530348] usbcore: registered new interface driver r8152
+[    0.531807] VFIO - User Level meta-driver version: 0.3
+[    0.537283] usbcore: registered new interface driver uas
+[    0.537509] usbcore: registered new interface driver usb-storage
+[    0.537828] usbcore: registered new interface driver usbserial_generic
+[    0.538057] usbserial: USB Serial support registered for generic
+[    0.538152] usbcore: registered new interface driver ftdi_sio
+[    0.538190] usbserial: USB Serial support registered for FTDI USB Serial Device
+[    0.538244] usbcore: registered new interface driver usb_serial_simple
+[    0.538270] usbserial: USB Serial support registered for carelink
+[    0.538304] usbserial: USB Serial support registered for flashloader
+[    0.538326] usbserial: USB Serial support registered for funsoft
+[    0.538348] usbserial: USB Serial support registered for google
+[    0.538373] usbserial: USB Serial support registered for hp4x
+[    0.538393] usbserial: USB Serial support registered for kaufmann
+[    0.538420] usbserial: USB Serial support registered for libtransistor
+[    0.538441] usbserial: USB Serial support registered for moto_modem
+[    0.538461] usbserial: USB Serial support registered for motorola_tetra
+[    0.538481] usbserial: USB Serial support registered for nokia
+[    0.538501] usbserial: USB Serial support registered for novatel_gps
+[    0.538520] usbserial: USB Serial support registered for owon
+[    0.538540] usbserial: USB Serial support registered for siemens_mpi
+[    0.538560] usbserial: USB Serial support registered for suunto
+[    0.538580] usbserial: USB Serial support registered for vivopay
+[    0.538601] usbserial: USB Serial support registered for zio
+[    0.538667] usbcore: registered new interface driver usb_ehset_test
+[    0.545610] i2c_dev: i2c /dev entries driver
+[    0.553235] Bluetooth: HCI UART driver ver 2.3
+[    0.553331] Bluetooth: HCI UART protocol H4 registered
+[    0.553403] Bluetooth: HCI UART protocol BCSP registered
+[    0.553476] Bluetooth: HCI UART protocol LL registered
+[    0.553489] Bluetooth: HCI UART protocol ATH3K registered
+[    0.553523] Bluetooth: HCI UART protocol Three-wire (H5) registered
+[    0.553723] Bluetooth: HCI UART protocol Broadcom registered
+[    0.553762] Bluetooth: HCI UART protocol QCA registered
+[    0.555585] failed to register cpuidle driver
+[    0.556376] sdhci: Secure Digital Host Controller Interface driver
+[    0.556385] sdhci: Copyright(c) Pierre Ossman
+[    0.557193] Synopsys Designware Multimedia Card Interface Driver
+[    0.558084] sdhci-pltfm: SDHCI platform and OF driver helper
+[    0.565865] arm-scmi arm-scmi.0.auto: Using scmi_mailbox_transport
+[    0.565899] arm-scmi arm-scmi.0.auto: SCMI max-rx-timeout: 5000ms
+[    0.569496] arm-scmi arm-scmi.0.auto: SCMI Notifications - Core Enabled.
+[    0.576843] arm-scmi arm-scmi.0.auto: SCMI Protocol v2.1 'NXP:IMX' Firmware version 0x333
+[    0.637878] cpu cpu0: EM: invalid power: 0
+[    0.642317] scmi-perf-domain scmi_dev.5: Initialized 13 performance domains
+[    1.063709] thermal thermal_zone0: Temperature check failed (-16)
+[    1.066401] thermal thermal_zone1: Temperature check failed (-16)
+[    1.136612] scmi_module: Loaded SCMI Vendor Protocol 0x81 - NXP IMX 0
+[    1.137584] arm-scmi arm-scmi.0.auto: NXP SM BBM Version 1.0
+[    1.144313] scmi-imx-bbm-rtc scmi_dev.10: registered as rtc0
+[    1.145592] scmi-imx-bbm-rtc scmi_dev.10: setting system clock to 2026-08-25T18:57:30 UTC (1787684250)
+[    1.147027] scmi-imx-bbm-key scmi_dev.11: key code is not specified, using default KEY_POWER
+[    1.149413] input: scmi_dev.11 as /devices/platform/arm-scmi.0.auto/scmi_dev.11/input/input0
+[    1.155258] scmi_module: Loaded SCMI Vendor Protocol 0x82 - NXP IMX 0
+[    1.155991] arm-scmi arm-scmi.0.auto: NXP SM CPU Protocol Version 1.0
+[    1.156435] arm-scmi arm-scmi.0.auto: i.MX SM MAX CPU: 9 cpus
+[    1.156980] arm-scmi arm-scmi.0.auto: i.MX CPU: name: m33p
+[    1.157402] arm-scmi arm-scmi.0.auto: i.MX CPU: name: m7p
+[    1.157849] arm-scmi arm-scmi.0.auto: i.MX CPU: name: a55c0
+[    1.158258] arm-scmi arm-scmi.0.auto: i.MX CPU: name: a55c1
+[    1.158694] arm-scmi arm-scmi.0.auto: i.MX CPU: name: a55c2
+[    1.159125] arm-scmi arm-scmi.0.auto: i.MX CPU: name: a55c3
+[    1.159539] arm-scmi arm-scmi.0.auto: i.MX CPU: name: a55c4
+[    1.160122] arm-scmi arm-scmi.0.auto: i.MX CPU: name: a55c5
+[    1.160958] arm-scmi arm-scmi.0.auto: i.MX CPU: name: a55p
+[    1.161689] scmi_module: Loaded SCMI Vendor Protocol 0x84 - NXP IMX 0
+[    1.162359] arm-scmi arm-scmi.0.auto: NXP SM MISC Version 1.1
+[    1.162817] arm-scmi arm-scmi.0.auto: i.MX MISC NUM DEV CTRL: 7, NUM BRD CTRL: 8,NUM Reason: 32
+[    1.164396] arm-scmi arm-scmi.0.auto: Protocol 0x84 successfully negotiated version 0x10000
+[    1.170177] scmi_module: Loaded SCMI Vendor Protocol 0x80 - NXP IMX 0
+[    1.170768] arm-scmi arm-scmi.0.auto: NXP SM LMM Version 1.1
+[    1.171389] arm-scmi arm-scmi.0.auto: i.MX LMM: 3 Logical Machines
+[    1.172864] arm-scmi arm-scmi.0.auto: Protocol 0x80 successfully negotiated version 0x10000
+[    1.178277] fsl-se secure-enclave-0: Successfully registered ele-trng
+[    1.178393] fsl-se secure-enclave-0: i.MX secure-enclave: hsm0 interface to firmware, configured.
+[    1.178827] fsl-se secure-enclave-1: failure: v2x fw state [0xca]is not loaded.
+[    1.178850] fsl-se secure-enclave-1: error -EPERM: se_if_probe: Probe failed.
+[    1.178867] fsl-se secure-enclave-1: probe with driver fsl-se failed with error -1
+[    1.179136] fsl-se secure-enclave-2: failure: v2x fw state [0xca]is not loaded.
+[    1.179147] fsl-se secure-enclave-2: error -EPERM: se_if_probe: Probe failed.
+[    1.179154] fsl-se secure-enclave-2: probe with driver fsl-se failed with error -1
+[    1.179379] random: crng init done
+[    1.180119] fsl-se secure-enclave-3: failure: v2x fw state [0xca]is not loaded.
+[    1.180136] fsl-se secure-enclave-3: error -EPERM: se_if_probe: Probe failed.
+[    1.180146] fsl-se secure-enclave-3: probe with driver fsl-se failed with error -1
+[    1.180398] fsl-se secure-enclave-4: failure: v2x fw state [0xca]is not loaded.
+[    1.180408] fsl-se secure-enclave-4: error -EPERM: se_if_probe: Probe failed.
+[    1.180415] fsl-se secure-enclave-4: probe with driver fsl-se failed with error -1
+[    1.180614] fsl-se secure-enclave-5: failure: v2x fw state [0xca]is not loaded.
+[    1.180623] fsl-se secure-enclave-5: error -EPERM: se_if_probe: Probe failed.
+[    1.180629] fsl-se secure-enclave-5: probe with driver fsl-se failed with error -1
+[    1.182208] usbcore: registered new interface driver usbhid
+[    1.182222] usbhid: USB HID core driver
+[    1.187484] remoteproc remoteproc0: neutron-rproc is available
+[    1.198553] hw perfevents: enabled with armv8_cortex_a55 PMU driver, 7 (0,8000003f) counters available
+[    1.203558]  cs_system_cfg: CoreSight Configuration manager initialised
+[    1.215754] NET: Registered PF_LLC protocol family
+[    1.216171] GACT probability NOT on
+[    1.216560] Mirror/redirect action on
+[    1.217260] u32 classifier
+[    1.217269]     input device check on
+[    1.217274]     Actions configured
+[    1.220094] NET: Registered PF_INET6 protocol family
+[    1.226401] Segment Routing with IPv6
+[    1.226605] In-situ OAM (IOAM) with IPv6
+[    1.227338] NET: Registered PF_PACKET protocol family
+[    1.227816] bridge: filtering via arp/ip/ip6tables is no longer available by default. Update your scripts to load br_netfilter if you need this.
+[    1.228800] Bluetooth: RFCOMM TTY layer initialized
+[    1.228855] Bluetooth: RFCOMM socket layer initialized
+[    1.228920] Bluetooth: RFCOMM ver 1.11
+[    1.228971] Bluetooth: BNEP (Ethernet Emulation) ver 1.3
+[    1.228981] Bluetooth: BNEP filters: protocol multicast
+[    1.229807] Bluetooth: BNEP socket layer initialized
+[    1.229832] Bluetooth: HIDP (Human Interface Emulation) ver 1.2
+[    1.229861] Bluetooth: HIDP socket layer initialized
+[    1.231007] 8021q: 802.1Q VLAN Support v1.8
+[    1.231800] 9pnet: Installing 9P2000 support
+[    1.232090] Key type dns_resolver registered
+[    1.232432] NET: Registered PF_VSOCK protocol family
+[    1.255290] registered taskstats version 1
+[    1.256925] Loading compiled-in X.509 certificates
+[    1.265387] Demotion targets for Node 0: null
+[    1.302519] usb_phy_generic usbphynop: dummy supplies not allowed for exclusive requests (id=vbus)
+[    1.310438] pca953x 2-0020: using no AI
+[    1.321805] i2c i2c-2: LPI2C adapter registered
+[    1.325536] i2c i2c-3: LPI2C adapter registered
+[    1.328892] pca953x 4-0021: using no AI
+[    1.329476] i2c i2c-4: LPI2C adapter registered
+[    1.332279] i2c i2c-5: LPI2C adapter registered
+[    1.335625] /soc/usb@4c010010/usb@4c100000: Fixed dependency cycle(s) with /soc/bus@42000000/i2c@426d0000/tcpc@50
+[    1.335762] /soc/bus@42000000/i2c@426d0000/tcpc@50: Fixed dependency cycle(s) with /soc/usb@4c010010/usb@4c100000
+[    1.335847] /soc/bus@42000000/i2c@426d0000/tcpc@50/connector: Fixed dependency cycle(s) with /soc/phy@4c1f0040
+[    1.336028] i2c i2c-6: LPI2C adapter registered
+[    1.341932] i2c i2c-1: LPI2C adapter registered
+[    1.344503] imx8mq-usb-phy 4c1f0040.phy: supply vbus not found, using dummy regulator
+[    1.367860] 42590000.serial: ttyLP4 at MMIO 0x42590010 (irq = 111, base_baud = 1500000) is a FSL_LPUART
+[    1.368905] serial serial0: tty port ttyLP4 registered
+[    1.371723] 44380000.serial: ttyLP0 at MMIO 0x44380010 (irq = 112, base_baud = 1500000) is a FSL_LPUART
+[    1.373501] printk: legacy console [ttyLP0] enabled
+[    1.401725] mali 4d900000.gpu: Kernel DDK version r54p1-11eac0
+[    1.402768] mali 4d900000.gpu: GPU metrics tracepoint support enabled
+[    1.409210] mali 4d900000.gpu: Register LUT 000a0a00 initialized for GPU arch 0x000a0c07
+[    1.410346] mali 4d900000.gpu: r0p0 status 1 not found in HW issues table;
+[    1.410460] mali 4d900000.gpu: falling back to closest match: r0p0 status 0
+[    1.410542] mali 4d900000.gpu: Execution proceeding normally with fallback match
+[    1.410633] mali 4d900000.gpu: GPU identified as 0x4 arch 10.12.7 r0p0 status 0
+[    1.412394] mali 4d900000.gpu: CSF_GPU_RESET_TIMEOUT is capped from 12400ms to 4500ms
+[    1.412517] mali 4d900000.gpu: CSF_GPU_SUSPEND_TIMEOUT is capped from 6200ms to 4500ms
+[    1.412685] mali 4d900000.gpu: KBASE_PRFCNT_ACTIVE_TIMEOUT is capped from 24000ms to 4500ms
+[    1.412870] mali 4d900000.gpu: KBASE_AS_INACTIVE_TIMEOUT is capped from 24000ms to 4500ms
+[    1.412963] mali 4d900000.gpu: CSF_FIRMWARE_STOP_TIMEOUT is capped from 24000ms to 4500ms
+[    1.413536] mali 4d900000.gpu: Miscellaneous device initialization failed error = -5
+[    1.418956] mali 4d900000.gpu: Device initialization failed
+[    1.419089] mali 4d900000.gpu: probe with driver mali failed with error -5
+[    1.422699] [drm] Initialized imx95-dpu 1.0.0 for 4b400000.display-controller on minor 0
+[    1.424121] imx95-dpu 4b400000.display-controller: [drm] Cannot find any crtc or sizes
+[    1.471176] pci-host-generic 4ca00000.pcie: host bridge /soc/netc-blk-ctrl@4cde0000/pcie@4ca00000 ranges:
+[    1.471869] pci-host-generic 4ca00000.pcie:      MEM 0x004cc00000..0x004ccdffff -> 0x004cc00000
+[    1.472180] pci-host-generic 4ca00000.pcie:      MEM 0x004cd00000..0x004cd0ffff -> 0x004cd00000
+[    1.472314] pci-host-generic 4ca00000.pcie:      MEM 0x004cd20000..0x004cd7ffff -> 0x004cd20000
+[    1.472423] pci-host-generic 4ca00000.pcie:      MEM 0x004cd80000..0x004cddffff -> 0x004cd80000
+[    1.473403] pci-host-generic 4ca00000.pcie: ECAM at [mem 0x4ca00000-0x4cafffff] for [bus 00]
+[    1.475107] pci-host-generic 4ca00000.pcie: PCI host bridge to bus 0002:00
+[    1.475414] pci_bus 0002:00: root bus resource [bus 00]
+[    1.475520] pci_bus 0002:00: root bus resource [mem 0x4cc00000-0x4ccdffff]
+[    1.475599] pci_bus 0002:00: root bus resource [mem 0x4cd00000-0x4cd0ffff pref]
+[    1.475706] pci_bus 0002:00: root bus resource [mem 0x4cd20000-0x4cd7ffff]
+[    1.475782] pci_bus 0002:00: root bus resource [mem 0x4cd80000-0x4cddffff pref]
+[    1.477616] pci 0002:00:00.0: [1131:e101] type 00 class 0x020000 conventional PCI endpoint
+[    1.478393] pci 0002:00:00.0: BAR 0 [mem 0x00000000-0x0003ffff 64bit]
+[    1.478551] pci 0002:00:00.0: BAR 2 [mem 0x00000000-0x00001fff 64bit]
+[    1.483800] pci 0002:00:08.0: [1131:e101] type 00 class 0x020000 conventional PCI endpoint
+[    1.483931] pci 0002:00:08.0: BAR 0 [mem 0x00000000-0x0003ffff 64bit]
+[    1.484014] pci 0002:00:08.0: BAR 2 [mem 0x00000000-0x00001fff 64bit]
+[    1.485199] pci 0002:00:10.0: [1131:e101] type 00 class 0x020000 conventional PCI endpoint
+[    1.485313] pci 0002:00:10.0: BAR 0 [mem 0x00000000-0x0003ffff 64bit]
+[    1.485387] pci 0002:00:10.0: BAR 2 [mem 0x00000000-0x00001fff 64bit]
+[    1.486394] pci 0002:00:18.0: [1131:ee02] type 00 class 0x088080 conventional PCI endpoint
+[    1.486509] pci 0002:00:18.0: BAR 0 [mem 0x00000000-0x0001ffff 64bit]
+[    1.486586] pci 0002:00:18.0: BAR 2 [mem 0x00000000-0x00001fff 64bit]
+[    1.487800] pci 0002:00:1f.0: [1b36:0008] type 00 class 0x060000 conventional PCI endpoint
+[    1.489875] pci 0002:00:00.0: BAR 0 [mem 0x4cc00000-0x4cc3ffff 64bit]: assigned
+[    1.490138] pci 0002:00:08.0: BAR 0 [mem 0x4cc40000-0x4cc7ffff 64bit]: assigned
+[    1.490249] pci 0002:00:10.0: BAR 0 [mem 0x4cc80000-0x4ccbffff 64bit]: assigned
+[    1.490336] pci 0002:00:18.0: BAR 0 [mem 0x4ccc0000-0x4ccdffff 64bit]: assigned
+[    1.490425] pci 0002:00:00.0: BAR 2 [mem 0x4cd20000-0x4cd21fff 64bit]: assigned
+[    1.490505] pci 0002:00:08.0: BAR 2 [mem 0x4cd22000-0x4cd23fff 64bit]: assigned
+[    1.490581] pci 0002:00:10.0: BAR 2 [mem 0x4cd24000-0x4cd25fff 64bit]: assigned
+[    1.490657] pci 0002:00:18.0: BAR 2 [mem 0x4cd26000-0x4cd27fff 64bit]: assigned
+[    1.490936] pci_bus 0002:00: resource 4 [mem 0x4cc00000-0x4ccdffff]
+[    1.491021] pci_bus 0002:00: resource 5 [mem 0x4cd00000-0x4cd0ffff pref]
+[    1.491090] pci_bus 0002:00: resource 6 [mem 0x4cd20000-0x4cd7ffff]
+[    1.491152] pci_bus 0002:00: resource 7 [mem 0x4cd80000-0x4cddffff pref]
+[    1.492311] OF: /soc/netc-blk-ctrl@4cde0000/pcie@4ca00000: no iommu-map translation for id 0xf8 on (null)
+[    1.493964] pci-host-generic 4cb00000.pcie: host bridge /soc/netc-blk-ctrl@4cde0000/pcie@4cb00000 ranges:
+[    1.494124] pci-host-generic 4cb00000.pcie:      MEM 0x004cce0000..0x004ccfffff -> 0x004cce0000
+[    1.494246] pci-host-generic 4cb00000.pcie:      MEM 0x004cd10000..0x004cd1ffff -> 0x004cd10000
+[    1.494416] pci-host-generic 4cb00000.pcie: ECAM at [mem 0x4cb00000-0x4cbfffff] for [bus 01]
+[    1.494679] pci-host-generic 4cb00000.pcie: PCI host bridge to bus 0003:01
+[    1.494771] pci_bus 0003:01: root bus resource [bus 01]
+[    1.494828] pci_bus 0003:01: root bus resource [mem 0x4cce0000-0x4ccfffff]
+[    1.494897] pci_bus 0003:01: root bus resource [mem 0x4cd10000-0x4cd1ffff pref]
+[    1.495053] pci 0003:01:00.0: [1131:ee00] type 00 class 0x088001 conventional PCI endpoint
+[    1.495156] pci 0003:01:00.0: BAR 0 [mem 0x00000000-0x0000ffff 64bit]
+[    1.498677] pci 0003:01:1e.0: [1b36:0008] type 00 class 0x060000 conventional PCI endpoint
+[    1.499120] pci 0003:01:00.0: BAR 0 [mem 0x4cce0000-0x4cceffff 64bit]: assigned
+[    1.499223] pci_bus 0003:01: resource 4 [mem 0x4cce0000-0x4ccfffff]
+[    1.499293] pci_bus 0003:01: resource 5 [mem 0x4cd10000-0x4cd1ffff pref]
+[    1.502428] /soc/bus@42000000/i2c@426d0000/tcpc@50: Fixed dependency cycle(s) with /soc/usb@4c010010/usb@4c100000
+[    1.502772] /soc/usb@4c010010/usb@4c100000: Fixed dependency cycle(s) with /soc/bus@42000000/i2c@426d0000/tcpc@50
+[    1.511930] imx-rproc imx95-cm7: Using LMM Protocol OPS
+[    1.513766] remoteproc remoteproc1: imx-rproc is available
+[    1.517395] wave6-vpu-ctrl 4c4c0000.vpu-ctrl: boot phys_addr: 0x00000000a0000000, dma_addr: 0x00000000a0000000, size: 0x100000
+[    1.517845] wave6-vpu-ctrl 4c4c0000.vpu-ctrl: sram 0x0x00000000204c0000, 0x0x00000000204c0000, size 0x14800
+[    1.610756] pca953x 3-0021: using no AI
+[    1.613967] pca953x 5-0021: using no AI
+[    1.616530] pca953x 6-0022: using AI
+[    2.121340] tcpci 6-0050: probe with driver tcpci failed with error -110
+[    2.154144] imx6q-pcie 4c380000.pcie: host bridge /soc/pcie@4c380000 ranges:
+[    2.154337] imx6q-pcie 4c380000.pcie:       IO 0x088ff00000..0x088fffffff -> 0x0000000000
+[    2.154715] imx6q-pcie 4c380000.pcie:      MEM 0x0a10000000..0x0a1fffffff -> 0x0010000000
+[    2.158393] imx6q-pcie 4c300000.pcie: host bridge /soc/pcie@4c300000 ranges:
+[    2.158574] imx6q-pcie 4c300000.pcie:       IO 0x006ff00000..0x006fffffff -> 0x0000000000
+[    2.158736] imx6q-pcie 4c300000.pcie:      MEM 0x0910000000..0x091fffffff -> 0x0010000000
+[    2.246632] fsl_enetc_mdio 0003:01:00.0: enabling device (0000 -> 0002)
+[    2.364437] hwmon hwmon1: temp1_input not attached to any thermal zone
+[    2.370626] imx6q-pcie 4c380000.pcie: iATU: unroll F, 256 ob, 256 ib, align 0K, limit 4G
+[    2.370658] imx6q-pcie 4c300000.pcie: iATU: unroll F, 256 ob, 256 ib, align 0K, limit 4G
+[    2.388033] cfg80211: Loading compiled-in X.509 certificates for regulatory database
+[    2.398820] Loaded X.509 cert 'sforshee: 00b28ddf47aef9cea7'
+[    2.399328] Loaded X.509 cert 'wens: 61c038651aabdcf94bd0ac7ff06c7248db18c600'
+[    2.400654] clk: Disabling unused clocks
+[    2.401438] platform regulatory.0: Direct firmware load for regulatory.db failed with error -2
+[    2.401769] platform regulatory.0: Falling back to sysfs fallback for: regulatory.db
+[    2.488961] imx6q-pcie 4c380000.pcie: PCIe Gen.1 x1 link up
+[    2.488961] imx6q-pcie 4c300000.pcie: PCIe Gen.1 x1 link up
+[    2.489336] imx6q-pcie 4c300000.pcie: PCI host bridge to bus 0000:00
+[    2.489477] pci_bus 0000:00: root bus resource [bus 00-ff]
+[    2.489623] pci_bus 0000:00: root bus resource [io  0x100000-0x1fffff] (bus address [0x0000-0xfffff])
+[    2.489806] pci_bus 0000:00: root bus resource [mem 0x910000000-0x91fffffff] (bus address [0x10000000-0x1fffffff])
+[    2.490429] pci 0000:00:00.0: [16c3:abcd] type 01 class 0x060400 PCIe Root Port
+[    2.498933] pci 0000:00:00.0: PCI bridge to [bus 01-ff]
+[    2.500823] pci 0000:00:00.0:   bridge window [io  0x100000-0x100fff]
+[    2.501010] pci 0000:00:00.0:   bridge window [mem 0x00000000-0x000fffff]
+[    2.504159] pci 0000:00:00.0:   bridge window [mem 0x00000000-0x000fffff 64bit pref]
+[    2.504429] pci 0000:00:00.0: enabling Extended Tags
+[    2.515831] pci 0000:00:00.0: PCI bridge to [bus 01-ff]
+[    2.517033] imx6q-pcie 4c380000.pcie: PCI host bridge to bus 0001:00
+[    2.519125] pci_bus 0001:00: root bus resource [bus 00-ff]
+[    2.520542] pci_bus 0000:00: resource 4 [io  0x100000-0x1fffff]
+[    2.520630] pci_bus 0001:00: root bus resource [io  0x0000-0xfffff]
+[    2.520795] pci_bus 0000:00: resource 5 [mem 0x910000000-0x91fffffff]
+[    2.520966] pci_bus 0001:00: root bus resource [mem 0xa10000000-0xa1fffffff] (bus address [0x10000000-0x1fffffff])
+[    2.521184] pci 0001:00:00.0: [16c3:abcd] type 01 class 0x060400 PCIe Root Port
+[    2.530261] pci 0001:00:00.0: PCI bridge to [bus 01-ff]
+[    2.531456] pci 0001:00:00.0:   bridge window [io  0x0000-0x0fff]
+[    2.531615] pci 0001:00:00.0:   bridge window [mem 0x00000000-0x000fffff]
+[    2.533006] pci 0001:00:00.0:   bridge window [mem 0x00000000-0x000fffff 64bit pref]
+[    2.533174] pci 0001:00:00.0: enabling Extended Tags
+[    2.544026] pci 0001:00:00.0: PCI bridge to [bus 01-ff]
+[    2.550309] pci_bus 0001:00: resource 4 [io  0x0000-0xfffff]
+[    2.554898] pci_bus 0001:00: resource 5 [mem 0xa10000000-0xa1fffffff]
+[    2.580340] PM: genpd: Disabling unused power domains
+[    2.580766] ALSA device list:
+[    2.581028]   No soundcards found.
+[    2.670032] Freeing unused kernel memory: 4096K
+[    2.671319] Run /init as init process
+[   12.529933] fsl-edma 42210000.dma-controller: deferred probe timeout, ignoring dependency
+[   12.541501] pciback 0002:00:00.0: deferred probe timeout, ignoring dependency
+[   12.541867] fsl_enetc4 0002:00:00.0: deferred probe timeout, ignoring dependency
+[   12.645281] fsl_enetc4 0002:00:00.0: enabling device (0000 -> 0002)
+[   12.673652] pciback 0002:00:08.0: deferred probe timeout, ignoring dependency
+[   12.673877] fsl_enetc4 0002:00:08.0: deferred probe timeout, ignoring dependency
+[   12.777246] fsl_enetc4 0002:00:08.0: enabling device (0000 -> 0002)
+[   12.784394] pciback 0002:00:10.0: deferred probe timeout, ignoring dependency
+[   12.784646] fsl_enetc4 0002:00:10.0: deferred probe timeout, ignoring dependency
+[   12.889198] fsl_enetc4 0002:00:10.0: enabling device (0000 -> 0002)
+[   12.898674] pciback 0002:00:18.0: deferred probe timeout, ignoring dependency
+[   12.898915] ptp_netc 0002:00:18.0: deferred probe timeout, ignoring dependency
+[   12.899137] ptp_netc 0002:00:18.0: enabling device (0000 -> 0002)
+[   12.907156] neutron 4ab00004.imx95-neutron: deferred probe timeout, ignoring dependency
+[   12.912602] neutron 4ab00004.imx95-neutron: created neutron device, name=neutron0
+[   12.914384] dwc3 4c100000.usb: deferred probe timeout, ignoring dependency
+[   12.918114] dwc3 4c100000.usb: Configuration mismatch. dr_mode forced to host
+[   12.923280] fsl_enetc4 0002:00:00.0 eth0: configuring for fixed/rgmii-id link mode
+[   12.925074] fsl_enetc4 0002:00:00.0 eth0: Link is Up - 1Gbps/Full - flow control off
+[   12.962327] fsl_enetc4 0002:00:08.0 eth1: configuring for fixed/rgmii-id link mode
+[   12.962644] fsl_enetc4 0002:00:08.0 eth1: Link is Up - 1Gbps/Full - flow control off
+[   12.965944] xhci-hcd xhci-hcd.4.auto: xHCI Host Controller
+[   12.966229] xhci-hcd xhci-hcd.4.auto: new USB bus registered, assigned bus number 1
+[   12.970120] xhci-hcd xhci-hcd.4.auto: hcc params 0x00087001 hci version 0x100 quirks 0x000080a001000010
+[   12.970478] xhci-hcd xhci-hcd.4.auto: irq 263, io mem 0x4c100000
+[   12.971773] xhci-hcd xhci-hcd.4.auto: xHCI Host Controller
+[   12.971923] xhci-hcd xhci-hcd.4.auto: new USB bus registered, assigned bus number 2
+[   12.972192] xhci-hcd xhci-hcd.4.auto: Host supports USB 3.0 SuperSpeed
+[   12.980391] hub 1-0:1.0: USB hub found
+[   12.981251] hub 1-0:1.0: 1 port detected
+[   12.984871] usb usb2: We don't know the algorithms for LPM for this host, disabling LPM.
+[   12.986149] hub 2-0:1.0: USB hub found
+[   12.986341] hub 2-0:1.0: 1 port detected
+[   12.987976] imx_usb 4c200000.usb: deferred probe timeout, ignoring dependency
+[   12.991007] ci_hdrc ci_hdrc.0: deferred probe timeout, ignoring dependency
+[   12.994982] ci_hdrc ci_hdrc.0: EHCI Host Controller
+[   12.995083] ci_hdrc ci_hdrc.0: new USB bus registered, assigned bus number 3
+[   13.005073] ci_hdrc ci_hdrc.0: USB 2.0 started, EHCI 1.00
+[   13.006367] hub 3-0:1.0: USB hub found
+[   13.006818] hub 3-0:1.0: 1 port detected
+[   13.009172] pciback 0000:00:00.0: deferred probe timeout, ignoring dependency
+[   13.010736] pcieport 0000:00:00.0: deferred probe timeout, ignoring dependency
+[   13.013315] pcieport 0000:00:00.0: PME: Signaling with IRQ 220
+[   13.014160] pciback 0001:00:00.0: deferred probe timeout, ignoring dependency
+[   13.015268] pcieport 0001:00:00.0: deferred probe timeout, ignoring dependency
+[   13.016499] pcieport 0001:00:00.0: PME: Signaling with IRQ 221
+[   13.019232] platform sound-bt-sco: deferred probe pending: asoc-simple-card: parse error
+[   13.030115] sdhci-esdhc-imx 42860000.mmc: deferred probe timeout, ignoring dependency
+[   13.034054] sdhci-esdhc-imx 42850000.mmc: deferred probe timeout, ignoring dependency
+[   13.040384] sdhci-esdhc-imx 42860000.mmc: Got CD GPIO
+[   13.078395] mmc0: SDHCI controller on 42850000.mmc [42850000.mmc] using ADMA
+[   13.081880] mmc1: SDHCI controller on 42860000.mmc [42860000.mmc] using ADMA
+ENET-LAB3 boot: leg0(FRDM/LAN)=eth0@0002:00:00.0 carrier=1 | leg1(Orin/USB)=eth1@0002:00:08.0 carrier=1
+ENET-LAB3 up: if=eth1 idx=3 mac=3a:2a:4f:ae:c1:96 my_et=0x88b7 watching 1 peer(s) body=magic+seq+fill
+ENET-LAB3 up: if=eth0 idx=2 mac=92:1b:a8:38:b7:21 my_et=0x88b7 watching 1 peer(s) body=magic+seq+fill
+ENET-LAB3 UP: ethertype=0x88b7 peers=1 body=emit enforce=self-arming
+ENET-LAB3 UP: ethertype=0x88b7 peers=1 body=emit enforce=self-arming
+ENET-LAB3 rx: peer 0x88b9 body OK src 00:04:9f:0a:fc:6d seq=1 (observed, not required)
+ENET-LAB3 rx: peer 0x88b9 body OK src 00:04:9f:0a:fc:6d seq=1
+ENET-LAB3 PASS: t=1787684280.580s peers=1/1 validated=1 beat=1 loss=0 foreign=334 self=69 reboots=0 legacy=0
+ENET-LAB3 PASS: t=1787684280.783s peers=1/1 validated=1 beat=2 loss=0 foreign=335 self=71 reboots=0 legacy=0
+ENET-LAB3 PASS: t=1787684281.149s peers=1/1 validated=1 beat=3 loss=0 foreign=338 self=72 reboots=0 legacy=0
+ENET-LAB3 PASS: t=1787684281.450s peers=1/1 validated=1 beat=4 loss=0 foreign=340 self=73 reboots=0 legacy=0
+ENET-LAB3 PASS: t=1787684281.822s peers=1/1 validated=1 beat=5 loss=0 foreign=343 self=74 reboots=0 legacy=0
+ENET-LAB3 PASS: t=1787684282.049s peers=1/1 validated=1 beat=6 loss=0 foreign=348 self=74 reboots=0 legacy=0
+ENET-LAB3 PASS: t=1787684282.260s peers=1/1 validated=1 beat=7 loss=0 foreign=358 self=75 reboots=0 legacy=0
+ENET-LAB3 PASS: t=1787684282.463s peers=1/1 validated=1 beat=8 loss=0 foreign=361 self=76 reboots=0 legacy=0
+ENET-LAB3 PASS: t=1787684282.813s peers=1/1 validated=1 beat=9 loss=0 foreign=375 self=78 reboots=0 legacy=0
+ENET-LAB3 PASS: t=1787684283.028s peers=1/1 validated=1 beat=10 loss=0 foreign=376 self=79 reboots=0 legacy=0
+ENET-LAB3 PASS: t=1787684283.236s peers=1/1 validated=1 beat=11 loss=0 foreign=379 self=80 reboots=0 legacy=0
+ENET-LAB3 rx: peer 0x88ba body OK src 3e:c7:e7:79:f3:87 seq=1 (observed, not required)
+ENET-LAB3 rx: peer 0x88ba body OK src 3e:c7:e7:79:f3:87 seq=1
+ENET-LAB3 PASS: t=1787684283.239s peers=1/1 validated=2 beat=1 loss=0 foreign=380 self=80 reboots=0 legacy=0
+ENET-LAB3 PASS: t=1787684283.442s peers=1/1 validated=2 beat=2 loss=0 foreign=387 self=80 reboots=0 legacy=0
+ENET-LAB3 PASS: t=1787684283.443s peers=1/1 validated=2 beat=12 loss=0 foreign=387 self=81 reboots=0 legacy=0
+ENET-LAB3 PASS: t=1787684283.649s peers=1/1 validated=2 beat=3 loss=0 foreign=388 self=81 reboots=0 legacy=0
+ENET-LAB3 PASS: t=1787684283.650s peers=1/1 validated=2 beat=13 loss=0 foreign=388 self=82 reboots=0 legacy=0
+ENET-LAB3 PASS: t=1787684283.853s peers=1/1 validated=2 beat=4 loss=0 foreign=388 self=83 reboots=0 legacy=0
+ENET-LAB3 PASS: t=1787684284.054s peers=1/1 validated=2 beat=14 loss=0 foreign=388 self=84 reboots=0 legacy=0
+ENET-LAB3 PASS: t=1787684284.260s peers=1/1 validated=2 beat=5 loss=0 foreign=390 self=84 reboots=0 legacy=0
+ENET-LAB3 PASS: t=1787684284.260s peers=1/1 validated=2 beat=15 loss=0 foreign=390 self=85 reboots=0 legacy=0
+ENET-LAB3 PASS: t=1787684284.466s peers=1/1 validated=2 beat=6 loss=0 foreign=394 self=85 reboots=0 legacy=0
+ENET-LAB3 PASS: t=1787684284.467s peers=1/1 validated=2 beat=16 loss=0 foreign=394 self=86 reboots=0 legacy=0
+ENET-LAB3 PASS: t=1787684284.673s peers=1/1 validated=2 beat=17 loss=0 foreign=401 self=87 reboots=0 legacy=0
+ENET-LAB3 PASS: t=1787684284.873s peers=1/1 validated=2 beat=7 loss=0 foreign=403 self=87 reboots=0 legacy=0
+ENET-LAB3 PASS: t=1787684284.897s peers=1/1 validated=2 beat=18 loss=0 foreign=403 self=88 reboots=0 legacy=0
+ENET-LAB3 PASS: t=1787684285.079s peers=1/1 validated=2 beat=8 loss=0 foreign=410 self=89 reboots=0 legacy=0
+ENET-LAB3 PASS: t=1787684285.110s peers=1/1 validated=2 beat=19 loss=0 foreign=410 self=89 reboots=0 legacy=0
+ENET-LAB3 PASS: t=1787684285.284s peers=1/1 validated=2 beat=9 loss=0 foreign=416 self=89 reboots=0 legacy=0
+ENET-LAB3 PASS: t=1787684285.331s peers=1/1 validated=2 beat=20 loss=0 foreign=420 self=90 reboots=0 legacy=0
+ENET-LAB3 PASS: t=1787684285.490s peers=1/1 validated=2 beat=10 loss=0 foreign=433 self=90 reboots=0 legacy=0
+ENET-LAB3 PASS: t=1787684285.586s peers=1/1 validated=2 beat=21 loss=0 foreign=436 self=91 reboots=0 legacy=0
+ENET-LAB3 PASS: t=1787684285.697s peers=1/1 validated=2 beat=11 loss=0 foreign=445 self=91 reboots=0 legacy=0
+ENET-LAB3 PASS: t=1787684285.840s peers=1/1 validated=2 beat=22 loss=0 foreign=450 self=92 reboots=0 legacy=0
+ENET-LAB3 PASS: t=1787684285.904s peers=1/1 validated=2 beat=12 loss=0 foreign=454 self=92 reboots=0 legacy=0
+ENET-LAB3 PASS: t=1787684286.063s peers=1/1 validated=2 beat=23 loss=0 foreign=456 self=93 reboots=0 legacy=0
+ENET-LAB3 PASS: t=1787684286.111s peers=1/1 validated=2 beat=13 loss=0 foreign=456 self=93 reboots=0 legacy=0
+ENET-LAB3 PASS: t=1787684286.297s peers=1/1 validated=2 beat=24 loss=0 foreign=458 self=94 reboots=0 legacy=0
+ENET-LAB3 PASS: t=1787684286.317s peers=1/1 validated=2 beat=14 loss=0 foreign=459 self=94 reboots=0 legacy=0
+ENET-LAB3 PASS: t=1787684286.524s peers=1/1 validated=2 beat=15 loss=0 foreign=462 self=95 reboots=0 legacy=0
+ENET-LAB3 PASS: t=1787684286.525s peers=1/1 validated=2 beat=25 loss=0 foreign=462 self=96 reboots=0 legacy=0
+ENET-LAB3 PASS: t=1787684286.731s peers=1/1 validated=2 beat=16 loss=0 foreign=466 self=96 reboots=0 legacy=0
+ENET-LAB3 PASS: t=1787684286.732s peers=1/1 validated=2 beat=26 loss=0 foreign=466 self=97 reboots=0 legacy=0
+ENET-LAB3 PASS: t=1787684286.935s peers=1/1 validated=2 beat=17 loss=0 foreign=473 self=98 reboots=0 legacy=0
+ENET-LAB3 PASS: t=1787684286.961s peers=1/1 validated=2 beat=27 loss=0 foreign=474 self=98 reboots=0 legacy=0
+ENET-LAB3 PASS: t=1787684287.139s peers=1/1 validated=2 beat=18 loss=0 foreign=475 self=98 reboots=0 legacy=0
+ENET-LAB3 PASS: t=1787684287.310s peers=1/1 validated=2 beat=28 loss=0 foreign=476 self=99 reboots=0 legacy=0
+ENET-LAB3 PASS: t=1787684287.345s peers=1/1 validated=2 beat=19 loss=0 foreign=476 self=99 reboots=0 legacy=0
+ENET-LAB3 PASS: t=1787684287.552s peers=1/1 validated=2 beat=20 loss=0 foreign=478 self=100 reboots=0 legacy=0
+ENET-LAB3 PASS: t=1787684287.553s peers=1/1 validated=2 beat=29 loss=0 foreign=478 self=101 reboots=0 legacy=0
+ENET-LAB3 PASS: t=1787684287.759s peers=1/1 validated=2 beat=21 loss=0 foreign=485 self=101 reboots=0 legacy=0
+ENET-LAB3 PASS: t=1787684287.760s peers=1/1 validated=2 beat=30 loss=0 foreign=485 self=102 reboots=0 legacy=0
+ENET-LAB3 PASS: t=1787684287.966s peers=1/1 validated=2 beat=22 loss=0 foreign=494 self=102 reboots=0 legacy=0
+ENET-LAB3 PASS: t=1787684287.966s peers=1/1 validated=2 beat=31 loss=0 foreign=494 self=103 reboots=0 legacy=0
+ENET-LAB3 PASS: t=1787684288.170s peers=1/1 validated=2 beat=23 loss=0 foreign=494 self=104 reboots=0 legacy=0
+ENET-LAB3 PASS: t=1787684288.327s peers=1/1 validated=2 beat=32 loss=0 foreign=495 self=104 reboots=0 legacy=0
+ENET-LAB3 PASS: t=1787684288.373s peers=1/1 validated=2 beat=24 loss=0 foreign=495 self=104 reboots=0 legacy=0
+ENET-LAB3 PASS: t=1787684288.576s peers=1/1 validated=2 beat=33 loss=0 foreign=496 self=105 reboots=0 legacy=0
+ENET-LAB3 PASS: t=1787684288.579s peers=1/1 validated=2 beat=25 loss=0 foreign=496 self=106 reboots=0 legacy=0
+ENET-LAB3 PASS: t=1787684288.783s peers=1/1 validated=2 beat=26 loss=0 foreign=498 self=106 reboots=0 legacy=0
+ENET-LAB3 PASS: t=1787684288.784s peers=1/1 validated=2 beat=34 loss=0 foreign=498 self=107 reboots=0 legacy=0
+ENET-LAB3 PASS: t=1787684288.990s peers=1/1 validated=2 beat=27 loss=0 foreign=506 self=107 reboots=0 legacy=0
+ENET-LAB3 PASS: t=1787684288.991s peers=1/1 validated=2 beat=35 loss=0 foreign=506 self=108 reboots=0 legacy=0
+ENET-LAB3 PASS: t=1787684289.197s peers=1/1 validated=2 beat=28 loss=0 foreign=508 self=108 reboots=0 legacy=0
+ENET-LAB3 PASS: t=1787684289.198s peers=1/1 validated=2 beat=36 loss=0 foreign=508 self=109 reboots=0 legacy=0
+ENET-LAB3 PASS: t=1787684289.403s peers=1/1 validated=2 beat=29 loss=0 foreign=510 self=109 reboots=0 legacy=0
+ENET-LAB3 PASS: t=1787684289.404s peers=1/1 validated=2 beat=37 loss=0 foreign=510 self=110 reboots=0 legacy=0
+ENET-LAB3 PASS: t=1787684289.610s peers=1/1 validated=2 beat=30 loss=0 foreign=511 self=110 reboots=0 legacy=0
+ENET-LAB3 PASS: t=1787684289.611s peers=1/1 validated=2 beat=38 loss=0 foreign=511 self=111 reboots=0 legacy=0
+ENET-LAB3 PASS: t=1787684289.817s peers=1/1 validated=2 beat=31 loss=0 foreign=512 self=111 reboots=0 legacy=0
+ENET-LAB3 PASS: t=1787684289.818s peers=1/1 validated=2 beat=39 loss=0 foreign=512 self=112 reboots=0 legacy=0
+ENET-LAB3 PASS: t=1787684290.021s peers=1/1 validated=2 beat=32 loss=0 foreign=512 self=113 reboots=0 legacy=0
+ENET-LAB3 PASS: t=1787684290.053s peers=1/1 validated=2 beat=40 loss=0 foreign=513 self=113 reboots=0 legacy=0
+ENET-LAB3 PASS: t=1787684290.225s peers=1/1 validated=2 beat=33 loss=0 foreign=513 self=113 reboots=0 legacy=0
+ENET-LAB3 PASS: t=1787684290.384s peers=1/1 validated=2 beat=41 loss=0 foreign=515 self=114 reboots=0 legacy=0
+ENET-LAB3 PASS: t=1787684290.431s peers=1/1 validated=2 beat=34 loss=0 foreign=515 self=114 reboots=0 legacy=0
+ENET-LAB3 PASS: t=1787684290.609s peers=1/1 validated=2 beat=42 loss=0 foreign=515 self=115 reboots=0 legacy=0
+ENET-LAB3 PASS: t=1787684290.638s peers=1/1 validated=2 beat=35 loss=0 foreign=515 self=115 reboots=0 legacy=0
+ENET-LAB3 PASS: t=1787684290.841s peers=1/1 validated=2 beat=43 loss=0 foreign=515 self=117 reboots=0 legacy=0
+ENET-LAB3 PASS: t=1787684290.842s peers=1/1 validated=2 beat=36 loss=0 foreign=515 self=117 reboots=0 legacy=0
+ENET-LAB3 PASS: t=1787684291.044s peers=1/1 validated=2 beat=44 loss=0 foreign=515 self=118 reboots=0 legacy=0
+ENET-LAB3 PASS: t=1787684291.046s peers=1/1 validated=2 beat=37 loss=0 foreign=515 self=118 reboots=0 legacy=0
+ENET-LAB3 PASS: t=1787684291.250s peers=1/1 validated=2 beat=38 loss=0 foreign=517 self=118 reboots=0 legacy=0
+ENET-LAB3 PASS: t=1787684291.251s peers=1/1 validated=2 beat=45 loss=0 foreign=517 self=119 reboots=0 legacy=0
+ENET-LAB3 PASS: t=1787684291.454s peers=1/1 validated=2 beat=39 loss=0 foreign=517 self=120 reboots=0 legacy=0
+ENET-LAB3 PASS: t=1787684291.655s peers=1/1 validated=2 beat=46 loss=0 foreign=517 self=121 reboots=0 legacy=0
+ENET-LAB3 PASS: t=1787684291.657s peers=1/1 validated=2 beat=40 loss=0 foreign=519 self=121 reboots=0 legacy=0
+ENET-LAB3 PASS: t=1787684291.865s peers=1/1 validated=2 beat=47 loss=0 foreign=521 self=122 reboots=0 legacy=0
+ENET-LAB3 PASS: t=1787684292.063s peers=1/1 validated=2 beat=41 loss=0 foreign=522 self=122 reboots=0 legacy=0
+ENET-LAB3 PASS: t=1787684292.094s peers=1/1 validated=2 beat=48 loss=0 foreign=523 self=123 reboots=0 legacy=0
+ENET-LAB3 PASS: t=1787684292.269s peers=1/1 validated=2 beat=42 loss=0 foreign=523 self=123 reboots=0 legacy=0
+ENET-LAB3 PASS: t=1787684292.392s peers=1/1 validated=2 beat=49 loss=0 foreign=524 self=124 reboots=0 legacy=0
+ENET-LAB3 PASS: t=1787684292.476s peers=1/1 validated=2 beat=43 loss=0 foreign=525 self=124 reboots=0 legacy=0
+ENET-LAB3 PASS: t=1787684292.641s peers=1/1 validated=2 beat=50 loss=0 foreign=525 self=125 reboots=0 legacy=0
+ENET-LAB3 PASS: t=1787684292.683s peers=1/1 validated=2 beat=44 loss=0 foreign=525 self=125 reboots=0 legacy=0
+ENET-LAB3 PASS: t=1787684292.890s peers=1/1 validated=2 beat=45 loss=0 foreign=526 self=126 reboots=0 legacy=0
+ENET-LAB3 PASS: t=1787684292.891s peers=1/1 validated=2 beat=51 loss=0 foreign=526 self=127 reboots=0 legacy=0
+ENET-LAB3 PASS: t=1787684293.097s peers=1/1 validated=2 beat=46 loss=0 foreign=530 self=127 reboots=0 legacy=0
+ENET-LAB3 PASS: t=1787684293.098s peers=1/1 validated=2 beat=52 loss=0 foreign=530 self=128 reboots=0 legacy=0
+ENET-LAB3 PASS: t=1787684293.301s peers=1/1 validated=2 beat=47 loss=0 foreign=530 self=129 reboots=0 legacy=0
+ENET-LAB3 PASS: t=1787684293.409s peers=1/1 validated=2 beat=53 loss=0 foreign=531 self=129 reboots=0 legacy=0
+ENET-LAB3 PASS: t=1787684293.505s peers=1/1 validated=2 beat=48 loss=0 foreign=532 self=129 reboots=0 legacy=0
+ENET-LAB3 PASS: t=1787684293.629s peers=1/1 validated=2 beat=54 loss=0 foreign=533 self=130 reboots=0 legacy=0
+ENET-LAB3 PASS: t=1787684293.711s peers=1/1 validated=2 beat=49 loss=0 foreign=535 self=130 reboots=0 legacy=0
+ENET-LAB3 PASS: t=1787684293.918s peers=1/1 validated=2 beat=50 loss=0 foreign=536 self=131 reboots=0 legacy=0
+ENET-LAB3 PASS: t=1787684293.919s peers=1/1 validated=2 beat=55 loss=0 foreign=536 self=132 reboots=0 legacy=0
+ENET-LAB3 PASS: t=1787684294.123s peers=1/1 validated=2 beat=51 loss=0 foreign=536 self=133 reboots=0 legacy=0
+ENET-LAB3 PASS: t=1787684294.324s peers=1/1 validated=2 beat=56 loss=0 foreign=536 self=134 reboots=0 legacy=0
+ENET-LAB3 PASS: t=1787684294.530s peers=1/1 validated=2 beat=52 loss=0 foreign=537 self=134 reboots=0 legacy=0
+ENET-LAB3 PASS: t=1787684294.531s peers=1/1 validated=2 beat=57 loss=0 foreign=537 self=135 reboots=0 legacy=0
+ENET-LAB3 PASS: t=1787684294.737s peers=1/1 validated=2 beat=53 loss=0 foreign=539 self=135 reboots=0 legacy=0
+ENET-LAB3 PASS: t=1787684294.738s peers=1/1 validated=2 beat=58 loss=0 foreign=539 self=136 reboots=0 legacy=0
+ENET-LAB3 PASS: t=1787684294.944s peers=1/1 validated=2 beat=54 loss=0 foreign=540 self=136 reboots=0 legacy=0
+ENET-LAB3 PASS: t=1787684294.944s peers=1/1 validated=2 beat=59 loss=0 foreign=540 self=137 reboots=0 legacy=0
+ENET-LAB3 PASS: t=1787684295.151s peers=1/1 validated=2 beat=55 loss=0 foreign=541 self=137 reboots=0 legacy=0
+ENET-LAB3 PASS: t=1787684295.151s peers=1/1 validated=2 beat=60 loss=0 foreign=541 self=138 reboots=0 legacy=0
+ENET-LAB3 PASS: t=1787684295.354s peers=1/1 validated=2 beat=56 loss=0 foreign=541 self=139 reboots=0 legacy=0
+ENET-LAB3 PASS: t=1787684295.454s peers=1/1 validated=2 beat=61 loss=0 foreign=543 self=139 reboots=0 legacy=0
+ENET-LAB3 PASS: t=1787684295.626s peers=1/1 validated=2 beat=57 loss=0 foreign=543 self=139 reboots=0 legacy=0
+ENET-LAB3 PASS: t=1787684295.668s peers=1/1 validated=2 beat=62 loss=0 foreign=543 self=140 reboots=0 legacy=0
+ENET-LAB3 PASS: t=1787684295.833s peers=1/1 validated=2 beat=58 loss=0 foreign=546 self=140 reboots=0 legacy=0
+ENET-LAB3 PASS: t=1787684296.022s peers=1/1 validated=2 beat=63 loss=0 foreign=547 self=141 reboots=0 legacy=0
+ENET-LAB3 PASS: t=1787684296.039s peers=1/1 validated=2 beat=59 loss=0 foreign=547 self=141 reboots=0 legacy=0
+ENET-LAB3 PASS: t=1787684296.241s peers=1/1 validated=2 beat=64 loss=0 foreign=547 self=143 reboots=0 legacy=0
+ENET-LAB3 PASS: t=1787684296.243s peers=1/1 validated=2 beat=60 loss=0 foreign=547 self=143 reboots=0 legacy=0
+ENET-LAB3 PASS: t=1787684296.447s peers=1/1 validated=2 beat=61 loss=0 foreign=548 self=143 reboots=0 legacy=0
+ENET-LAB3 PASS: t=1787684296.448s peers=1/1 validated=2 beat=65 loss=0 foreign=548 self=144 reboots=0 legacy=0
+ENET-LAB3 PASS: t=1787684296.651s peers=1/1 validated=2 beat=62 loss=0 foreign=548 self=145 reboots=0 legacy=0
+ENET-LAB3 PASS: t=1787684296.690s peers=1/1 validated=2 beat=66 loss=0 foreign=548 self=145 reboots=0 legacy=0
+ENET-LAB3 PASS: t=1787684296.855s peers=1/1 validated=2 beat=63 loss=0 foreign=551 self=145 reboots=0 legacy=0
+ENET-LAB3 PASS: t=1787684297.046s peers=1/1 validated=2 beat=67 loss=0 foreign=553 self=146 reboots=0 legacy=0
+ENET-LAB3 PASS: t=1787684297.062s peers=1/1 validated=2 beat=64 loss=0 foreign=553 self=146 reboots=0 legacy=0
+ENET-LAB3 PASS: t=1787684297.270s peers=1/1 validated=2 beat=65 loss=0 foreign=554 self=147 reboots=0 legacy=0
+ENET-LAB3 PASS: t=1787684297.270s peers=1/1 validated=2 beat=68 loss=0 foreign=554 self=148 reboots=0 legacy=0
+ENET-LAB3 PASS: t=1787684297.474s peers=1/1 validated=2 beat=66 loss=0 foreign=554 self=149 reboots=0 legacy=0
+ENET-LAB3 PASS: t=1787684297.494s peers=1/1 validated=2 beat=69 loss=0 foreign=556 self=149 reboots=0 legacy=0
+ENET-LAB3 PASS: t=1787684297.678s peers=1/1 validated=2 beat=67 loss=0 foreign=560 self=149 reboots=0 legacy=0
+ENET-LAB3 PASS: t=1787684297.707s peers=1/1 validated=2 beat=70 loss=0 foreign=560 self=150 reboots=0 legacy=0
+ENET-LAB3 PASS: t=1787684297.885s peers=1/1 validated=2 beat=68 loss=0 foreign=564 self=150 reboots=0 legacy=0
+ENET-LAB3 PASS: t=1787684298.088s peers=1/1 validated=2 beat=71 loss=0 foreign=564 self=152 reboots=0 legacy=0
+ENET-LAB3 PASS: t=1787684298.090s peers=1/1 validated=2 beat=69 loss=0 foreign=564 self=152 reboots=0 legacy=0
+ENET-LAB3 PASS: t=1787684298.294s peers=1/1 validated=2 beat=70 loss=0 foreign=565 self=152 reboots=0 legacy=0
+ENET-LAB3 PASS: t=1787684298.295s peers=1/1 validated=2 beat=72 loss=0 foreign=565 self=153 reboots=0 legacy=0
+ENET-LAB3 PASS: t=1787684298.497s peers=1/1 validated=2 beat=71 loss=0 foreign=565 self=154 reboots=0 legacy=0
+ENET-LAB3 PASS: t=1787684298.510s peers=1/1 validated=2 beat=73 loss=0 foreign=567 self=154 reboots=0 legacy=0
+ENET-LAB3 PASS: t=1787684298.702s peers=1/1 validated=2 beat=72 loss=0 foreign=571 self=154 reboots=0 legacy=0
+ENET-LAB3 PASS: t=1787684298.718s peers=1/1 validated=2 beat=74 loss=0 foreign=571 self=155 reboots=0 legacy=0
+ENET-LAB3 PASS: t=1787684298.909s peers=1/1 validated=2 beat=73 loss=0 foreign=573 self=155 reboots=0 legacy=0
+ENET-LAB3 PASS: t=1787684299.111s peers=1/1 validated=2 beat=75 loss=0 foreign=573 self=157 reboots=0 legacy=0
+ENET-LAB3 PASS: t=1787684299.113s peers=1/1 validated=2 beat=74 loss=0 foreign=573 self=157 reboots=0 legacy=0
+ENET-LAB3 PASS: t=1787684299.317s peers=1/1 validated=2 beat=75 loss=0 foreign=574 self=157 reboots=0 legacy=0
+ENET-LAB3 PASS: t=1787684299.318s peers=1/1 validated=2 beat=76 loss=0 foreign=574 self=158 reboots=0 legacy=0
+ENET-LAB3 PASS: t=1787684299.524s peers=1/1 validated=2 beat=76 loss=0 foreign=577 self=158 reboots=0 legacy=0
+ENET-LAB3 PASS: t=1787684299.525s peers=1/1 validated=2 beat=77 loss=0 foreign=577 self=159 reboots=0 legacy=0
+ENET-LAB3 PASS: t=1787684299.731s peers=1/1 validated=2 beat=77 loss=0 foreign=578 self=159 reboots=0 legacy=0
+ENET-LAB3 PASS: t=1787684299.732s peers=1/1 validated=2 beat=78 loss=0 foreign=578 self=160 reboots=0 legacy=0
+ENET-LAB3 PASS: t=1787684299.938s peers=1/1 validated=2 beat=78 loss=0 foreign=582 self=160 reboots=0 legacy=0
+ENET-LAB3 PASS: t=1787684299.939s peers=1/1 validated=2 beat=79 loss=0 foreign=582 self=161 reboots=0 legacy=0
+ENET-LAB3 PASS: t=1787684300.143s peers=1/1 validated=2 beat=79 loss=0 foreign=582 self=162 reboots=0 legacy=0
+ENET-LAB3 PASS: t=1787684300.216s peers=1/1 validated=2 beat=80 loss=0 foreign=583 self=162 reboots=0 legacy=0
+ENET-LAB3 PASS: t=1787684300.347s peers=1/1 validated=2 beat=80 loss=0 foreign=583 self=162 reboots=0 legacy=0
+ENET-LAB3 PASS: t=1787684300.506s peers=1/1 validated=2 beat=81 loss=0 foreign=585 self=163 reboots=0 legacy=0
+ENET-LAB3 PASS: t=1787684300.554s peers=1/1 validated=2 beat=81 loss=0 foreign=593 self=163 reboots=0 legacy=0
+ENET-LAB3 PASS: t=1787684300.756s peers=1/1 validated=2 beat=82 loss=0 foreign=593 self=165 reboots=0 legacy=0
+ENET-LAB3 PASS: t=1787684300.758s peers=1/1 validated=2 beat=82 loss=0 foreign=593 self=165 reboots=0 legacy=0
+ENET-LAB3 PASS: t=1787684300.960s peers=1/1 validated=2 beat=83 loss=0 foreign=594 self=165 reboots=0 legacy=0
+ENET-LAB3 PASS: t=1787684300.962s peers=1/1 validated=2 beat=83 loss=0 foreign=595 self=166 reboots=0 legacy=0
+ENET-LAB3 PASS: t=1787684301.167s peers=1/1 validated=2 beat=84 loss=0 foreign=601 self=166 reboots=0 legacy=0
+ENET-LAB3 PASS: t=1787684301.168s peers=1/1 validated=2 beat=84 loss=0 foreign=601 self=166 reboots=0 legacy=0
+ENET-LAB3 PASS: t=1787684301.375s peers=1/1 validated=2 beat=85 loss=0 foreign=604 self=167 reboots=0 legacy=0
+ENET-LAB3 PASS: t=1787684301.376s peers=1/1 validated=2 beat=85 loss=0 foreign=604 self=168 reboots=0 legacy=0
+ENET-LAB3 PASS: t=1787684301.582s peers=1/1 validated=2 beat=86 loss=0 foreign=610 self=168 reboots=0 legacy=0
+ENET-LAB3 PASS: t=1787684301.583s peers=1/1 validated=2 beat=86 loss=0 foreign=610 self=169 reboots=0 legacy=0
+ENET-LAB3 PASS: t=1787684301.835s peers=1/1 validated=2 beat=87 loss=0 foreign=613 self=170 reboots=0 legacy=0
+ENET-LAB3 PASS: t=1787684301.989s peers=1/1 validated=2 beat=87 loss=0 foreign=613 self=170 reboots=0 legacy=0
+ENET-LAB3 PASS: t=1787684302.062s peers=1/1 validated=2 beat=88 loss=0 foreign=614 self=171 reboots=0 legacy=0
+ENET-LAB3 PASS: t=1787684302.196s peers=1/1 validated=2 beat=88 loss=0 foreign=614 self=171 reboots=0 legacy=0
+ENET-LAB3 PASS: t=1787684302.403s peers=1/1 validated=2 beat=89 loss=0 foreign=615 self=172 reboots=0 legacy=0
+ENET-LAB3 PASS: t=1787684302.404s peers=1/1 validated=2 beat=89 loss=0 foreign=615 self=173 reboots=0 legacy=0
+ENET-LAB3 PASS: t=1787684302.607s peers=1/1 validated=2 beat=90 loss=0 foreign=622 self=174 reboots=0 legacy=0
+ENET-LAB3 PASS: t=1787684302.616s peers=1/1 validated=2 beat=90 loss=0 foreign=624 self=174 reboots=0 legacy=0
+ENET-LAB3 PASS: t=1787684302.811s peers=1/1 validated=2 beat=91 loss=0 foreign=626 self=174 reboots=0 legacy=0
+ENET-LAB3 PASS: t=1787684302.933s peers=1/1 validated=2 beat=91 loss=0 foreign=627 self=175 reboots=0 legacy=0
+ENET-LAB3 PASS: t=1787684303.018s peers=1/1 validated=2 beat=92 loss=0 foreign=627 self=175 reboots=0 legacy=0
+ENET-LAB3 PASS: t=1787684303.220s peers=1/1 validated=2 beat=92 loss=0 foreign=627 self=177 reboots=0 legacy=0
+ENET-LAB3 PASS: t=1787684303.222s peers=1/1 validated=2 beat=93 loss=0 foreign=627 self=177 reboots=0 legacy=0
+ENET-LAB3 PASS: t=1787684303.426s peers=1/1 validated=2 beat=94 loss=0 foreign=627 self=178 reboots=0 legacy=0
+ENET-LAB3 PASS: t=1787684303.602s peers=1/1 validated=2 beat=93 loss=0 foreign=629 self=178 reboots=0 legacy=0
+ENET-LAB3 PASS: t=1787684303.629s peers=1/1 validated=2 beat=95 loss=0 foreign=633 self=178 reboots=0 legacy=0
+ENET-LAB3 PASS: t=1787684303.834s peers=1/1 validated=2 beat=94 loss=0 foreign=637 self=180 reboots=0 legacy=0
+ENET-LAB3 PASS: t=1787684303.844s peers=1/1 validated=2 beat=96 loss=0 foreign=637 self=180 reboots=0 legacy=0
+ENET-LAB3 PASS: t=1787684304.048s peers=1/1 validated=2 beat=97 loss=0 foreign=647 self=180 reboots=0 legacy=0
+ENET-LAB3 PASS: t=1787684304.049s peers=1/1 validated=2 beat=95 loss=0 foreign=647 self=181 reboots=0 legacy=0
+ENET-LAB3 PASS: t=1787684304.252s peers=1/1 validated=2 beat=96 loss=0 foreign=655 self=181 reboots=0 legacy=0
+ENET-LAB3 PASS: t=1787684304.254s peers=1/1 validated=2 beat=98 loss=0 foreign=655 self=182 reboots=0 legacy=0
+ENET-LAB3 PASS: t=1787684304.457s peers=1/1 validated=2 beat=99 loss=0 foreign=655 self=183 reboots=0 legacy=0
+ENET-LAB3 PASS: t=1787684304.471s peers=1/1 validated=2 beat=97 loss=0 foreign=655 self=183 reboots=0 legacy=0
+ENET-LAB3 PASS: t=1787684304.661s peers=1/1 validated=2 beat=100 loss=0 foreign=667 self=183 reboots=0 legacy=0
+ENET-LAB3 PASS: t=1787684304.701s peers=1/1 validated=2 beat=98 loss=0 foreign=667 self=184 reboots=0 legacy=0
+ENET-LAB3 PASS: t=1787684304.869s peers=1/1 validated=2 beat=101 loss=0 foreign=678 self=184 reboots=0 legacy=0
+ENET-LAB3 PASS: t=1787684304.957s peers=1/1 validated=2 beat=99 loss=0 foreign=681 self=185 reboots=0 legacy=0
+ENET-LAB3 PASS: t=1787684305.076s peers=1/1 validated=2 beat=102 loss=0 foreign=687 self=185 reboots=0 legacy=0
+ENET-LAB3 PASS: t=1787684305.241s peers=1/1 validated=2 beat=100 loss=0 foreign=692 self=186 reboots=0 legacy=0
+ENET-LAB3 PASS: t=1787684305.283s peers=1/1 validated=2 beat=103 loss=0 foreign=696 self=186 reboots=0 legacy=0
+ENET-LAB3 PASS: t=1787684305.446s peers=1/1 validated=2 beat=101 loss=0 foreign=701 self=187 reboots=0 legacy=0
+ENET-LAB3 PASS: t=1787684305.490s peers=1/1 validated=2 beat=104 loss=0 foreign=701 self=187 reboots=0 legacy=0
+ENET-LAB3 PASS: t=1787684305.696s peers=1/1 validated=2 beat=102 loss=0 foreign=708 self=188 reboots=0 legacy=0
+ENET-LAB3 PASS: t=1787684305.696s peers=1/1 validated=2 beat=105 loss=0 foreign=708 self=189 reboots=0 legacy=0
+ENET-LAB3 PASS: t=1787684305.902s peers=1/1 validated=2 beat=106 loss=0 foreign=712 self=189 reboots=0 legacy=0
+ENET-LAB3 PASS: t=1787684305.903s peers=1/1 validated=2 beat=103 loss=0 foreign=712 self=190 reboots=0 legacy=0
+ENET-LAB3 PASS: t=1787684306.109s peers=1/1 validated=2 beat=107 loss=0 foreign=717 self=190 reboots=0 legacy=0
+ENET-LAB3 PASS: t=1787684306.110s peers=1/1 validated=2 beat=104 loss=0 foreign=717 self=191 reboots=0 legacy=0
+ENET-LAB3 PASS: t=1787684306.316s peers=1/1 validated=2 beat=108 loss=0 foreign=721 self=191 reboots=0 legacy=0
+ENET-LAB3 PASS: t=1787684306.317s peers=1/1 validated=2 beat=105 loss=0 foreign=721 self=192 reboots=0 legacy=0
+ENET-LAB3 PASS: t=1787684306.523s peers=1/1 validated=2 beat=109 loss=0 foreign=725 self=192 reboots=0 legacy=0
+ENET-LAB3 PASS: t=1787684306.524s peers=1/1 validated=2 beat=106 loss=0 foreign=725 self=193 reboots=0 legacy=0
+ENET-LAB3 PASS: t=1787684306.731s peers=1/1 validated=2 beat=110 loss=0 foreign=726 self=193 reboots=0 legacy=0
+ENET-LAB3 PASS: t=1787684306.732s peers=1/1 validated=2 beat=107 loss=0 foreign=726 self=194 reboots=0 legacy=0
+ENET-LAB3 PASS: t=1787684306.938s peers=1/1 validated=2 beat=111 loss=0 foreign=728 self=194 reboots=0 legacy=0
+ENET-LAB3 PASS: t=1787684306.938s peers=1/1 validated=2 beat=108 loss=0 foreign=728 self=195 reboots=0 legacy=0
+ENET-LAB3 PASS: t=1787684307.141s peers=1/1 validated=2 beat=112 loss=0 foreign=728 self=196 reboots=0 legacy=0
+ENET-LAB3 PASS: t=1787684307.171s peers=1/1 validated=2 beat=109 loss=0 foreign=729 self=196 reboots=0 legacy=0
+ENET-LAB3 PASS: t=1787684307.542s peers=1/1 validated=2 beat=110 loss=0 foreign=733 self=198 reboots=0 legacy=0
+ENET-LAB3 PASS: t=1787684307.543s peers=1/1 validated=2 beat=113 loss=0 foreign=733 self=198 reboots=0 legacy=0
+ENET-LAB3 PASS: t=1787684307.768s peers=1/1 validated=2 beat=111 loss=0 foreign=734 self=199 reboots=0 legacy=0
+ENET-LAB3 PASS: t=1787684307.950s peers=1/1 validated=2 beat=114 loss=0 foreign=737 self=199 reboots=0 legacy=0
+ENET-LAB3 PASS: t=1787684308.015s peers=1/1 validated=2 beat=112 loss=0 foreign=738 self=200 reboots=0 legacy=0
+ENET-LAB3 PASS: t=1787684308.157s peers=1/1 validated=2 beat=115 loss=0 foreign=740 self=200 reboots=0 legacy=0
+ENET-LAB3 PASS: t=1787684308.265s peers=1/1 validated=2 beat=113 loss=0 foreign=741 self=201 reboots=0 legacy=0
+ENET-LAB3 PASS: t=1787684308.447s peers=1/1 validated=2 beat=116 loss=0 foreign=745 self=202 reboots=0 legacy=0
+ENET-LAB3 PASS: t=1787684308.544s peers=1/1 validated=2 beat=114 loss=0 foreign=746 self=202 reboots=0 legacy=0
+ENET-LAB3 PASS: t=1787684308.651s peers=1/1 validated=2 beat=117 loss=0 foreign=747 self=202 reboots=0 legacy=0
+ENET-LAB3 PASS: t=1787684308.785s peers=1/1 validated=2 beat=115 loss=0 foreign=748 self=203 reboots=0 legacy=0
+ENET-LAB3 PASS: t=1787684308.858s peers=1/1 validated=2 beat=118 loss=0 foreign=749 self=203 reboots=0 legacy=0
+ENET-LAB3 PASS: t=1787684309.065s peers=1/1 validated=2 beat=119 loss=0 foreign=750 self=204 reboots=0 legacy=0
+ENET-LAB3 PASS: t=1787684309.066s peers=1/1 validated=2 beat=116 loss=0 foreign=750 self=205 reboots=0 legacy=0
+ENET-LAB3 PASS: t=1787684309.269s peers=1/1 validated=2 beat=120 loss=0 foreign=750 self=206 reboots=0 legacy=0
+ENET-LAB3 PASS: t=1787684309.322s peers=1/1 validated=2 beat=117 loss=0 foreign=751 self=206 reboots=0 legacy=0
+ENET-LAB3 PASS: t=1787684309.473s peers=1/1 validated=2 beat=121 loss=0 foreign=751 self=206 reboots=0 legacy=0
+ENET-LAB3 PASS: t=1787684309.673s peers=1/1 validated=2 beat=118 loss=0 foreign=752 self=207 reboots=0 legacy=0
+ENET-LAB3 PASS: t=1787684309.879s peers=1/1 validated=2 beat=122 loss=0 foreign=753 self=208 reboots=0 legacy=0
+ENET-LAB3 PASS: t=1787684309.880s peers=1/1 validated=2 beat=119 loss=0 foreign=753 self=209 reboots=0 legacy=0
+ENET-LAB3 PASS: t=1787684310.086s peers=1/1 validated=2 beat=123 loss=0 foreign=755 self=209 reboots=0 legacy=0
+ENET-LAB3 PASS: t=1787684310.087s peers=1/1 validated=2 beat=120 loss=0 foreign=755 self=210 reboots=0 legacy=0
+ENET-LAB3 PASS: t=1787684310.293s peers=1/1 validated=2 beat=124 loss=0 foreign=757 self=210 reboots=0 legacy=0
+ENET-LAB3 PASS: t=1787684310.294s peers=1/1 validated=2 beat=121 loss=0 foreign=757 self=211 reboots=0 legacy=0
+ENET-LAB3 PASS: t=1787684310.573s peers=1/1 validated=2 beat=122 loss=0 foreign=760 self=211 reboots=0 legacy=0
+ENET-LAB3 PASS: t=1787684310.574s peers=1/1 validated=2 beat=125 loss=0 foreign=760 self=212 reboots=0 legacy=0
+ENET-LAB3 PASS: t=1787684310.779s peers=1/1 validated=2 beat=126 loss=0 foreign=761 self=212 reboots=0 legacy=0
+ENET-LAB3 PASS: t=1787684310.780s peers=1/1 validated=2 beat=123 loss=0 foreign=761 self=212 reboots=0 legacy=0
+ENET-LAB3 PASS: t=1787684310.983s peers=1/1 validated=2 beat=127 loss=0 foreign=761 self=214 reboots=0 legacy=0
+ENET-LAB3 PASS: t=1787684311.184s peers=1/1 validated=2 beat=124 loss=0 foreign=761 self=215 reboots=0 legacy=0
+ENET-LAB3 PASS: t=1787684311.390s peers=1/1 validated=2 beat=128 loss=0 foreign=763 self=215 reboots=0 legacy=0
+ENET-LAB3 PASS: t=1787684311.391s peers=1/1 validated=2 beat=125 loss=0 foreign=763 self=216 reboots=0 legacy=0
+ENET-LAB3 PASS: t=1787684311.597s peers=1/1 validated=2 beat=129 loss=0 foreign=764 self=216 reboots=0 legacy=0
+ENET-LAB3 PASS: t=1787684311.598s peers=1/1 validated=2 beat=126 loss=0 foreign=764 self=217 reboots=0 legacy=0
+ENET-LAB3 PASS: t=1787684311.801s peers=1/1 validated=2 beat=130 loss=0 foreign=764 self=218 reboots=0 legacy=0
+[   13.202616] mmc0: Failed to initialize a non-removable card
+[   62.449548] cfg80211: failed to load regulatory.db
+ENET-LAB3 PASS: t=1787684311.969s peers=1/1 validated=2 beat=127 loss=0 foreign=765 self=218 reboots=0 legacy=0
+ENET-LAB3 PASS: t=1787684312.005s peers=1/1 validated=2 beat=131 loss=0 foreign=766 self=218 reboots=0 legacy=0
+ENET-LAB3 PASS: t=1787684312.207s peers=1/1 validated=2 beat=128 loss=0 foreign=766 self=220 reboots=0 legacy=0
+ENET-LAB3 PASS: t=1787684312.209s peers=1/1 validated=2 beat=132 loss=0 foreign=766 self=220 reboots=0 legacy=0
+ENET-LAB3 PASS: t=1787684312.413s peers=1/1 validated=2 beat=133 loss=0 foreign=768 self=220 reboots=0 legacy=0
+ENET-LAB3 PASS: t=1787684312.413s peers=1/1 validated=2 beat=129 loss=0 foreign=768 self=221 reboots=0 legacy=0
+ENET-LAB3 PASS: t=1787684312.625s peers=1/1 validated=2 beat=134 loss=0 foreign=774 self=221 reboots=0 legacy=0
+ENET-LAB3 PASS: t=1787684312.626s peers=1/1 validated=2 beat=130 loss=0 foreign=774 self=222 reboots=0 legacy=0
+ENET-LAB3 PASS: t=1787684312.829s peers=1/1 validated=2 beat=131 loss=0 foreign=776 self=223 reboots=0 legacy=0
+ENET-LAB3 PASS: t=1787684312.829s peers=1/1 validated=2 beat=135 loss=0 foreign=776 self=223 reboots=0 legacy=0
+ENET-LAB3 PASS: t=1787684313.033s peers=1/1 validated=2 beat=136 loss=0 foreign=777 self=223 reboots=0 legacy=0
+ENET-LAB3 PASS: t=1787684313.034s peers=1/1 validated=2 beat=132 loss=0 foreign=777 self=224 reboots=0 legacy=0
+ENET-LAB3 PASS: t=1787684313.239s peers=1/1 validated=2 beat=137 loss=0 foreign=778 self=224 reboots=0 legacy=0
+ENET-LAB3 PASS: t=1787684313.240s peers=1/1 validated=2 beat=133 loss=0 foreign=778 self=225 reboots=0 legacy=0
+ENET-LAB3 PASS: t=1787684313.443s peers=1/1 validated=2 beat=138 loss=0 foreign=778 self=226 reboots=0 legacy=0
+ENET-LAB3 PASS: t=1787684313.549s peers=1/1 validated=2 beat=134 loss=0 foreign=779 self=226 reboots=0 legacy=0
+ENET-LAB3 PASS: t=1787684313.647s peers=1/1 validated=2 beat=139 loss=0 foreign=779 self=226 reboots=0 legacy=0
+ENET-LAB3 PASS: t=1787684313.846s peers=1/1 validated=2 beat=135 loss=0 foreign=781 self=227 reboots=0 legacy=0
+ENET-LAB3 PASS: t=1787684313.855s peers=1/1 validated=2 beat=140 loss=0 foreign=781 self=228 reboots=0 legacy=0
+ENET-LAB3 PASS: t=1787684314.051s peers=1/1 validated=2 beat=136 loss=0 foreign=781 self=228 reboots=0 legacy=0
+ENET-LAB3 PASS: t=1787684314.058s peers=1/1 validated=2 beat=141 loss=0 foreign=782 self=229 reboots=0 legacy=0
+ENET-LAB3 PASS: t=1787684314.260s peers=1/1 validated=2 beat=137 loss=0 foreign=782 self=230 reboots=0 legacy=0
+ENET-LAB3 PASS: t=1787684314.465s peers=1/1 validated=2 beat=142 loss=0 foreign=786 self=230 reboots=0 legacy=0
+ENET-LAB3 PASS: t=1787684314.466s peers=1/1 validated=2 beat=138 loss=0 foreign=786 self=231 reboots=0 legacy=0
+ENET-LAB3 PASS: t=1787684314.704s peers=1/1 validated=2 beat=143 loss=0 foreign=789 self=231 reboots=0 legacy=0
+ENET-LAB3 PASS: t=1787684314.706s peers=1/1 validated=2 beat=139 loss=0 foreign=789 self=232 reboots=0 legacy=0
+ENET-LAB3 PASS: t=1787684314.912s peers=1/1 validated=2 beat=144 loss=0 foreign=790 self=232 reboots=0 legacy=0
+ENET-LAB3 PASS: t=1787684314.913s peers=1/1 validated=2 beat=140 loss=0 foreign=790 self=233 reboots=0 legacy=0
+ENET-LAB3 PASS: t=1787684315.129s peers=1/1 validated=2 beat=141 loss=0 foreign=791 self=234 reboots=0 legacy=0
+ENET-LAB3 PASS: t=1787684315.131s peers=1/1 validated=2 beat=145 loss=0 foreign=791 self=234 reboots=0 legacy=0
+ENET-LAB3 PASS: t=1787684315.465s peers=1/1 validated=2 beat=142 loss=0 foreign=792 self=235 reboots=0 legacy=0
+ENET-LAB3 PASS: t=1787684315.538s peers=1/1 validated=2 beat=146 loss=0 foreign=792 self=235 reboots=0 legacy=0
+ENET-LAB3 PASS: t=1787684315.740s peers=1/1 validated=2 beat=143 loss=0 foreign=792 self=237 reboots=0 legacy=0
+ENET-LAB3 PASS: t=1787684315.741s peers=1/1 validated=2 beat=147 loss=0 foreign=792 self=237 reboots=0 legacy=0
+ENET-LAB3 PASS: t=1787684315.945s peers=1/1 validated=2 beat=148 loss=0 foreign=793 self=237 reboots=0 legacy=0
+ENET-LAB3 PASS: t=1787684315.946s peers=1/1 validated=2 beat=144 loss=0 foreign=793 self=238 reboots=0 legacy=0
+ENET-LAB3 PASS: t=1787684316.152s peers=1/1 validated=2 beat=149 loss=0 foreign=794 self=238 reboots=0 legacy=0
+ENET-LAB3 PASS: t=1787684316.153s peers=1/1 validated=2 beat=145 loss=0 foreign=794 self=239 reboots=0 legacy=0
+ENET-LAB3 PASS: t=1787684316.359s peers=1/1 validated=2 beat=150 loss=0 foreign=795 self=239 reboots=0 legacy=0
+ENET-LAB3 PASS: t=1787684316.360s peers=1/1 validated=2 beat=146 loss=0 foreign=795 self=240 reboots=0 legacy=0
+ENET-LAB3 PASS: t=1787684316.563s peers=1/1 validated=2 beat=151 loss=0 foreign=795 self=241 reboots=0 legacy=0
+ENET-LAB3 PASS: t=1787684316.716s peers=1/1 validated=2 beat=147 loss=0 foreign=796 self=241 reboots=0 legacy=0
+ENET-LAB3 PASS: t=1787684316.766s peers=1/1 validated=2 beat=152 loss=0 foreign=797 self=241 reboots=0 legacy=0
+ENET-LAB3 PASS: t=1787684316.968s peers=1/1 validated=2 beat=148 loss=0 foreign=797 self=243 reboots=0 legacy=0
+ENET-LAB3 PASS: t=1787684316.970s peers=1/1 validated=2 beat=153 loss=0 foreign=797 self=243 reboots=0 legacy=0
+ENET-LAB3 PASS: t=1787684317.174s peers=1/1 validated=2 beat=154 loss=0 foreign=798 self=243 reboots=0 legacy=0
+ENET-LAB3 PASS: t=1787684317.175s peers=1/1 validated=2 beat=149 loss=0 foreign=798 self=244 reboots=0 legacy=0
+ENET-LAB3 PASS: t=1787684317.380s peers=1/1 validated=2 beat=155 loss=0 foreign=799 self=244 reboots=0 legacy=0
+ENET-LAB3 PASS: t=1787684317.381s peers=1/1 validated=2 beat=150 loss=0 foreign=799 self=245 reboots=0 legacy=0
+ENET-LAB3 PASS: t=1787684317.586s peers=1/1 validated=2 beat=156 loss=0 foreign=800 self=245 reboots=0 legacy=0
+ENET-LAB3 PASS: t=1787684317.587s peers=1/1 validated=2 beat=151 loss=0 foreign=800 self=246 reboots=0 legacy=0
+ENET-LAB3 PASS: t=1787684317.793s peers=1/1 validated=2 beat=157 loss=0 foreign=801 self=246 reboots=0 legacy=0
+ENET-LAB3 PASS: t=1787684317.794s peers=1/1 validated=2 beat=152 loss=0 foreign=801 self=247 reboots=0 legacy=0
+ENET-LAB3 PASS: t=1787684318.000s peers=1/1 validated=2 beat=158 loss=0 foreign=807 self=247 reboots=0 legacy=0
+ENET-LAB3 PASS: t=1787684318.001s peers=1/1 validated=2 beat=153 loss=0 foreign=807 self=248 reboots=0 legacy=0
+ENET-LAB3 PASS: t=1787684318.206s peers=1/1 validated=2 beat=159 loss=0 foreign=809 self=248 reboots=0 legacy=0
+ENET-LAB3 PASS: t=1787684318.207s peers=1/1 validated=2 beat=154 loss=0 foreign=809 self=248 reboots=0 legacy=0
+ENET-LAB3 PASS: t=1787684318.411s peers=1/1 validated=2 beat=160 loss=0 foreign=809 self=250 reboots=0 legacy=0
+ENET-LAB3 PASS: t=1787684318.427s peers=1/1 validated=2 beat=155 loss=0 foreign=810 self=250 reboots=0 legacy=0
+ENET-LAB3 PASS: t=1787684318.615s peers=1/1 validated=2 beat=161 loss=0 foreign=810 self=250 reboots=0 legacy=0
+ENET-LAB3 PASS: t=1787684318.817s peers=1/1 validated=2 beat=156 loss=0 foreign=810 self=252 reboots=0 legacy=0
+ENET-LAB3 PASS: t=1787684318.819s peers=1/1 validated=2 beat=162 loss=0 foreign=810 self=252 reboots=0 legacy=0
+ENET-LAB3 PASS: t=1787684319.023s peers=1/1 validated=2 beat=163 loss=0 foreign=816 self=252 reboots=0 legacy=0
+ENET-LAB3 PASS: t=1787684319.024s peers=1/1 validated=2 beat=157 loss=0 foreign=816 self=253 reboots=0 legacy=0
+ENET-LAB3 PASS: t=1787684319.230s peers=1/1 validated=2 beat=164 loss=0 foreign=817 self=253 reboots=0 legacy=0
+ENET-LAB3 PASS: t=1787684319.231s peers=1/1 validated=2 beat=158 loss=0 foreign=817 self=254 reboots=0 legacy=0
+ENET-LAB3 PASS: t=1787684319.433s peers=1/1 validated=2 beat=165 loss=0 foreign=817 self=255 reboots=0 legacy=0
+ENET-LAB3 PASS: t=1787684319.484s peers=1/1 validated=2 beat=159 loss=0 foreign=818 self=255 reboots=0 legacy=0
+ENET-LAB3 PASS: t=1787684319.637s peers=1/1 validated=2 beat=166 loss=0 foreign=818 self=255 reboots=0 legacy=0
+ENET-LAB3 PASS: t=1787684319.836s peers=1/1 validated=2 beat=160 loss=0 foreign=819 self=256 reboots=0 legacy=0
+ENET-LAB3 PASS: t=1787684319.844s peers=1/1 validated=2 beat=167 loss=0 foreign=819 self=256 reboots=0 legacy=0
+ENET-LAB3 PASS: t=1787684320.046s peers=1/1 validated=2 beat=161 loss=0 foreign=819 self=258 reboots=0 legacy=0
+ENET-LAB3 PASS: t=1787684320.047s peers=1/1 validated=2 beat=168 loss=0 foreign=819 self=258 reboots=0 legacy=0
+ENET-LAB3 PASS: t=1787684320.251s peers=1/1 validated=2 beat=169 loss=0 foreign=820 self=258 reboots=0 legacy=0
+ENET-LAB3 PASS: t=1787684320.252s peers=1/1 validated=2 beat=162 loss=0 foreign=820 self=258 reboots=0 legacy=0
+ENET-LAB3 PASS: t=1787684320.455s peers=1/1 validated=2 beat=170 loss=0 foreign=820 self=260 reboots=0 legacy=0
+ENET-LAB3 PASS: t=1787684320.541s peers=1/1 validated=2 beat=163 loss=0 foreign=821 self=260 reboots=0 legacy=0
+ENET-LAB3 PASS: t=1787684320.660s peers=1/1 validated=2 beat=171 loss=0 foreign=821 self=260 reboots=0 legacy=0
+ENET-LAB3 PASS: t=1787684320.856s peers=1/1 validated=2 beat=164 loss=0 foreign=824 self=261 reboots=0 legacy=0
+ENET-LAB3 PASS: t=1787684320.866s peers=1/1 validated=2 beat=172 loss=0 foreign=826 self=261 reboots=0 legacy=0
+ENET-LAB3 PASS: t=1787684321.072s peers=1/1 validated=2 beat=173 loss=0 foreign=827 self=262 reboots=0 legacy=0
+ENET-LAB3 PASS: t=1787684321.073s peers=1/1 validated=2 beat=165 loss=0 foreign=827 self=263 reboots=0 legacy=0
+ENET-LAB3 PASS: t=1787684321.280s peers=1/1 validated=2 beat=174 loss=0 foreign=828 self=263 reboots=0 legacy=0
+ENET-LAB3 PASS: t=1787684321.280s peers=1/1 validated=2 beat=166 loss=0 foreign=828 self=264 reboots=0 legacy=0
+ENET-LAB3 PASS: t=1787684321.483s peers=1/1 validated=2 beat=175 loss=0 foreign=828 self=265 reboots=0 legacy=0
+ENET-LAB3 PASS: t=1787684321.559s peers=1/1 validated=2 beat=167 loss=0 foreign=829 self=265 reboots=0 legacy=0
+ENET-LAB3 PASS: t=1787684321.687s peers=1/1 validated=2 beat=176 loss=0 foreign=831 self=265 reboots=0 legacy=0
+ENET-LAB3 PASS: t=1787684321.889s peers=1/1 validated=2 beat=168 loss=0 foreign=831 self=267 reboots=0 legacy=0
+ENET-LAB3 PASS: t=1787684321.891s peers=1/1 validated=2 beat=177 loss=0 foreign=831 self=267 reboots=0 legacy=0
+ENET-LAB3 PASS: t=1787684322.142s peers=1/1 validated=2 beat=169 loss=0 foreign=832 self=268 reboots=0 legacy=0
+ENET-LAB3 PASS: t=1787684322.298s peers=1/1 validated=2 beat=178 loss=0 foreign=833 self=268 reboots=0 legacy=0
+ENET-LAB3 PASS: t=1787684322.500s peers=1/1 validated=2 beat=170 loss=0 foreign=833 self=270 reboots=0 legacy=0
+ENET-LAB3 PASS: t=1787684322.501s peers=1/1 validated=2 beat=179 loss=0 foreign=833 self=270 reboots=0 legacy=0
+ENET-LAB3 PASS: t=1787684322.705s peers=1/1 validated=2 beat=180 loss=0 foreign=834 self=270 reboots=0 legacy=0
+ENET-LAB3 PASS: t=1787684322.706s peers=1/1 validated=2 beat=171 loss=0 foreign=834 self=271 reboots=0 legacy=0
+ENET-LAB3 PASS: t=1787684323.023s peers=1/1 validated=2 beat=172 loss=0 foreign=837 self=271 reboots=0 legacy=0
+ENET-LAB3 PASS: t=1787684323.025s peers=1/1 validated=2 beat=181 loss=0 foreign=837 self=272 reboots=0 legacy=0
+ENET-LAB3 PASS: t=1787684323.229s peers=1/1 validated=2 beat=182 loss=0 foreign=846 self=272 reboots=0 legacy=0
+ENET-LAB3 PASS: t=1787684323.229s peers=1/1 validated=2 beat=173 loss=0 foreign=846 self=273 reboots=0 legacy=0
+ENET-LAB3 PASS: t=1787684323.435s peers=1/1 validated=2 beat=183 loss=0 foreign=847 self=273 reboots=0 legacy=0
+ENET-LAB3 PASS: t=1787684323.436s peers=1/1 validated=2 beat=174 loss=0 foreign=847 self=274 reboots=0 legacy=0
+ENET-LAB3 PASS: t=1787684323.639s peers=1/1 validated=2 beat=184 loss=0 foreign=847 self=275 reboots=0 legacy=0
+ENET-LAB3 PASS: t=1787684323.841s peers=1/1 validated=2 beat=175 loss=0 foreign=847 self=276 reboots=0 legacy=0
+ENET-LAB3 PASS: t=1787684324.042s peers=1/1 validated=2 beat=185 loss=0 foreign=849 self=277 reboots=0 legacy=0
+ENET-LAB3 PASS: t=1787684324.059s peers=1/1 validated=2 beat=176 loss=0 foreign=850 self=277 reboots=0 legacy=0
+ENET-LAB3 PASS: t=1787684324.246s peers=1/1 validated=2 beat=186 loss=0 foreign=858 self=277 reboots=0 legacy=0
+ENET-LAB3 PASS: t=1787684324.436s peers=1/1 validated=2 beat=177 loss=0 foreign=859 self=278 reboots=0 legacy=0
+ENET-LAB3 PASS: t=1787684324.452s peers=1/1 validated=2 beat=187 loss=0 foreign=859 self=278 reboots=0 legacy=0
+ENET-LAB3 PASS: t=1787684324.654s peers=1/1 validated=2 beat=178 loss=0 foreign=859 self=280 reboots=0 legacy=0
+ENET-LAB3 PASS: t=1787684324.656s peers=1/1 validated=2 beat=188 loss=0 foreign=859 self=280 reboots=0 legacy=0
+ENET-LAB3 PASS: t=1787684324.926s peers=1/1 validated=2 beat=179 loss=0 foreign=860 self=281 reboots=0 legacy=0
+ENET-LAB3 PASS: t=1787684325.062s peers=1/1 validated=2 beat=189 loss=0 foreign=861 self=281 reboots=0 legacy=0
+ENET-LAB3 PASS: t=1787684325.172s peers=1/1 validated=2 beat=180 loss=0 foreign=861 self=282 reboots=0 legacy=0
+ENET-LAB3 PASS: t=1787684325.269s peers=1/1 validated=2 beat=190 loss=0 foreign=863 self=282 reboots=0 legacy=0
+ENET-LAB3 PASS: t=1787684325.471s peers=1/1 validated=2 beat=181 loss=0 foreign=863 self=284 reboots=0 legacy=0
+ENET-LAB3 PASS: t=1787684325.472s peers=1/1 validated=2 beat=191 loss=0 foreign=863 self=284 reboots=0 legacy=0
+ENET-LAB3 PASS: t=1787684325.676s peers=1/1 validated=2 beat=192 loss=0 foreign=864 self=284 reboots=0 legacy=0
+ENET-LAB3 PASS: t=1787684325.677s peers=1/1 validated=2 beat=182 loss=0 foreign=864 self=285 reboots=0 legacy=0
+ENET-LAB3 PASS: t=1787684325.880s peers=1/1 validated=2 beat=193 loss=0 foreign=864 self=286 reboots=0 legacy=0
+ENET-LAB3 PASS: t=1787684325.947s peers=1/1 validated=2 beat=183 loss=0 foreign=865 self=286 reboots=0 legacy=0
+ENET-LAB3 PASS: t=1787684326.084s peers=1/1 validated=2 beat=194 loss=0 foreign=865 self=286 reboots=0 legacy=0
+ENET-LAB3 PASS: t=1787684326.286s peers=1/1 validated=2 beat=184 loss=0 foreign=865 self=288 reboots=0 legacy=0
+ENET-LAB3 PASS: t=1787684326.287s peers=1/1 validated=2 beat=195 loss=0 foreign=865 self=288 reboots=0 legacy=0
+ENET-LAB3 PASS: t=1787684326.491s peers=1/1 validated=2 beat=196 loss=0 foreign=865 self=289 reboots=0 legacy=0
+ENET-LAB3 PASS: t=1787684326.508s peers=1/1 validated=2 beat=185 loss=0 foreign=866 self=289 reboots=0 legacy=0
+ENET-LAB3 PASS: t=1787684326.695s peers=1/1 validated=2 beat=197 loss=0 foreign=866 self=289 reboots=0 legacy=0
+ENET-LAB3 PASS: t=1787684326.876s peers=1/1 validated=2 beat=186 loss=0 foreign=867 self=290 reboots=0 legacy=0
+ENET-LAB3 PASS: t=1787684326.901s peers=1/1 validated=2 beat=198 loss=0 foreign=867 self=290 reboots=0 legacy=0
+ENET-LAB3 PASS: t=1787684327.104s peers=1/1 validated=2 beat=187 loss=0 foreign=867 self=292 reboots=0 legacy=0
+ENET-LAB3 PASS: t=1787684327.105s peers=1/1 validated=2 beat=199 loss=0 foreign=867 self=292 reboots=0 legacy=0
+ENET-LAB3 PASS: t=1787684327.309s peers=1/1 validated=2 beat=200 loss=0 foreign=868 self=292 reboots=0 legacy=0
+ENET-LAB3 PASS: t=1787684327.310s peers=1/1 validated=2 beat=188 loss=0 foreign=868 self=293 reboots=0 legacy=0
+ENET-LAB3 PASS: t=1787684327.513s peers=1/1 validated=2 beat=201 loss=0 foreign=868 self=294 reboots=0 legacy=0
+ENET-LAB3 PASS: t=1787684327.533s peers=1/1 validated=2 beat=189 loss=0 foreign=869 self=294 reboots=0 legacy=0
+ENET-LAB3 PASS: t=1787684327.717s peers=1/1 validated=2 beat=202 loss=0 foreign=869 self=294 reboots=0 legacy=0
+ENET-LAB3 PASS: t=1787684327.794s peers=1/1 validated=2 beat=190 loss=0 foreign=870 self=295 reboots=0 legacy=0
+ENET-LAB3 PASS: t=1787684327.924s peers=1/1 validated=2 beat=203 loss=0 foreign=870 self=295 reboots=0 legacy=0
+ENET-LAB3 PASS: t=1787684328.078s peers=1/1 validated=2 beat=191 loss=0 foreign=871 self=296 reboots=0 legacy=0
+ENET-LAB3 PASS: t=1787684328.130s peers=1/1 validated=2 beat=204 loss=0 foreign=872 self=297 reboots=0 legacy=0
+ENET-LAB3 PASS: t=1787684328.344s peers=1/1 validated=2 beat=192 loss=0 foreign=876 self=297 reboots=0 legacy=0
+ENET-LAB3 PASS: t=1787684328.346s peers=1/1 validated=2 beat=205 loss=0 foreign=876 self=298 reboots=0 legacy=0
+ENET-LAB3 PASS: t=1787684328.550s peers=1/1 validated=2 beat=206 loss=0 foreign=878 self=298 reboots=0 legacy=0
+ENET-LAB3 PASS: t=1787684328.550s peers=1/1 validated=2 beat=193 loss=0 foreign=878 self=299 reboots=0 legacy=0
+ENET-LAB3 PASS: t=1787684328.756s peers=1/1 validated=2 beat=207 loss=0 foreign=879 self=299 reboots=0 legacy=0
+ENET-LAB3 PASS: t=1787684328.757s peers=1/1 validated=2 beat=194 loss=0 foreign=879 self=300 reboots=0 legacy=0
+ENET-LAB3 PASS: t=1787684328.960s peers=1/1 validated=2 beat=208 loss=0 foreign=879 self=301 reboots=0 legacy=0
+ENET-LAB3 PASS: t=1787684329.093s peers=1/1 validated=2 beat=195 loss=0 foreign=880 self=301 reboots=0 legacy=0
+ENET-LAB3 PASS: t=1787684329.164s peers=1/1 validated=2 beat=209 loss=0 foreign=881 self=301 reboots=0 legacy=0
+ENET-LAB3 PASS: t=1787684329.371s peers=1/1 validated=2 beat=210 loss=0 foreign=883 self=302 reboots=0 legacy=0
+ENET-LAB3 PASS: t=1787684329.372s peers=1/1 validated=2 beat=196 loss=0 foreign=883 self=303 reboots=0 legacy=0
+ENET-LAB3 PASS: t=1787684329.575s peers=1/1 validated=2 beat=211 loss=0 foreign=883 self=304 reboots=0 legacy=0
+ENET-LAB3 PASS: t=1787684329.647s peers=1/1 validated=2 beat=197 loss=0 foreign=884 self=304 reboots=0 legacy=0
+ENET-LAB3 PASS: t=1787684329.779s peers=1/1 validated=2 beat=212 loss=0 foreign=884 self=304 reboots=0 legacy=0
+ENET-LAB3 PASS: t=1787684329.981s peers=1/1 validated=2 beat=198 loss=0 foreign=884 self=306 reboots=0 legacy=0
+ENET-LAB3 PASS: t=1787684329.982s peers=1/1 validated=2 beat=213 loss=0 foreign=884 self=306 reboots=0 legacy=0
+ENET-LAB3 PASS: t=1787684330.187s peers=1/1 validated=2 beat=214 loss=0 foreign=886 self=306 reboots=0 legacy=0
+ENET-LAB3 PASS: t=1787684330.188s peers=1/1 validated=2 beat=199 loss=0 foreign=886 self=307 reboots=0 legacy=0
+ENET-LAB3 PASS: t=1787684330.393s peers=1/1 validated=2 beat=215 loss=0 foreign=887 self=307 reboots=0 legacy=0
+ENET-LAB3 PASS: t=1787684330.394s peers=1/1 validated=2 beat=200 loss=0 foreign=887 self=308 reboots=0 legacy=0
+ENET-LAB3 PASS: t=1787684330.600s peers=1/1 validated=2 beat=216 loss=0 foreign=888 self=308 reboots=0 legacy=0
+ENET-LAB3 PASS: t=1787684330.601s peers=1/1 validated=2 beat=201 loss=0 foreign=888 self=309 reboots=0 legacy=0
+ENET-LAB3 PASS: t=1787684330.807s peers=1/1 validated=2 beat=217 loss=0 foreign=889 self=309 reboots=0 legacy=0
+ENET-LAB3 PASS: t=1787684330.808s peers=1/1 validated=2 beat=202 loss=0 foreign=889 self=310 reboots=0 legacy=0
+ENET-LAB3 PASS: t=1787684331.014s peers=1/1 validated=2 beat=218 loss=0 foreign=890 self=310 reboots=0 legacy=0
+ENET-LAB3 PASS: t=1787684331.015s peers=1/1 validated=2 beat=203 loss=0 foreign=890 self=311 reboots=0 legacy=0
+ENET-LAB3 PASS: t=1787684331.221s peers=1/1 validated=2 beat=219 loss=0 foreign=892 self=311 reboots=0 legacy=0
+ENET-LAB3 PASS: t=1787684331.222s peers=1/1 validated=2 beat=204 loss=0 foreign=892 self=312 reboots=0 legacy=0
+ENET-LAB3 PASS: t=1787684331.428s peers=1/1 validated=2 beat=220 loss=0 foreign=893 self=312 reboots=0 legacy=0
+ENET-LAB3 PASS: t=1787684331.430s peers=1/1 validated=2 beat=205 loss=0 foreign=893 self=312 reboots=0 legacy=0
+ENET-LAB3 PASS: t=1787684331.636s peers=1/1 validated=2 beat=221 loss=0 foreign=896 self=313 reboots=0 legacy=0
+ENET-LAB3 PASS: t=1787684331.637s peers=1/1 validated=2 beat=206 loss=0 foreign=896 self=314 reboots=0 legacy=0
+ENET-LAB3 PASS: t=1787684331.843s peers=1/1 validated=2 beat=222 loss=0 foreign=898 self=314 reboots=0 legacy=0
+ENET-LAB3 PASS: t=1787684331.845s peers=1/1 validated=2 beat=207 loss=0 foreign=898 self=315 reboots=0 legacy=0
+ENET-LAB3 PASS: t=1787684332.048s peers=1/1 validated=2 beat=223 loss=0 foreign=898 self=316 reboots=0 legacy=0
+ENET-LAB3 PASS: t=1787684332.250s peers=1/1 validated=2 beat=208 loss=0 foreign=898 self=317 reboots=0 legacy=0
+ENET-LAB3 PASS: t=1787684332.251s peers=1/1 validated=2 beat=224 loss=0 foreign=898 self=317 reboots=0 legacy=0
+ENET-LAB3 PASS: t=1787684332.455s peers=1/1 validated=2 beat=225 loss=0 foreign=899 self=317 reboots=0 legacy=0
+ENET-LAB3 PASS: t=1787684332.457s peers=1/1 validated=2 beat=209 loss=0 foreign=899 self=318 reboots=0 legacy=0
+ENET-LAB3 PASS: t=1787684332.660s peers=1/1 validated=2 beat=226 loss=0 foreign=899 self=319 reboots=0 legacy=0
+ENET-LAB3 PASS: t=1787684332.744s peers=1/1 validated=2 beat=210 loss=0 foreign=900 self=319 reboots=0 legacy=0
+ENET-LAB3 PASS: t=1787684332.864s peers=1/1 validated=2 beat=227 loss=0 foreign=900 self=319 reboots=0 legacy=0
+ENET-LAB3 PASS: t=1787684333.066s peers=1/1 validated=2 beat=211 loss=0 foreign=900 self=321 reboots=0 legacy=0
+ENET-LAB3 PASS: t=1787684333.067s peers=1/1 validated=2 beat=228 loss=0 foreign=900 self=321 reboots=0 legacy=0
+ENET-LAB3 PASS: t=1787684333.281s peers=1/1 validated=2 beat=212 loss=0 foreign=901 self=322 reboots=0 legacy=0
+ENET-LAB3 PASS: t=1787684333.474s peers=1/1 validated=2 beat=229 loss=0 foreign=904 self=322 reboots=0 legacy=0
+ENET-LAB3 PASS: t=1787684333.676s peers=1/1 validated=2 beat=213 loss=0 foreign=904 self=324 reboots=0 legacy=0
+ENET-LAB3 PASS: t=1787684333.678s peers=1/1 validated=2 beat=230 loss=0 foreign=904 self=324 reboots=0 legacy=0
+ENET-LAB3 PASS: t=1787684333.882s peers=1/1 validated=2 beat=231 loss=0 foreign=905 self=324 reboots=0 legacy=0
+ENET-LAB3 PASS: t=1787684333.883s peers=1/1 validated=2 beat=214 loss=0 foreign=905 self=325 reboots=0 legacy=0
+ENET-LAB3 PASS: t=1787684334.088s peers=1/1 validated=2 beat=232 loss=0 foreign=911 self=325 reboots=0 legacy=0
+ENET-LAB3 PASS: t=1787684334.089s peers=1/1 validated=2 beat=215 loss=0 foreign=911 self=326 reboots=0 legacy=0
+ENET-LAB3 PASS: t=1787684334.292s peers=1/1 validated=2 beat=233 loss=0 foreign=911 self=327 reboots=0 legacy=0
+ENET-LAB3 PASS: t=1787684334.313s peers=1/1 validated=2 beat=216 loss=0 foreign=912 self=327 reboots=0 legacy=0
+ENET-LAB3 PASS: t=1787684334.496s peers=1/1 validated=2 beat=234 loss=0 foreign=921 self=327 reboots=0 legacy=0
+ENET-LAB3 PASS: t=1787684334.523s peers=1/1 validated=2 beat=217 loss=0 foreign=922 self=328 reboots=0 legacy=0
+ENET-LAB3 PASS: t=1787684334.703s peers=1/1 validated=2 beat=235 loss=0 foreign=922 self=328 reboots=0 legacy=0
+ENET-LAB3 PASS: t=1787684334.808s peers=1/1 validated=2 beat=218 loss=0 foreign=922 self=329 reboots=0 legacy=0
+ENET-LAB3 PASS: t=1787684334.910s peers=1/1 validated=2 beat=236 loss=0 foreign=928 self=329 reboots=0 legacy=0
+ENET-LAB3 PASS: t=1787684335.080s peers=1/1 validated=2 beat=219 loss=0 foreign=929 self=330 reboots=0 legacy=0
+ENET-LAB3 PASS: t=1787684335.116s peers=1/1 validated=2 beat=237 loss=0 foreign=929 self=330 reboots=0 legacy=0
+ENET-LAB3 PASS: t=1787684335.323s peers=1/1 validated=2 beat=238 loss=0 foreign=934 self=331 reboots=0 legacy=0
+ENET-LAB3 PASS: t=1787684335.324s peers=1/1 validated=2 beat=220 loss=0 foreign=934 self=332 reboots=0 legacy=0
+ENET-LAB3 PASS: t=1787684335.527s peers=1/1 validated=2 beat=239 loss=0 foreign=934 self=333 reboots=0 legacy=0
+ENET-LAB3 PASS: t=1787684335.728s peers=1/1 validated=2 beat=221 loss=0 foreign=934 self=334 reboots=0 legacy=0
+ENET-LAB3 PASS: t=1787684335.933s peers=1/1 validated=2 beat=240 loss=0 foreign=936 self=334 reboots=0 legacy=0
+ENET-LAB3 PASS: t=1787684335.934s peers=1/1 validated=2 beat=222 loss=0 foreign=936 self=335 reboots=0 legacy=0
+ENET-LAB3 PASS: t=1787684336.140s peers=1/1 validated=2 beat=241 loss=0 foreign=937 self=335 reboots=0 legacy=0
+ENET-LAB3 PASS: t=1787684336.141s peers=1/1 validated=2 beat=223 loss=0 foreign=937 self=336 reboots=0 legacy=0
+ENET-LAB3 PASS: t=1787684336.344s peers=1/1 validated=2 beat=242 loss=0 foreign=937 self=337 reboots=0 legacy=0
+ENET-LAB3 PASS: t=1787684336.546s peers=1/1 validated=2 beat=224 loss=0 foreign=937 self=338 reboots=0 legacy=0
+ENET-LAB3 PASS: t=1787684336.751s peers=1/1 validated=2 beat=243 loss=0 foreign=939 self=338 reboots=0 legacy=0
+ENET-LAB3 PASS: t=1787684336.752s peers=1/1 validated=2 beat=225 loss=0 foreign=939 self=338 reboots=0 legacy=0
+ENET-LAB3 PASS: t=1787684336.959s peers=1/1 validated=2 beat=244 loss=0 foreign=945 self=339 reboots=0 legacy=0
+ENET-LAB3 PASS: t=1787684336.960s peers=1/1 validated=2 beat=226 loss=0 foreign=945 self=339 reboots=0 legacy=0
+ENET-LAB3 PASS: t=1787684337.166s peers=1/1 validated=2 beat=245 loss=0 foreign=946 self=340 reboots=0 legacy=0
+ENET-LAB3 PASS: t=1787684337.167s peers=1/1 validated=2 beat=227 loss=0 foreign=946 self=340 reboots=0 legacy=0
+ENET-LAB3 PASS: t=1787684337.373s peers=1/1 validated=2 beat=246 loss=0 foreign=951 self=341 reboots=0 legacy=0
+ENET-LAB3 PASS: t=1787684337.374s peers=1/1 validated=2 beat=228 loss=0 foreign=951 self=342 reboots=0 legacy=0
+ENET-LAB3 PASS: t=1787684337.580s peers=1/1 validated=2 beat=247 loss=0 foreign=953 self=342 reboots=0 legacy=0
+ENET-LAB3 PASS: t=1787684337.581s peers=1/1 validated=2 beat=229 loss=0 foreign=953 self=343 reboots=0 legacy=0
+ENET-LAB3 PASS: t=1787684337.787s peers=1/1 validated=2 beat=248 loss=0 foreign=958 self=343 reboots=0 legacy=0
+ENET-LAB3 PASS: t=1787684337.788s peers=1/1 validated=2 beat=230 loss=0 foreign=958 self=343 reboots=0 legacy=0
+ENET-LAB3 PASS: t=1787684337.995s peers=1/1 validated=2 beat=249 loss=0 foreign=959 self=344 reboots=0 legacy=0
+ENET-LAB3 PASS: t=1787684337.996s peers=1/1 validated=2 beat=231 loss=0 foreign=959 self=344 reboots=0 legacy=0
+ENET-LAB3 PASS: t=1787684338.199s peers=1/1 validated=2 beat=250 loss=0 foreign=959 self=346 reboots=0 legacy=0
+ENET-LAB3 PASS: t=1787684338.290s peers=1/1 validated=2 beat=232 loss=0 foreign=960 self=346 reboots=0 legacy=0
+ENET-LAB3 PASS: t=1787684338.505s peers=1/1 validated=2 beat=233 loss=0 foreign=968 self=347 reboots=0 legacy=0
+ENET-LAB3 PASS: t=1787684338.606s peers=1/1 validated=2 beat=251 loss=0 foreign=968 self=347 reboots=0 legacy=0
+ENET-LAB3 PASS: t=1787684338.752s peers=1/1 validated=2 beat=234 loss=0 foreign=969 self=348 reboots=0 legacy=0
+ENET-LAB3 PASS: t=1787684338.813s peers=1/1 validated=2 beat=252 loss=0 foreign=969 self=348 reboots=0 legacy=0
+ENET-LAB3 PASS: t=1787684339.015s peers=1/1 validated=2 beat=235 loss=0 foreign=969 self=350 reboots=0 legacy=0
+ENET-LAB3 PASS: t=1787684339.017s peers=1/1 validated=2 beat=253 loss=0 foreign=969 self=350 reboots=0 legacy=0
+ENET-LAB3 PASS: t=1787684339.399s peers=1/1 validated=2 beat=236 loss=0 foreign=969 self=351 reboots=0 legacy=0
+ENET-LAB3 PASS: t=1787684339.424s peers=1/1 validated=2 beat=254 loss=0 foreign=975 self=351 reboots=0 legacy=0
+ENET-LAB3 PASS: t=1787684339.627s peers=1/1 validated=2 beat=255 loss=0 foreign=975 self=353 reboots=0 legacy=0
+ENET-LAB3 PASS: t=1787684339.629s peers=1/1 validated=2 beat=237 loss=0 foreign=975 self=353 reboots=0 legacy=0
+ENET-LAB3 PASS: t=1787684339.831s peers=1/1 validated=2 beat=256 loss=0 foreign=976 self=353 reboots=0 legacy=0
+ENET-LAB3 PASS: t=1787684339.832s peers=1/1 validated=2 beat=238 loss=0 foreign=976 self=354 reboots=0 legacy=0
+ENET-LAB3 PASS: t=1787684340.035s peers=1/1 validated=2 beat=257 loss=0 foreign=976 self=355 reboots=0 legacy=0
+ENET-LAB3 PASS: t=1787684340.156s peers=1/1 validated=2 beat=239 loss=0 foreign=977 self=355 reboots=0 legacy=0
+ENET-LAB3 PASS: t=1787684340.239s peers=1/1 validated=2 beat=258 loss=0 foreign=977 self=355 reboots=0 legacy=0
+ENET-LAB3 PASS: t=1787684340.393s peers=1/1 validated=2 beat=240 loss=0 foreign=979 self=356 reboots=0 legacy=0
+ENET-LAB3 PASS: t=1787684340.446s peers=1/1 validated=2 beat=259 loss=0 foreign=979 self=356 reboots=0 legacy=0
+ENET-LAB3 PASS: t=1787684340.653s peers=1/1 validated=2 beat=260 loss=0 foreign=981 self=357 reboots=0 legacy=0
+ENET-LAB3 PASS: t=1787684340.654s peers=1/1 validated=2 beat=241 loss=0 foreign=981 self=357 reboots=0 legacy=0
+ENET-LAB3 PASS: t=1787684340.858s peers=1/1 validated=2 beat=261 loss=0 foreign=981 self=359 reboots=0 legacy=0
+ENET-LAB3 PASS: t=1787684340.866s peers=1/1 validated=2 beat=242 loss=0 foreign=982 self=359 reboots=0 legacy=0
+ENET-LAB3 PASS: t=1787684341.062s peers=1/1 validated=2 beat=262 loss=0 foreign=983 self=359 reboots=0 legacy=0
+ENET-LAB3 PASS: t=1787684341.203s peers=1/1 validated=2 beat=243 loss=0 foreign=985 self=360 reboots=0 legacy=0
+ENET-LAB3 PASS: t=1787684341.269s peers=1/1 validated=2 beat=263 loss=0 foreign=986 self=360 reboots=0 legacy=0
+ENET-LAB3 PASS: t=1787684341.432s peers=1/1 validated=2 beat=244 loss=0 foreign=986 self=361 reboots=0 legacy=0
+ENET-LAB3 PASS: t=1787684341.475s peers=1/1 validated=2 beat=264 loss=0 foreign=986 self=361 reboots=0 legacy=0
+ENET-LAB3 PASS: t=1787684341.682s peers=1/1 validated=2 beat=265 loss=0 foreign=987 self=362 reboots=0 legacy=0
+ENET-LAB3 PASS: t=1787684341.683s peers=1/1 validated=2 beat=245 loss=0 foreign=987 self=363 reboots=0 legacy=0
+ENET-LAB3 PASS: t=1787684341.886s peers=1/1 validated=2 beat=266 loss=0 foreign=987 self=364 reboots=0 legacy=0
+ENET-LAB3 PASS: t=1787684341.909s peers=1/1 validated=2 beat=246 loss=0 foreign=988 self=364 reboots=0 legacy=0
+ENET-LAB3 PASS: t=1787684342.090s peers=1/1 validated=2 beat=267 loss=0 foreign=990 self=364 reboots=0 legacy=0
+ENET-LAB3 PASS: t=1787684342.159s peers=1/1 validated=2 beat=247 loss=0 foreign=991 self=365 reboots=0 legacy=0
+ENET-LAB3 PASS: t=1787684342.297s peers=1/1 validated=2 beat=268 loss=0 foreign=992 self=365 reboots=0 legacy=0
+ENET-LAB3 PASS: t=1787684342.444s peers=1/1 validated=2 beat=248 loss=0 foreign=993 self=366 reboots=0 legacy=0
+ENET-LAB3 PASS: t=1787684342.505s peers=1/1 validated=2 beat=269 loss=0 foreign=994 self=366 reboots=0 legacy=0
+ENET-LAB3 PASS: t=1787684342.712s peers=1/1 validated=2 beat=270 loss=0 foreign=995 self=367 reboots=0 legacy=0
+ENET-LAB3 PASS: t=1787684342.713s peers=1/1 validated=2 beat=249 loss=0 foreign=995 self=367 reboots=0 legacy=0
+ENET-LAB3 PASS: t=1787684342.919s peers=1/1 validated=2 beat=271 loss=0 foreign=997 self=368 reboots=0 legacy=0
+ENET-LAB3 PASS: t=1787684342.920s peers=1/1 validated=2 beat=250 loss=0 foreign=997 self=369 reboots=0 legacy=0
+ENET-LAB3 PASS: t=1787684343.123s peers=1/1 validated=2 beat=272 loss=0 foreign=997 self=370 reboots=0 legacy=0
+ENET-LAB3 PASS: t=1787684343.325s peers=1/1 validated=2 beat=251 loss=0 foreign=997 self=371 reboots=0 legacy=0
+ENET-LAB3 PASS: t=1787684343.530s peers=1/1 validated=2 beat=252 loss=0 foreign=1007 self=371 reboots=0 legacy=0
+ENET-LAB3 PASS: t=1787684343.531s peers=1/1 validated=2 beat=273 loss=0 foreign=1006 self=371 reboots=0 legacy=0
+ENET-LAB3 PASS: t=1787684343.738s peers=1/1 validated=2 beat=274 loss=0 foreign=1011 self=372 reboots=0 legacy=0
+ENET-LAB3 PASS: t=1787684343.738s peers=1/1 validated=2 beat=253 loss=0 foreign=1011 self=373 reboots=0 legacy=0
+ENET-LAB3 PASS: t=1787684343.942s peers=1/1 validated=2 beat=275 loss=0 foreign=1011 self=374 reboots=0 legacy=0
+ENET-LAB3 PASS: t=1787684344.063s peers=1/1 validated=2 beat=254 loss=0 foreign=1013 self=374 reboots=0 legacy=0
+ENET-LAB3 PASS: t=1787684344.145s peers=1/1 validated=2 beat=276 loss=0 foreign=1015 self=374 reboots=0 legacy=0
+ENET-LAB3 PASS: t=1787684344.347s peers=1/1 validated=2 beat=255 loss=0 foreign=1015 self=376 reboots=0 legacy=0
+ENET-LAB3 PASS: t=1787684344.349s peers=1/1 validated=2 beat=277 loss=0 foreign=1015 self=376 reboots=0 legacy=0
+ENET-LAB3 PASS: t=1787684344.557s peers=1/1 validated=2 beat=256 loss=0 foreign=1027 self=377 reboots=0 legacy=0
+ENET-LAB3 PASS: t=1787684344.754s peers=1/1 validated=2 beat=278 loss=0 foreign=1027 self=377 reboots=0 legacy=0
+ENET-LAB3 PASS: t=1787684344.956s peers=1/1 validated=2 beat=257 loss=0 foreign=1027 self=379 reboots=0 legacy=0
+ENET-LAB3 PASS: t=1787684344.957s peers=1/1 validated=2 beat=279 loss=0 foreign=1027 self=379 reboots=0 legacy=0
+ENET-LAB3 PASS: t=1787684345.238s peers=1/1 validated=2 beat=258 loss=0 foreign=1028 self=380 reboots=0 legacy=0
+ENET-LAB3 PASS: t=1787684345.365s peers=1/1 validated=2 beat=280 loss=0 foreign=1028 self=380 reboots=0 legacy=0
+ENET-LAB3 PASS: t=1787684345.497s peers=1/1 validated=2 beat=259 loss=0 foreign=1028 self=381 reboots=0 legacy=0
+ENET-LAB3 PASS: t=1787684345.573s peers=1/1 validated=2 beat=281 loss=0 foreign=1028 self=381 reboots=0 legacy=0
+ENET-LAB3 PASS: t=1787684345.718s peers=1/1 validated=2 beat=260 loss=0 foreign=1028 self=382 reboots=0 legacy=0
+ENET-LAB3 PASS: t=1787684345.780s peers=1/1 validated=2 beat=282 loss=0 foreign=1029 self=382 reboots=0 legacy=0
+ENET-LAB3 PASS: t=1787684345.959s peers=1/1 validated=2 beat=261 loss=0 foreign=1030 self=383 reboots=0 legacy=0
+ENET-LAB3 PASS: t=1787684345.987s peers=1/1 validated=2 beat=283 loss=0 foreign=1030 self=383 reboots=0 legacy=0
+ENET-LAB3 PASS: t=1787684346.190s peers=1/1 validated=2 beat=262 loss=0 foreign=1030 self=385 reboots=0 legacy=0
+ENET-LAB3 PASS: t=1787684346.191s peers=1/1 validated=2 beat=284 loss=0 foreign=1030 self=385 reboots=0 legacy=0
+ENET-LAB3 PASS: t=1787684346.395s peers=1/1 validated=2 beat=285 loss=0 foreign=1031 self=385 reboots=0 legacy=0
+ENET-LAB3 PASS: t=1787684346.397s peers=1/1 validated=2 beat=263 loss=0 foreign=1031 self=386 reboots=0 legacy=0
+ENET-LAB3 PASS: t=1787684346.602s peers=1/1 validated=2 beat=286 loss=0 foreign=1032 self=386 reboots=0 legacy=0
+ENET-LAB3 PASS: t=1787684346.603s peers=1/1 validated=2 beat=264 loss=0 foreign=1032 self=387 reboots=0 legacy=0
+ENET-LAB3 PASS: t=1787684346.806s peers=1/1 validated=2 beat=287 loss=0 foreign=1032 self=388 reboots=0 legacy=0
+ENET-LAB3 PASS: t=1787684346.837s peers=1/1 validated=2 beat=265 loss=0 foreign=1033 self=388 reboots=0 legacy=0
+ENET-LAB3 PASS: t=1787684347.010s peers=1/1 validated=2 beat=288 loss=0 foreign=1033 self=388 reboots=0 legacy=0
+ENET-LAB3 PASS: t=1787684347.204s peers=1/1 validated=2 beat=266 loss=0 foreign=1034 self=389 reboots=0 legacy=0
+ENET-LAB3 PASS: t=1787684347.217s peers=1/1 validated=2 beat=289 loss=0 foreign=1034 self=389 reboots=0 legacy=0
+ENET-LAB3 PASS: t=1787684347.420s peers=1/1 validated=2 beat=267 loss=0 foreign=1034 self=391 reboots=0 legacy=0
+ENET-LAB3 PASS: t=1787684347.421s peers=1/1 validated=2 beat=290 loss=0 foreign=1034 self=391 reboots=0 legacy=0
+ENET-LAB3 PASS: t=1787684347.625s peers=1/1 validated=2 beat=291 loss=0 foreign=1035 self=391 reboots=0 legacy=0
+ENET-LAB3 PASS: t=1787684347.626s peers=1/1 validated=2 beat=268 loss=0 foreign=1035 self=392 reboots=0 legacy=0
+ENET-LAB3 PASS: t=1787684347.829s peers=1/1 validated=2 beat=292 loss=0 foreign=1035 self=393 reboots=0 legacy=0
+ENET-LAB3 PASS: t=1787684347.868s peers=1/1 validated=2 beat=269 loss=0 foreign=1036 self=393 reboots=0 legacy=0
+ENET-LAB3 PASS: t=1787684348.033s peers=1/1 validated=2 beat=293 loss=0 foreign=1037 self=393 reboots=0 legacy=0
+ENET-LAB3 PASS: t=1787684348.235s peers=1/1 validated=2 beat=270 loss=0 foreign=1037 self=395 reboots=0 legacy=0
+ENET-LAB3 PASS: t=1787684348.237s peers=1/1 validated=2 beat=294 loss=0 foreign=1037 self=395 reboots=0 legacy=0
+ENET-LAB3 PASS: t=1787684348.612s peers=1/1 validated=2 beat=271 loss=0 foreign=1038 self=396 reboots=0 legacy=0
+ENET-LAB3 PASS: t=1787684348.644s peers=1/1 validated=2 beat=295 loss=0 foreign=1039 self=396 reboots=0 legacy=0
+ENET-LAB3 PASS: t=1787684348.852s peers=1/1 validated=2 beat=296 loss=0 foreign=1042 self=397 reboots=0 legacy=0
+ENET-LAB3 PASS: t=1787684348.852s peers=1/1 validated=2 beat=272 loss=0 foreign=1042 self=398 reboots=0 legacy=0
+ENET-LAB3 PASS: t=1787684349.058s peers=1/1 validated=2 beat=297 loss=0 foreign=1046 self=398 reboots=0 legacy=0
+ENET-LAB3 PASS: t=1787684349.059s peers=1/1 validated=2 beat=273 loss=0 foreign=1046 self=399 reboots=0 legacy=0
+ENET-LAB3 PASS: t=1787684349.265s peers=1/1 validated=2 beat=298 loss=0 foreign=1047 self=399 reboots=0 legacy=0
+ENET-LAB3 PASS: t=1787684349.266s peers=1/1 validated=2 beat=274 loss=0 foreign=1047 self=400 reboots=0 legacy=0
+ENET-LAB3 PASS: t=1787684349.471s peers=1/1 validated=2 beat=299 loss=0 foreign=1049 self=400 reboots=0 legacy=0
+ENET-LAB3 PASS: t=1787684349.472s peers=1/1 validated=2 beat=275 loss=0 foreign=1049 self=401 reboots=0 legacy=0
+ENET-LAB3 PASS: t=1787684349.678s peers=1/1 validated=2 beat=300 loss=0 foreign=1052 self=401 reboots=0 legacy=0
+ENET-LAB3 PASS: t=1787684349.679s peers=1/1 validated=2 beat=276 loss=0 foreign=1052 self=402 reboots=0 legacy=0
+ENET-LAB3 PASS: t=1787684349.882s peers=1/1 validated=2 beat=301 loss=0 foreign=1052 self=403 reboots=0 legacy=0
+ENET-LAB3 PASS: t=1787684349.972s peers=1/1 validated=2 beat=277 loss=0 foreign=1053 self=403 reboots=0 legacy=0
+ENET-LAB3 PASS: t=1787684350.086s peers=1/1 validated=2 beat=302 loss=0 foreign=1053 self=403 reboots=0 legacy=0
+ENET-LAB3 PASS: t=1787684350.237s peers=1/1 validated=2 beat=278 loss=0 foreign=1054 self=404 reboots=0 legacy=0
+ENET-LAB3 PASS: t=1787684350.293s peers=1/1 validated=2 beat=303 loss=0 foreign=1054 self=404 reboots=0 legacy=0
+ENET-LAB3 PASS: t=1787684350.499s peers=1/1 validated=2 beat=304 loss=0 foreign=1055 self=405 reboots=0 legacy=0
+ENET-LAB3 PASS: t=1787684350.500s peers=1/1 validated=2 beat=279 loss=0 foreign=1055 self=406 reboots=0 legacy=0
+ENET-LAB3 PASS: t=1787684350.706s peers=1/1 validated=2 beat=305 loss=0 foreign=1057 self=406 reboots=0 legacy=0
+ENET-LAB3 PASS: t=1787684350.707s peers=1/1 validated=2 beat=280 loss=0 foreign=1057 self=407 reboots=0 legacy=0
+ENET-LAB3 PASS: t=1787684350.910s peers=1/1 validated=2 beat=306 loss=0 foreign=1057 self=408 reboots=0 legacy=0
+ENET-LAB3 PASS: t=1787684351.029s peers=1/1 validated=2 beat=281 loss=0 foreign=1058 self=408 reboots=0 legacy=0
+ENET-LAB3 PASS: t=1787684351.114s peers=1/1 validated=2 beat=307 loss=0 foreign=1058 self=408 reboots=0 legacy=0
+ENET-LAB3 PASS: t=1787684351.321s peers=1/1 validated=2 beat=308 loss=0 foreign=1059 self=409 reboots=0 legacy=0
+ENET-LAB3 PASS: t=1787684351.322s peers=1/1 validated=2 beat=282 loss=0 foreign=1059 self=410 reboots=0 legacy=0
+ENET-LAB3 PASS: t=1787684351.528s peers=1/1 validated=2 beat=309 loss=0 foreign=1060 self=410 reboots=0 legacy=0
+ENET-LAB3 PASS: t=1787684351.528s peers=1/1 validated=2 beat=283 loss=0 foreign=1060 self=411 reboots=0 legacy=0
+ENET-LAB3 PASS: t=1787684351.731s peers=1/1 validated=2 beat=310 loss=0 foreign=1060 self=412 reboots=0 legacy=0
+ENET-LAB3 PASS: t=1787684351.933s peers=1/1 validated=2 beat=284 loss=0 foreign=1060 self=413 reboots=0 legacy=0
+ENET-LAB3 PASS: t=1787684352.138s peers=1/1 validated=2 beat=311 loss=0 foreign=1061 self=413 reboots=0 legacy=0
+ENET-LAB3 PASS: t=1787684352.139s peers=1/1 validated=2 beat=285 loss=0 foreign=1061 self=414 reboots=0 legacy=0
+ENET-LAB3 PASS: t=1787684352.342s peers=1/1 validated=2 beat=312 loss=0 foreign=1061 self=415 reboots=0 legacy=0
+ENET-LAB3 PASS: t=1787684352.544s peers=1/1 validated=2 beat=286 loss=0 foreign=1061 self=416 reboots=0 legacy=0
+ENET-LAB3 PASS: t=1787684352.749s peers=1/1 validated=2 beat=313 loss=0 foreign=1063 self=416 reboots=0 legacy=0
+ENET-LAB3 PASS: t=1787684352.749s peers=1/1 validated=2 beat=287 loss=0 foreign=1063 self=417 reboots=0 legacy=0
+ENET-LAB3 PASS: t=1787684352.955s peers=1/1 validated=2 beat=314 loss=0 foreign=1065 self=417 reboots=0 legacy=0
+ENET-LAB3 PASS: t=1787684352.956s peers=1/1 validated=2 beat=288 loss=0 foreign=1065 self=418 reboots=0 legacy=0
+ENET-LAB3 PASS: t=1787684353.162s peers=1/1 validated=2 beat=315 loss=0 foreign=1067 self=418 reboots=0 legacy=0
+ENET-LAB3 PASS: t=1787684353.163s peers=1/1 validated=2 beat=289 loss=0 foreign=1067 self=419 reboots=0 legacy=0
+ENET-LAB3 PASS: t=1787684353.366s peers=1/1 validated=2 beat=316 loss=0 foreign=1067 self=420 reboots=0 legacy=0
+ENET-LAB3 PASS: t=1787684353.567s peers=1/1 validated=2 beat=290 loss=0 foreign=1067 self=421 reboots=0 legacy=0
+ENET-LAB3 PASS: t=1787684353.773s peers=1/1 validated=2 beat=317 loss=0 foreign=1070 self=421 reboots=0 legacy=0
+ENET-LAB3 PASS: t=1787684353.773s peers=1/1 validated=2 beat=291 loss=0 foreign=1070 self=422 reboots=0 legacy=0
+ENET-LAB3 PASS: t=1787684353.976s peers=1/1 validated=2 beat=318 loss=0 foreign=1070 self=423 reboots=0 legacy=0
+ENET-LAB3 PASS: t=1787684354.094s peers=1/1 validated=2 beat=292 loss=0 foreign=1071 self=423 reboots=0 legacy=0
+ENET-LAB3 PASS: t=1787684354.180s peers=1/1 validated=2 beat=319 loss=0 foreign=1071 self=423 reboots=0 legacy=0
+ENET-LAB3 PASS: t=1787684354.331s peers=1/1 validated=2 beat=293 loss=0 foreign=1071 self=424 reboots=0 legacy=0
+ENET-LAB3 PASS: t=1787684354.387s peers=1/1 validated=2 beat=320 loss=0 foreign=1071 self=424 reboots=0 legacy=0
+ENET-LAB3 PASS: t=1787684354.589s peers=1/1 validated=2 beat=294 loss=0 foreign=1071 self=426 reboots=0 legacy=0
+ENET-LAB3 PASS: t=1787684354.590s peers=1/1 validated=2 beat=321 loss=0 foreign=1071 self=426 reboots=0 legacy=0
+ENET-LAB3 PASS: t=1787684354.794s peers=1/1 validated=2 beat=322 loss=0 foreign=1074 self=426 reboots=0 legacy=0
+ENET-LAB3 PASS: t=1787684354.795s peers=1/1 validated=2 beat=295 loss=0 foreign=1074 self=427 reboots=0 legacy=0
+ENET-LAB3 PASS: t=1787684354.998s peers=1/1 validated=2 beat=323 loss=0 foreign=1074 self=428 reboots=0 legacy=0
+ENET-LAB3 PASS: t=1787684355.131s peers=1/1 validated=2 beat=296 loss=0 foreign=1075 self=428 reboots=0 legacy=0
+ENET-LAB3 PASS: t=1787684355.202s peers=1/1 validated=2 beat=324 loss=0 foreign=1076 self=428 reboots=0 legacy=0
+ENET-LAB3 PASS: t=1787684355.404s peers=1/1 validated=2 beat=297 loss=0 foreign=1076 self=430 reboots=0 legacy=0
+ENET-LAB3 PASS: t=1787684355.406s peers=1/1 validated=2 beat=325 loss=0 foreign=1077 self=430 reboots=0 legacy=0
+ENET-LAB3 PASS: t=1787684355.610s peers=1/1 validated=2 beat=326 loss=0 foreign=1079 self=430 reboots=0 legacy=0
+ENET-LAB3 PASS: t=1787684355.610s peers=1/1 validated=2 beat=298 loss=0 foreign=1079 self=431 reboots=0 legacy=0
+ENET-LAB3 PASS: t=1787684355.817s peers=1/1 validated=2 beat=327 loss=0 foreign=1080 self=431 reboots=0 legacy=0
+ENET-LAB3 PASS: t=1787684355.817s peers=1/1 validated=2 beat=299 loss=0 foreign=1080 self=432 reboots=0 legacy=0
+ENET-LAB3 PASS: t=1787684356.021s peers=1/1 validated=2 beat=328 loss=0 foreign=1080 self=433 reboots=0 legacy=0
+ENET-LAB3 PASS: t=1787684356.100s peers=1/1 validated=2 beat=300 loss=0 foreign=1081 self=433 reboots=0 legacy=0
+ENET-LAB3 PASS: t=1787684356.225s peers=1/1 validated=2 beat=329 loss=0 foreign=1081 self=433 reboots=0 legacy=0
+ENET-LAB3 PASS: t=1787684356.427s peers=1/1 validated=2 beat=301 loss=0 foreign=1081 self=435 reboots=0 legacy=0
+ENET-LAB3 PASS: t=1787684356.428s peers=1/1 validated=2 beat=330 loss=0 foreign=1081 self=435 reboots=0 legacy=0
+ENET-LAB3 PASS: t=1787684356.633s peers=1/1 validated=2 beat=331 loss=0 foreign=1084 self=435 reboots=0 legacy=0
+ENET-LAB3 PASS: t=1787684356.634s peers=1/1 validated=2 beat=302 loss=0 foreign=1084 self=436 reboots=0 legacy=0
+ENET-LAB3 PASS: t=1787684356.839s peers=1/1 validated=2 beat=332 loss=0 foreign=1085 self=436 reboots=0 legacy=0
+ENET-LAB3 PASS: t=1787684356.840s peers=1/1 validated=2 beat=303 loss=0 foreign=1085 self=437 reboots=0 legacy=0
+ENET-LAB3 PASS: t=1787684357.046s peers=1/1 validated=2 beat=333 loss=0 foreign=1088 self=437 reboots=0 legacy=0
+ENET-LAB3 PASS: t=1787684357.047s peers=1/1 validated=2 beat=304 loss=0 foreign=1088 self=438 reboots=0 legacy=0
+ENET-LAB3 PASS: t=1787684357.253s peers=1/1 validated=2 beat=334 loss=0 foreign=1090 self=438 reboots=0 legacy=0
+ENET-LAB3 PASS: t=1787684357.254s peers=1/1 validated=2 beat=305 loss=0 foreign=1090 self=439 reboots=0 legacy=0
+ENET-LAB3 PASS: t=1787684357.460s peers=1/1 validated=2 beat=335 loss=0 foreign=1093 self=440 reboots=0 legacy=0
+ENET-LAB3 PASS: t=1787684357.460s peers=1/1 validated=2 beat=306 loss=0 foreign=1092 self=439 reboots=0 legacy=0
+ENET-LAB3 PASS: t=1787684357.664s peers=1/1 validated=2 beat=307 loss=0 foreign=1095 self=441 reboots=0 legacy=0
+ENET-LAB3 PASS: t=1787684357.665s peers=1/1 validated=2 beat=336 loss=0 foreign=1095 self=441 reboots=0 legacy=0
+ENET-LAB3 PASS: t=1787684357.869s peers=1/1 validated=2 beat=337 loss=0 foreign=1096 self=441 reboots=0 legacy=0
+ENET-LAB3 PASS: t=1787684357.869s peers=1/1 validated=2 beat=308 loss=0 foreign=1096 self=442 reboots=0 legacy=0
+ENET-LAB3 PASS: t=1787684358.075s peers=1/1 validated=2 beat=338 loss=0 foreign=1097 self=442 reboots=0 legacy=0
+ENET-LAB3 PASS: t=1787684358.076s peers=1/1 validated=2 beat=309 loss=0 foreign=1097 self=443 reboots=0 legacy=0
+ENET-LAB3 PASS: t=1787684358.282s peers=1/1 validated=2 beat=339 loss=0 foreign=1098 self=443 reboots=0 legacy=0
+ENET-LAB3 PASS: t=1787684358.283s peers=1/1 validated=2 beat=310 loss=0 foreign=1098 self=444 reboots=0 legacy=0
+ENET-LAB3 PASS: t=1787684358.486s peers=1/1 validated=2 beat=340 loss=0 foreign=1098 self=445 reboots=0 legacy=0
+ENET-LAB3 PASS: t=1787684358.688s peers=1/1 validated=2 beat=311 loss=0 foreign=1098 self=446 reboots=0 legacy=0
+ENET-LAB3 PASS: t=1787684358.893s peers=1/1 validated=2 beat=341 loss=0 foreign=1106 self=446 reboots=0 legacy=0
+ENET-LAB3 PASS: t=1787684358.894s peers=1/1 validated=2 beat=312 loss=0 foreign=1106 self=447 reboots=0 legacy=0
+ENET-LAB3 PASS: t=1787684359.100s peers=1/1 validated=2 beat=342 loss=0 foreign=1107 self=447 reboots=0 legacy=0
+ENET-LAB3 PASS: t=1787684359.100s peers=1/1 validated=2 beat=313 loss=0 foreign=1107 self=448 reboots=0 legacy=0
+ENET-LAB3 PASS: t=1787684359.306s peers=1/1 validated=2 beat=343 loss=0 foreign=1108 self=448 reboots=0 legacy=0
+ENET-LAB3 PASS: t=1787684359.307s peers=1/1 validated=2 beat=314 loss=0 foreign=1108 self=449 reboots=0 legacy=0
+ENET-LAB3 PASS: t=1787684359.510s peers=1/1 validated=2 beat=344 loss=0 foreign=1108 self=450 reboots=0 legacy=0
+ENET-LAB3 PASS: t=1787684359.712s peers=1/1 validated=2 beat=315 loss=0 foreign=1108 self=451 reboots=0 legacy=0
+ENET-LAB3 PASS: t=1787684359.918s peers=1/1 validated=2 beat=345 loss=0 foreign=1114 self=451 reboots=0 legacy=0
+ENET-LAB3 PASS: t=1787684359.919s peers=1/1 validated=2 beat=316 loss=0 foreign=1114 self=452 reboots=0 legacy=0
+ENET-LAB3 PASS: t=1787684360.122s peers=1/1 validated=2 beat=346 loss=0 foreign=1114 self=453 reboots=0 legacy=0
+ENET-LAB3 PASS: t=1787684360.135s peers=1/1 validated=2 beat=317 loss=0 foreign=1115 self=453 reboots=0 legacy=0
+ENET-LAB3 PASS: t=1787684360.326s peers=1/1 validated=2 beat=347 loss=0 foreign=1115 self=453 reboots=0 legacy=0
+ENET-LAB3 PASS: t=1787684360.481s peers=1/1 validated=2 beat=318 loss=0 foreign=1116 self=454 reboots=0 legacy=0
+ENET-LAB3 PASS: t=1787684360.533s peers=1/1 validated=2 beat=348 loss=0 foreign=1116 self=454 reboots=0 legacy=0
+ENET-LAB3 PASS: t=1787684360.725s peers=1/1 validated=2 beat=319 loss=0 foreign=1117 self=455 reboots=0 legacy=0
+ENET-LAB3 PASS: t=1787684360.739s peers=1/1 validated=2 beat=349 loss=0 foreign=1117 self=455 reboots=0 legacy=0
+ENET-LAB3 PASS: t=1787684360.941s peers=1/1 validated=2 beat=320 loss=0 foreign=1117 self=457 reboots=0 legacy=0
+ENET-LAB3 PASS: t=1787684360.943s peers=1/1 validated=2 beat=350 loss=0 foreign=1117 self=457 reboots=0 legacy=0
+ENET-LAB3 PASS: t=1787684361.145s peers=1/1 validated=2 beat=321 loss=0 foreign=1117 self=458 reboots=0 legacy=0
+ENET-LAB3 PASS: t=1787684361.350s peers=1/1 validated=2 beat=351 loss=0 foreign=1128 self=458 reboots=0 legacy=0
+ENET-LAB3 PASS: t=1787684361.351s peers=1/1 validated=2 beat=322 loss=0 foreign=1128 self=459 reboots=0 legacy=0
