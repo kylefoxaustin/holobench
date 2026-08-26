@@ -220,7 +220,22 @@ def score_leg(node, board_log: str, guest_console: str) -> tuple[str, list[str]]
     want = f"0x{node.ethertype:04x}"
     guest_saw = GUEST_PASS in guest_console
     if guest_saw:
-        notes.append(f"guest corroborates: saw {want} ({guest_console.count(GUEST_PASS)} PASS lines)")
+        # ⚠️ THE GUEST'S PASS COUNT IS POOLED AND CANNOT BE SPLIT PER LEG.
+        # The guest runs one enet-lab3 instance per leg onto ONE console, and its
+        # PASS lines carry no ethertype:
+        #     ENET-LAB3 PASS: t=... peers=1/1 validated=1 beat=1 loss=0 ...
+        # So a total is all this log can support. The earlier form printed
+        # "saw 0x88b9 (673 PASS lines)" under BOTH legs — a per-leg ethertype
+        # welded to a pooled count, which invites a reader to sum them (1346) or
+        # to believe each leg was independently corroborated 673 times. Neither is
+        # in the log. ⭐ 673 was REAL and TRUE and attached to a claim it does not
+        # measure — the instrument-pointed-at-the-wrong-quantity class, which is
+        # the one that survives review because nothing looks wrong.
+        # (qualcomm found this on the third re-derivation of the same bundle.)
+        notes.append(f"guest corroborates: reached PASS on this leg's peer {want}; "
+                     f"the guest's {guest_console.count(GUEST_PASS)} PASS lines are a "
+                     f"POOLED TOTAL across BOTH legs and cannot be attributed per-leg "
+                     f"(its PASS line carries no ethertype). Do not sum across legs.")
     else:
         notes.append(f"⚠️ guest did NOT report seeing {want}. The crossing is proven "
                      f"ONE WAY (board received the guest); the reverse is not shown.")

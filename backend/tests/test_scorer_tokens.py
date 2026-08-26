@@ -155,3 +155,22 @@ def test_no_scorer_token_is_left_undeclared():
     assert declared == covered, (
         f"score-real-silicon.py declares token(s) with no pin here: "
         f"{sorted(declared - covered)}. Add them, or the next rename dies quietly.")
+
+
+def test_guest_corroboration_is_never_reported_as_a_per_leg_count():
+    """⭐ A POOLED NUMBER MUST NOT WEAR A PER-LEG LABEL.
+
+    The guest runs one enet-lab3 instance per leg onto ONE console, and its PASS
+    lines carry no ethertype — so its total cannot be attributed per leg. The
+    scorer once printed "saw 0x88b9 (673 PASS lines)" under BOTH legs, inviting a
+    reader to sum them (1346) or to read each leg as independently corroborated
+    673 times. Neither is in the log. The count was real; the claim it was
+    attached to was not one it measures.
+    """
+    src = SCORE_RS.read_text()
+    i = src.index("guest corroborates")
+    line = src[i:src.index(")", src.index("notes.append", i))]
+    assert "POOLED" in line, (
+        "the guest corroboration note must mark its count as POOLED — a per-leg "
+        "ethertype beside an unqualified total reads as a per-leg count")
+    assert "cannot be attributed per-leg" in line or "per-leg" in line

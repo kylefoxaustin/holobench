@@ -55,6 +55,22 @@ the reader would meet it — and then the announcing message quoted across that 
 because the author was not the document's reader. Cite **771 board-side**; 673 is
 guest-side corroboration and is also *lower*, which is why nothing looked wrong.
 
+**3. VERDICT.txt's guest parenthetical is a POOLED total, printed under each leg.**
+It reads `guest corroborates: saw 0x88b9 (673 PASS lines)` under frdm95 AND
+`saw 0x88ba (673 PASS lines)` under orin — the same 673 both times. Re-derived:
+the guest's PASS lines carry NO ethertype
+(`ENET-LAB3 PASS: t=... peers=1/1 validated=1 beat=1 loss=0 ...`), so 673 is an
+undifferentiated total across both legs and CANNOT be split. ⚠️ DO NOT SUM THEM
+(1346 is not a number in this run) and do not read each leg as independently
+corroborated 673 times. ⭐ 673 is REAL AND TRUE and attached to a claim it does not
+measure — the same class as error 2, one level finer, and again nothing looks wrong
+because it is a correct count of something. The scorer is fixed
+(tools/score-real-silicon.py) so future runs label it; THIS FILE's VERDICT.txt still
+carries the old wording because it is the artifact of a run that already happened
+and is not being retro-edited.
+Report 673 ONCE, as a pooled guest-side figure. The load-bearing numbers are the
+board-side 391 and 380, whose per-leg attribution IS sound.
+
 ## What this does NOT show
 Nothing here speaks to the negative control (that is a separate run, and only 2 of
 its 4 observed clean runs have preserved transcripts). Nothing here is a claim about
