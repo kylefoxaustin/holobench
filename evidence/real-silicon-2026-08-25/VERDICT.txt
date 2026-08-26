@@ -1,2 +1,23 @@
  PER-LEG VERDICT — graded on the SILICON side; the guest corroborates
 ══════════════════════════════════════════════════════════════════════════
+
+✅ frdm95   (eth1 @ root@10.0.1.181, et=0x88b9) — PASS
+     board: PASS=391 rx=391 CORRUPT=0
+     guest corroborates: saw 0x88b9 (673 PASS lines)
+
+✅ orin     (l4tbr0 @ kyle@10.0.1.124, et=0x88ba) — PASS
+     board: PASS=380 rx=380 CORRUPT=0
+     guest corroborates: saw 0x88ba (673 PASS lines)
+
+══════════════════════════════════════════════════════════════════════════
+ VERDICT   pass=2  fail=0  inconclusive=0  (of 2 legs)
+ ⭐⭐ THE MODEL IS INDISTINGUISHABLE FROM THE SILICON, TO THE SILICON —
+    on every leg, asserted by hardware on the far side of a cable.
+
+ ⚠️  A leg is scored on the REAL BOARD's log. The guest sits on a macvtap
+    where frames can be locally switched, so its own PASS is compatible
+    with nothing leaving the NIC. Only the far end can refute that.
+══════════════════════════════════════════════════════════════════════════
+
+═══════════════════════════════════════════════════════════════════════
+ SEQUENCE COMPLETE

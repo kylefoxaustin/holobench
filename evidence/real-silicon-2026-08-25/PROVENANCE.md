@@ -32,6 +32,29 @@ so each leg is graded on the REAL BOARD's log and the guest corroborates.
     grep -c 'L2BEACON CORRUPT' orin.board.log        # must be 0
     grep -m1 'ENET-LAB3 boot'  imx95.console.log     # both PFs bound, by PCI address
 
+## ⚠️ TWO ERRORS IN THE FIRST CUT OF THIS BUNDLE (found by qualcomm, 2026-08-26)
+
+Recorded rather than quietly fixed, because both are instructive and one of them is
+the failure this very document was written to prevent.
+
+**1. VERDICT.txt shipped EMPTY.** It was extracted with a sed range whose terminator
+(`/^═\+$/`) matched the box-rule directly under the title, so it captured a heading
+and stopped — 2 lines, no verdict. ⭐ AND ITS md5 VERIFIED. A hash proves the file is
+the one that was meant to ship; it cannot notice the file says nothing. The
+strongest-looking integrity check in the bundle passed on the one file with no
+content. Now extracted with a terminator that cannot occur inside the block.
+
+**2. THE AGGREGATE 673 WAS THE GUEST-SIDE NUMBER.** It was announced as the headline
+total. Re-derived:
+    673 = ENET-LAB3 PASS in imx95.console.log   <- THE GUEST (corroboration only)
+    771 = 391 + 380                              <- THE TWO REAL BOARDS (load-bearing)
+The per-leg attributions were always correct; only the aggregate crossed sides. ⭐ AND
+IT CROSSED THE EXACT BOUNDARY THIS FILE DRAWS: the section below says the guest
+console must not be the evidence. The scope warning was written INTO the artifact so
+the reader would meet it — and then the announcing message quoted across that scope,
+because the author was not the document's reader. Cite **771 board-side**; 673 is
+guest-side corroboration and is also *lower*, which is why nothing looked wrong.
+
 ## What this does NOT show
 Nothing here speaks to the negative control (that is a separate run, and only 2 of
 its 4 observed clean runs have preserved transcripts). Nothing here is a claim about
