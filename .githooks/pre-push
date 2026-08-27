@@ -1,0 +1,19 @@
+#!/usr/bin/env bash
+# DELEGATE to the fleet's push gate.
+#
+# ⚠️ THIS FILE EXISTS ONLY SO THAT ADDING A pre-commit DOES NOT DISABLE THE PUSH GATE.
+# This repo sets core.hooksPath=.githooks so its pre-commit runs; that redirect makes
+# git stop consulting the fleet dir entirely, which would silently remove the gate at
+# /home/kyle/.claude/git-hooks/pre-push. A local convenience quietly disabling a fleet
+# control is exactly the trade nobody would approve if asked.
+#
+# ⭐ FAILS CLOSED. If the fleet gate is missing or not executable, this REFUSES the push
+# rather than allowing it. An absent guard must never read as a satisfied one — the
+# whole subject of this week.
+FLEET_HOOK=/home/kyle/.claude/git-hooks/pre-push
+if [ ! -x "$FLEET_HOOK" ]; then
+    echo "pre-push: the fleet push gate ($FLEET_HOOK) is missing or not executable." >&2
+    echo "  REFUSING THE PUSH. An absent gate is not an open one." >&2
+    exit 1
+fi
+exec "$FLEET_HOOK" "$@"

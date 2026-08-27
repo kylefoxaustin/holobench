@@ -1,0 +1,40 @@
+#!/usr/bin/env bash
+# Run the suite before every commit.
+#
+# ⚠️ WHY THIS EXISTS (2026-08-27). For 24 commits this session I reported "138 tests
+# green" on each one — and NOTHING RAN THEM but my habit of typing pytest in the same
+# bash call. No hook, no CI, no Makefile target. The tests existed, were correct, and
+# were INERT BY WIRING: the moment anyone committed without the habit, the claim would
+# have decayed silently and nothing would have said so.
+#
+# qualcomm's warning, which is what prompted the check: "it is not enough that a
+# self-test exists and passes when you run it by hand. Check that the thing which runs
+# on every commit actually INVOKES it." Theirs did not, for a day, while writing
+# messages about inert checkers. Neither did mine.
+#
+# NOTE THIS IS LOCAL ONLY — .git/hooks is not committed, so it protects this checkout
+# and nobody else's. That is a real limit, stated rather than papered over.
+set -e
+cd "$(git rev-parse --show-toplevel)/backend"
+if [ ! -x ../.venv/bin/python ]; then
+    echo "pre-commit: no ../.venv — SKIPPING the suite." >&2
+    echo "  ⚠️ A skip is not a pass. Commit proceeding, but nothing was verified." >&2
+    exit 0
+fi
+echo "pre-commit: running the suite…"
+../.venv/bin/python -m pytest tests/ -q || {
+    echo "pre-commit: TESTS FAILED — commit refused." >&2
+    echo "  (--no-verify bypasses this, and then 'tests green' is not a claim you hold.)" >&2
+    exit 1
+}
+
+# ⚠️ SELF-CHECK: this repo sets core.hooksPath=.githooks, which means a plain
+# `git reset --hard` to a commit predating .githooks DELETES THE HOOKS DIRECTORY —
+# and git then silently runs NO hooks at all, including the fleet's pre-push gate.
+# That happened once, for about a minute, while wiring this up. A gate that a
+# routine command can remove without a word is not a gate.
+if [ ! -x "$(git rev-parse --show-toplevel)/.githooks/pre-push" ]; then
+    echo "pre-commit: .githooks/pre-push is MISSING — the fleet push gate is NOT armed" >&2
+    echo "  for this repo. Restore it before committing: git checkout .githooks" >&2
+    exit 1
+fi
