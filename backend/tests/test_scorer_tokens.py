@@ -30,6 +30,7 @@ its own text. Search the tree you are changing FIRST.
 """
 from __future__ import annotations
 
+import os
 import re
 import subprocess
 from pathlib import Path
@@ -241,3 +242,42 @@ def test_no_test_file_lives_outside_the_path_the_gate_actually_runs():
         f"runs `pytest tests/` from backend/, so these are collected by nobody and "
         f"fail silently forever. Move them under backend/tests/ or widen the hook — "
         f"but do not leave them where the default is silence.")
+
+
+def test_the_commit_gate_is_actually_wired():
+    """⭐ MAKE THE UNARMED STATE ANNOUNCE ITSELF THE FIRST TIME ANYONE LOOKS.
+
+    qualcomm's move (2026-08-27), adopted: a FRESH CLONE has no installed hooks, so
+    the repo's stated guarantee — "the suite runs on every commit" — is FALSE until
+    someone runs .githooks/install.sh, and nothing says so. No local hook can fix
+    that, because on a fresh clone no local hook exists to complain.
+
+    What CAN fix it is the thing a newcomer runs anyway: the suite itself. So this
+    fails, loudly, naming the install command. It converts "silently unarmed
+    forever" into "unarmed until the first time anyone runs the tests".
+
+    ⚠️ IT IS A PARTIAL CLOSE AND I WILL NOT CLAIM MORE. Nothing forces that first
+    run. A clone where nobody runs pytest and nobody commits is still unarmed and
+    still silent. Only CI closes it properly, and there is none here.
+
+    ⚠️ NO ESCAPE HATCH, DELIBERATELY. An env-var bypass would reintroduce exactly
+    the hole — the degraded state would go quiet again for anyone who set it once.
+    The fix is five seconds: bash .githooks/install.sh
+    """
+    import subprocess
+    root = Path(__file__).resolve().parents[2]
+
+    hooks_path = subprocess.run(
+        ["git", "-C", str(root), "config", "--get", "core.hooksPath"],
+        capture_output=True, text=True).stdout.strip()
+    assert hooks_path, (
+        "core.hooksPath is UNSET — this repo's commit gate is not wired, so the suite "
+        "runs only when someone remembers to type it. Fix: bash .githooks/install.sh")
+
+    installed = (root / hooks_path).resolve()
+    for hook in ("pre-commit", "pre-push"):
+        p = installed / hook
+        assert p.is_file() and os.access(p, os.X_OK), (
+            f"{hook} missing or not executable at {installed} — the gate is not armed. "
+            f"pre-push also DELEGATES TO THE FLEET PUSH GATE, so a missing one removes "
+            f"that too. Fix: bash .githooks/install.sh")
