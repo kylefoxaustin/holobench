@@ -158,19 +158,52 @@ def test_no_scorer_token_is_left_undeclared():
 
 
 def test_guest_corroboration_is_never_reported_as_a_per_leg_count():
-    """⭐ A POOLED NUMBER MUST NOT WEAR A PER-LEG LABEL.
+    """⭐ A POOLED NUMBER MUST NOT WEAR A PER-LEG LABEL — CHECKED AT *EVERY* SITE.
 
     The guest runs one enet-lab3 instance per leg onto ONE console, and its PASS
     lines carry no ethertype — so its total cannot be attributed per leg. The
     scorer once printed "saw 0x88b9 (673 PASS lines)" under BOTH legs, inviting a
-    reader to sum them (1346) or to read each leg as independently corroborated
-    673 times. Neither is in the log. The count was real; the claim it was
-    attached to was not one it measures.
+    reader to sum them (1346) or read each leg as corroborated 673 times.
+
+    ⚠️ THIS TEST WAS ITSELF INERT UNTIL 2026-08-27. It used src.index(...) — the
+    FIRST occurrence only — and the first occurrence is the CORRECTED one. So it
+    passed forever while any number of bare re-assertions accumulated below it.
+    Proven by planting exactly that: a second, unqualified "saw {want} ({count}
+    PASS lines)" lower in the same file, and the suite stayed green.
+
+    ⭐ THAT IS qualcomm's PROXIMITY-GUARD INVERSION IN A DIFFERENT MECHANISM. Theirs
+    forgave anything within ±400 chars of a retraction — so the file documenting a
+    correction was the file most able to absorb its re-assertion. Mine forgave
+    everything after the first match. Both guards are strongest exactly where the
+    claim is most likely to come back, and neither is revealed by RUNNING it — only
+    by planting the superseded form and checking the guard still fires.
     """
     src = SCORE_RS.read_text()
-    i = src.index("guest corroborates")
-    line = src[i:src.index(")", src.index("notes.append", i))]
-    assert "POOLED" in line, (
-        "the guest corroboration note must mark its count as POOLED — a per-leg "
-        "ethertype beside an unqualified total reads as a per-leg count")
-    assert "cannot be attributed per-leg" in line or "per-leg" in line
+
+    # ⚠️ SCOPE TO THE CLAIM-UNIT, NOT TO A WINDOW. qualcomm's guard forgave anything
+    # within +/-400 chars of a retraction, which made the file DOCUMENTING a
+    # correction the file most able to absorb its re-assertion. Widening a window to
+    # fix an over-fire would rebuild that hole here. So: extract each notes.append(...)
+    # call by PAREN BALANCE — the statement is the unit the claim lives in — and
+    # require every one that corroborates to mark its count POOLED.
+    calls, k = [], 0
+    while True:
+        k = src.find("notes.append(", k)
+        if k < 0:
+            break
+        j, depth = k + len("notes.append("), 1
+        while j < len(src) and depth:
+            depth += (src[j] == "(") - (src[j] == ")")
+            j += 1
+        calls.append(src[k:j])
+        k = j
+
+    corroborating = [c for c in calls if "guest corroborates" in c]
+    assert corroborating, "the guest-corroboration note vanished — the claim is unguarded"
+    for c in corroborating:
+        assert "POOLED" in c or "pooled" in c, (
+            "an UNQUALIFIED guest-corroboration note exists:\n"
+            f"    {c[:120]}...\n"
+            "A per-leg ethertype beside an unqualified total reads as a per-leg count. "
+            "EVERY site must mark it POOLED, not just the first — the first is the one "
+            "that got corrected.")
