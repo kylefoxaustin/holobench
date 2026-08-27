@@ -71,6 +71,21 @@ and is not being retro-edited.
 Report 673 ONCE, as a pooled guest-side figure. The load-bearing numbers are the
 board-side 391 and 380, whose per-leg attribution IS sound.
 
+**4. THE TWO BOARD COUNTS WERE NOT MEASURED OVER EQUAL WINDOWS.** 391 (FRDM) vs
+380 (Orin) has been quoted as a straight pair. The lab declares BOTH silicon nodes
+at `start_at: 30`, but the coordinator awaited each arrival in turn — and a silicon
+arrival deliberately waits 2s to prove its beacon started — so they actually began
+at t+30.0 and t+33.1. At 200 ms/beacon that accounts for the direction and most of
+the 11-frame gap; ~5 frames (~1s) remain unaccounted and are NOT explained here.
+⚠️ I published a cause for that gap ("sudo -n over ssh adds latency") twice before
+testing it. Reading the arrival loop refutes it: the gap is serialization plus a
+hardcoded sleep in my own code. A DEFAULT EXPLANATION IS NOT A HYPOTHESIS — it
+arrives already believed, so it gets written into the record rather than tested.
+The coordinator now gathers equal-`start_at` arrivals concurrently, so a FUTURE run
+of this lab will not have the offset. THIS run's numbers are unchanged and remain
+correct as board-side sighting counts; they are simply not a like-for-like
+comparison, and nothing in the result depends on their being one.
+
 ## What this does NOT show
 Nothing here speaks to the negative control (that is a separate run, and only 2 of
 its 4 observed clean runs have preserved transcripts). Nothing here is a claim about

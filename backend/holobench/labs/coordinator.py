@@ -778,16 +778,38 @@ class LabCoordinator:
                 await asyncio.sleep(max(0.0, t0 + node.rejoin_at - loop.time()))
                 await _arrive(node, rejoin=True)
 
-            for node in sorted(lab.nodes, key=lambda n: n.start_at):
-                delay = t0 + node.start_at - loop.time()
+            # ⚠️ NODES DECLARED AT THE SAME start_at MUST ARRIVE TOGETHER.
+            # This loop used to await each arrival in turn, so two nodes both
+            # declaring start_at: 30 arrived 3.1s apart — the second waiting out the
+            # first's whole arrival, including the deliberate `sleep 2` that proves a
+            # silicon beacon started. THE LAB SILENTLY DID NOT HONOUR ITS OWN SPEC,
+            # and the two boards' frame counts (391 vs 380) were therefore never
+            # measured over equal windows, while being compared as if they were.
+            #
+            # ⭐ I HAD PUBLISHED A CAUSE FOR THAT GAP — "sudo -n over ssh adds latency"
+            # — twice, without testing it. Reading these two lines refutes it: the gap
+            # is serialization plus my own hardcoded sleep. qualcomm's rule, arriving
+            # the same hour: A DEFAULT EXPLANATION IS NOT A HYPOTHESIS. It comes
+            # already believed, so it is written into the record rather than tested,
+            # and the cheapest check gets done last.
+            #
+            # Groups preserve ordering between DIFFERENT start_at values, so every
+            # staggered lab is byte-identical in behaviour; only ties change.
+            from itertools import groupby
+            for start_at, group in groupby(
+                    sorted(lab.nodes, key=lambda n: n.start_at), key=lambda n: n.start_at):
+                cohort = list(group)
+                delay = t0 + start_at - loop.time()
                 if delay > 0:
-                    _emit(f"  ... waiting {delay:.0f}s for {node.name} to join "
+                    names = ", ".join(n.name for n in cohort)
+                    _emit(f"  ... waiting {delay:.0f}s for {names} to join "
                           f"(segment is live without it)")
                     await asyncio.sleep(delay)
-                await _arrive(node)
-                if node.stop_at is not None:
-                    running._departure_tasks.append(
-                        asyncio.create_task(_depart(node)))
+                await asyncio.gather(*(_arrive(n) for n in cohort))
+                for node in cohort:
+                    if node.stop_at is not None:
+                        running._departure_tasks.append(
+                            asyncio.create_task(_depart(node)))
         except BaseException:
             # Allocation failed wholesale: free groups + any partial sessions.
             await self._teardown(running, seg_group)

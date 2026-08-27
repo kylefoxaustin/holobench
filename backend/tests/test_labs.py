@@ -1141,3 +1141,30 @@ def test_leg_count_matches_what_the_profile_says_the_board_exposes():
             f"fabric_legs={declared}. QEMU binds -nic backends BY POSITION and the "
             f"initramfs binds each beacon to a FIXED PCI address, so a mismatch means "
             f"a leg silently watches the wrong cable or finds no netdev at all.")
+
+
+def test_nodes_declared_at_the_same_start_at_arrive_together():
+    """⭐ A LAB MUST HONOUR ITS OWN TIMELINE. Two nodes declaring start_at: 30 arrived
+    3.1s apart, because the arrival loop awaited each in turn and a silicon arrival
+    deliberately waits 2s to prove its beacon started. The spec said 30/30; the lab
+    delivered 30.0/33.1, silently — and the two boards' counts were then compared as
+    if measured over equal windows. They were not.
+
+    Guarded structurally: the loop must group by start_at and gather the cohort.
+    """
+    import inspect
+    from holobench.labs import coordinator
+    src = inspect.getsource(coordinator.LabCoordinator.launch)
+    assert "groupby" in src and "asyncio.gather" in src, (
+        "the arrival loop no longer groups equal start_at values and gathers them — "
+        "nodes declared to arrive together will arrive staggered, and any comparison "
+        "between them is over unequal windows")
+
+
+def test_the_real_silicon_lab_actually_declares_a_tie():
+    """The guard above is only meaningful while a lab exercises it."""
+    lab = load_lab("imx95-real-silicon")
+    starts = [n.start_at for n in lab.nodes]
+    assert len(starts) != len(set(starts)), (
+        "no lab declares two nodes at the same start_at, so the concurrent-arrival "
+        "path is unexercised — the guard is real but nothing proves it works")
