@@ -15,6 +15,20 @@
 # NOTE THIS IS LOCAL ONLY — .git/hooks is not committed, so it protects this checkout
 # and nobody else's. That is a real limit, stated rather than papered over.
 set -e
+# ⭐ DRIFT CHECK. This hook lives in .git/holobench-hooks/ — outside the blast radius
+# of reset/checkout/clean, which is the whole point (qualcomm: "the detector cannot
+# be the thing the failure removes"). The cost of living outside the tree is that it
+# can silently diverge from the committed .githooks/ source. So compare, and refuse.
+ROOT="$(git rev-parse --show-toplevel)"
+INSTALLED="$ROOT/.git/holobench-hooks/pre-commit"
+SOURCE="$ROOT/.githooks/pre-commit"
+if [ -f "$SOURCE" ] && ! cmp -s "$INSTALLED" "$SOURCE"; then
+    echo "pre-commit: the INSTALLED hook differs from the committed .githooks/pre-commit." >&2
+    echo "  Re-install with: cp .githooks/pre-commit .git/holobench-hooks/pre-commit" >&2
+    echo "  REFUSING: a gate that has drifted from its source is not the gate the repo claims." >&2
+    exit 1
+fi
+
 cd "$(git rev-parse --show-toplevel)/backend"
 if [ ! -x ../.venv/bin/python ]; then
     echo "pre-commit: no ../.venv — SKIPPING the suite." >&2
