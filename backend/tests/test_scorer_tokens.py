@@ -207,3 +207,37 @@ def test_guest_corroboration_is_never_reported_as_a_per_leg_count():
             "A per-leg ethertype beside an unqualified total reads as a per-leg count. "
             "EVERY site must mark it POOLED, not just the first — the first is the one "
             "that got corrected.")
+
+
+def test_no_test_file_lives_outside_the_path_the_gate_actually_runs():
+    """⭐ INVERT THE DEFAULT: a test the gate does not collect must be LOUD, not silent.
+
+    qualcomm's finding (2026-08-27): their gate matched each checker's last line
+    against an ALLOWLIST OF NOUNS, so 7 of 25 checkers were invisible — including
+    the one guarding shipped artifacts, and two live failures in the checker
+    reserved for defects that had already shipped. Their generalisation:
+
+        AN ALLOWLIST MAKES SILENCE THE DEFAULT FOR ANYTHING NEW.
+
+    A checker added tomorrow is mute until someone edits a pattern in another file,
+    and nothing tells you. They proved it on themselves within the hour: the checker
+    they wrote to DETECT inert wiring was itself invisible to the gate, by that
+    mechanism, on the day they wrote it.
+
+    My equivalent is narrower but real: the pre-commit hook runs `pytest tests/`
+    from backend/, so a test file placed anywhere else is collected by nobody and
+    says nothing. This makes that condition fail loudly instead.
+    """
+    root = Path(__file__).resolve().parents[2]
+    collected_dir = (root / "backend" / "tests").resolve()
+    strays = []
+    for p in root.rglob("test_*.py"):
+        if ".venv" in p.parts or ".git" in p.parts:
+            continue
+        if collected_dir not in p.resolve().parents:
+            strays.append(p.relative_to(root))
+    assert not strays, (
+        f"test file(s) outside the path the gate runs: {strays}. The pre-commit hook "
+        f"runs `pytest tests/` from backend/, so these are collected by nobody and "
+        f"fail silently forever. Move them under backend/tests/ or widen the hook — "
+        f"but do not leave them where the default is silence.")
