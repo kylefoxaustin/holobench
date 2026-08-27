@@ -86,6 +86,25 @@ of this lab will not have the offset. THIS run's numbers are unchanged and remai
 correct as board-side sighting counts; they are simply not a like-for-like
 comparison, and nothing in the result depends on their being one.
 
+**5. THE GUEST'S `0 CORRUPT` IS A BARE NULL IN THIS CONFIGURATION.** Both boards'
+`0 CORRUPT` are backed by a local positive control: prove-oracle-bites.sh plants
+broken magic and the board logs CORRUPT=30, so that counter demonstrably fires
+here. The GUEST's `ENET-LAB3 CORRUPT: 0` has no such local control — nothing
+malformed has ever been sent to the guest in THIS lab, so the zero is supported by
+INHERITANCE, not by exercise.
+The control does exist upstream: 95emulator's tests/enet-lab3/run.sh (at pinned
+commit d10d314a, lines 292-337) has an IMPOSTOR mode emitting 1000-byte frames with
+a valid 64-byte prefix and asserts the guest reports `CORRUPT ... wrong length`. Same
+source file, so the DETECTOR LOGIC is proven. What is untested is whether it fires
+through THIS plumbing — macvtap and the 2-port artifact rather than their mcast
+1-port harness.
+⭐ Prompted by qualcomm: A NULL BETWEEN TWO POINTS IS NOT A NULL ABOUT THE VARIABLE.
+"0 corrupt" earns its meaning only next to a demonstration that the counter can be
+made non-zero. Two of the three counters here have that; the third borrows it.
+⚠️ UNCLOSED as of 2026-08-27, dated rather than argued away. Closing it needs a
+malformed frame written to the guest's macvtap during a live lab run — buildable
+from tools/prove-macvtap-guest.sh, not built.
+
 ## What this does NOT show
 Nothing here speaks to the negative control (that is a separate run, and only 2 of
 its 4 observed clean runs have preserved transcripts). Nothing here is a claim about
