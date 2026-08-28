@@ -932,7 +932,16 @@ def test_the_can_responder_kernel_and_its_modules_are_ONE_BUILD():
     prof = load_profile("imx95-evk-can-lab")
     from holobench.profiles.loader import default_asset_dir
 
-    image = default_asset_dir(prof.id) / prof.boot.artifacts.kernel
+    # ⚠️ NEEDS THE ACTUAL KERNEL IMAGE ON DISK. default_asset_dir returns None when the
+    # assets are absent, which on a fresh clone made this die with
+    # "TypeError: unsupported operand type(s) for /: 'NoneType' and 'str'" — a crash that
+    # names nothing. A missing boot artifact is an absent precondition, not a vermagic
+    # mismatch, and the two must not produce the same red.
+    asset_dir = default_asset_dir(prof.id)
+    if asset_dir is None or not (asset_dir / prof.boot.artifacts.kernel).is_file():
+        pytest.skip(f"kernel image for {prof.id} absent — cannot read its vermagic here")
+
+    image = asset_dir / prof.boot.artifacts.kernel
     krel = subprocess.run(
         ["strings", "-a", str(image)], capture_output=True, text=True, check=True
     ).stdout

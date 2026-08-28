@@ -85,9 +85,28 @@ jobs:
           pip install -e backend
           pip install pytest
 
+      # ⭐ ARM THE FRESH CLONE — and thereby test install.sh, which nothing ever had.
+      # test_the_commit_gate_is_actually_wired asserts core.hooksPath is set, and on a
+      # fresh clone it is not; that test failed on this workflow's FIRST real run. The
+      # wrong fix is an env-var bypass — that test's own docstring refuses one, because a
+      # bypass makes the degraded state quiet again for anyone who sets it once. The right
+      # fix is to satisfy it honestly: run the installer a newcomer would run, from the
+      # exact fresh-clone state install.sh was written for and had never been exercised in.
+      # If install.sh is broken, this step goes red and names it.
+      - name: arm the hooks (fresh clone) — exercises .githooks/install.sh
+        run: |
+          bash .githooks/install.sh
+          test -x .git/holobench-hooks/pre-commit || { echo "::error::install.sh did not install pre-commit"; exit 1; }
+          test -n "$(git config --get core.hooksPath)" || { echo "::error::install.sh did not set core.hooksPath"; exit 1; }
+
+      # -rs so SKIPS ARE VISIBLE. Nine tests behave differently on a clean clone than on
+      # the machine where "155 passed" was measured — six already skipped for an absent
+      # sibling checkout, and three FAILED for absent local artifacts until they were
+      # taught to skip with a reason. A skip is not a pass, and an invisible skip is not
+      # even a skip; the log must show which preconditions this runner could not meet.
       - name: run the suite
         working-directory: backend
-        run: python -m pytest tests/ -q
+        run: python -m pytest tests/ -q -rs
 
       # A skip is not a pass. If the behavioural hook probe SKIPPED (it reports UNVERIFIED
       # when .githooks/pre-commit is absent), say so loudly rather than letting a green

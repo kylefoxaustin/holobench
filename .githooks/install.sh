@@ -11,8 +11,15 @@
 # installed pre-commit compares itself against .githooks/ and REFUSES on mismatch.
 #
 # ⚠️ WHAT THIS STILL DOES NOT COVER: a FRESH CLONE has no .git/holobench-hooks and is
-# therefore unarmed until someone runs this. Local hooks cannot fix that; only CI can,
-# and CI is not wired here. Stated rather than left as an assumption.
+# therefore unarmed until someone runs this. Local hooks cannot fix that, because on a
+# fresh clone no local hook exists to complain.
+#
+# ⭐ UPDATE 2026-08-28: CI IS NOW WIRED (.github/workflows/suite.yml) and runs this script
+# on every push, from the exact fresh-clone state described above — so this file is now
+# EXERCISED rather than merely documented, and a break in it turns the build red. That
+# does not arm anyone's laptop; it means the repo's guarantee no longer depends on a
+# human remembering. The remaining hole is one level out and named in the workflow: CI's
+# own trigger is governed by the repository's Actions setting, which no file here can see.
 set -e
 ROOT="$(git rev-parse --show-toplevel)"
 mkdir -p "$ROOT/.git/holobench-hooks"
