@@ -77,6 +77,49 @@ L2BEACON_SRC = Path(__file__).resolve().parent / "l2beacon.py"
 ENET_LAB3_C = Path.home() / "Documents/GitHub/95emulator/tests/enet-lab3/enet-lab3.c"
 
 
+def _emitted_strings(py_src: str) -> list[str]:
+    """Every string literal that actually reaches a print() call. NOT the whole file.
+
+    ⚠️ WHY THIS IS NOT `tok in source` (fixed 2026-08-27, proven by planting). The old
+    check asked whether the token appeared ANYWHERE in tools/l2beacon.py — and that file
+    documents its own output format in its module docstring, worked example and all:
+
+        L2BEACON PASS #<n>: saw all required peers (0x88b7 rx=1234)
+
+    So the emitter's PASS line was renamed to "L2BEACON VERIFIED", the docstring was left
+    alone, and the guard reported NO PROBLEMS. A guard whose stated job is "refuse a
+    verdict rather than produce a quiet one" was satisfied by the DOCUMENTATION of the
+    thing it was checking. My own vantage rule, turned on me: a grep hit is not a finding
+    until you read what it hit.
+
+    qualcomm, same day: a guard's detection pattern should be tested against a real
+    sample of what it detects — a regex is a claim about a string FORMAT, and format
+    claims rot exactly like numeric ones.
+    """
+    import ast
+    out: list[str] = []
+    try:
+        tree = ast.parse(py_src)
+    except SyntaxError:
+        return out
+    for node in ast.walk(tree):
+        if isinstance(node, ast.Call) and isinstance(node.func, ast.Name) \
+                and node.func.id == "print":
+            for sub in ast.walk(node):
+                if isinstance(sub, ast.Constant) and isinstance(sub.value, str):
+                    out.append(sub.value)
+    return out
+
+
+def _c_string_literals(c_src: str) -> list[str]:
+    """Every double-quoted literal in a C source, with // and /* */ comments stripped
+    first — same reason as above: a token surviving only in a comment is not emitted."""
+    import re as _re
+    no_block = _re.sub(r"/\*.*?\*/", " ", c_src, flags=_re.S)
+    no_line = _re.sub(r"//[^\n]*", " ", no_block)
+    return _re.findall(r'"((?:[^"\\]|\\.)*)"', no_line)
+
+
 def _verify_tokens_still_exist() -> list[str]:
     """⭐ FAIL LOUD, NOT QUIET — 93emulator's distinction, applied at RUN time.
 
@@ -95,7 +138,7 @@ def _verify_tokens_still_exist() -> list[str]:
     Returns a list of problems (empty = fine).
     """
     problems: list[str] = []
-    ours = L2BEACON_SRC.read_text() if L2BEACON_SRC.is_file() else ""
+    ours = "\n".join(_emitted_strings(L2BEACON_SRC.read_text())) if L2BEACON_SRC.is_file() else ""
     for name, tok in (("BOARD_PASS", BOARD_PASS), ("BOARD_UP", BOARD_UP),
                       ("BOARD_CORRUPT", BOARD_CORRUPT)):
         if not ours:
@@ -103,10 +146,11 @@ def _verify_tokens_still_exist() -> list[str]:
             break
         if tok not in ours:
             problems.append(
-                f"{name}={tok!r} is no longer emitted by tools/l2beacon.py. This "
+                f"{name}={tok!r} is no longer PRINTED by tools/l2beacon.py (it may "
+                f"still appear in a docstring or comment there — that does not emit it). This "
                 f"scorer would grade every leg INCONCLUSIVE and look like a quiet lab.")
     if ENET_LAB3_C.is_file():
-        guest = ENET_LAB3_C.read_text()
+        guest = "\n".join(_c_string_literals(ENET_LAB3_C.read_text()))
         for name, tok in (("GUEST_PASS", GUEST_PASS), ("GUEST_CORRUPT", GUEST_CORRUPT)):
             if tok not in guest:
                 problems.append(

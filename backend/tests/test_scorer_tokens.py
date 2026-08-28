@@ -334,3 +334,102 @@ def test_or_guard_second_half_is_not_redundant():
     assert not (rx <= 0), "first half does NOT fire on the honest negative"
     assert passes <= 0, "second half DOES fire on it"
     assert (rx <= 0 or passes <= 0), "the guard as written catches it"
+
+
+# ═══════════════════════════════════════════════════════════════════════════════════════
+# qualcomm, 2026-08-27: A GUARD'S DETECTION PATTERN SHOULD BE TESTED AGAINST A REAL
+# SAMPLE OF WHAT IT DETECTS. A regex is a claim about a string FORMAT, and format claims
+# rot exactly like numeric ones. Everything below tests patterns against the REAL
+# CAPTURED LOGS in evidence/, not against strings this test file invented.
+# ═══════════════════════════════════════════════════════════════════════════════════════
+
+def _evidence(name: str) -> str:
+    from pathlib import Path
+    p = Path(__file__).resolve().parents[2] / "evidence" / "real-silicon-2026-08-25" / name
+    if not p.is_file():
+        pytest.skip(f"{name} absent — a skip is not a pass")
+    return p.read_text()
+
+
+@pytest.mark.parametrize("log_name,passes,rx", [
+    ("frdm95.board.log", 391, 391),
+    ("orin.board.log", 380, 380),
+])
+def test_board_patterns_match_the_real_captured_logs(log_name, passes, rx):
+    """The exact numbers the shipped VERDICT rests on, re-derived from the real logs by
+    the patterns as they stand today. If a pattern rots, these move — which is the point:
+    a token check against SOURCE cannot notice a format change, but a count against
+    captured output can."""
+    m = _scorer_mod()
+    log = _evidence(log_name)
+    assert log.count(m.BOARD_PASS) == passes
+    assert m._rx_from(log) == rx
+    assert log.count(m.BOARD_UP) == 1, "exactly one UP banner per board run"
+    assert log.count(m.BOARD_CORRUPT) == 0
+
+
+def test_guest_pattern_matches_the_real_captured_console():
+    """⚠️ 673 IS POOLED ACROSS BOTH LEGS and is corroboration, never the verdict — the
+    guest's PASS lines carry no ethertype, so this number cannot be split per leg."""
+    m = _scorer_mod()
+    g = _evidence("imx95.console.log")
+    assert g.count(m.GUEST_PASS) == 673
+    assert g.count(m.GUEST_CORRUPT) == 0
+
+
+def test_corrupt_pattern_matches_what_the_emitter_actually_prints():
+    """⚠️ SCOPED DELIBERATELY, AND WEAKER THAN THE TESTS ABOVE.
+
+    BOARD_CORRUPT is the one pattern with NO real captured sample to test against: both
+    shipped board logs contain zero corrupt lines, and the 2026-08-25 negative control
+    that DID produce corrupt frames preserved only my scorer's derived count
+    ("board: PASS=0 rx=0 CORRUPT=30" in scratchpad-consoles/runs/run-20260825-135531.log),
+    not a raw L2BEACON CORRUPT line. That count is real evidence the pattern matched THEN;
+    it is not a sample I can re-test the pattern against NOW.
+
+    So this asserts the next best thing — the token matches a format string the emitter
+    itself prints, taken from l2beacon.py's actual print() calls rather than from a
+    literal typed here. A sample I invented would be authored to make my own token look
+    right; one lifted from the emitter is at least not that."""
+    m = _scorer_mod()
+    from pathlib import Path
+    src = (Path(__file__).resolve().parents[2] / "tools" / "l2beacon.py").read_text()
+    emitted = m._emitted_strings(src)
+    assert any(s.startswith(m.BOARD_CORRUPT) for s in emitted), \
+        f"{m.BOARD_CORRUPT!r} is not the prefix of any string l2beacon.py prints"
+    # negative direction: a real PASS line must never be read as corrupt
+    assert m.BOARD_CORRUPT not in _evidence("frdm95.board.log")
+
+
+def test_token_guard_is_not_satisfied_by_a_docstring():
+    """⭐ THE REGRESSION. _verify_tokens_still_exist used to ask `tok in source`, and
+    l2beacon.py documents its own output format in its module docstring — worked example
+    included. So renaming the PASS line while leaving the docstring alone left the guard
+    reporting NO PROBLEMS, on a scorer whose entire stated job is to REFUSE a verdict
+    rather than produce a quiet one. Proven by planting before it was fixed.
+
+    My own vantage rule, turned on me: a grep hit is not a finding until you read what
+    it hit. The guard was satisfied by the DOCUMENTATION of the thing it was checking."""
+    m = _scorer_mod()
+    from pathlib import Path
+    src = (Path(__file__).resolve().parents[2] / "tools" / "l2beacon.py").read_text()
+
+    emitted = "\n".join(m._emitted_strings(src))
+    assert m.BOARD_PASS in emitted, "the token must be PRINTED, not merely present"
+
+    renamed = src.replace('print("L2BEACON PASS #%d',
+                          'print("L2BEACON VERIFIED #%d', 1)
+    assert renamed != src, "the plant did not apply — the emit site moved"
+    assert m.BOARD_PASS in renamed, "…and the docstring still carries the old token"
+    assert m.BOARD_PASS not in "\n".join(m._emitted_strings(renamed)), \
+        "a renamed emitter must be invisible to the emission-site check"
+
+
+def test_c_literal_extraction_ignores_comments():
+    """The guest side is C, so the same hazard applies with // and /* */ instead of a
+    docstring. A token surviving only in a comment is not a token the guest emits."""
+    m = _scorer_mod()
+    src = '/* prints ENET-LAB3 PASS on success */\n// also ENET-LAB3 PASS here\n'
+    assert "ENET-LAB3 PASS" not in "\n".join(m._c_string_literals(src))
+    src2 = src + 'printf("ENET-LAB3 PASS #%d\\n", n);\n'
+    assert "ENET-LAB3 PASS" in "\n".join(m._c_string_literals(src2))
