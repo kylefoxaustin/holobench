@@ -19,6 +19,26 @@ set -e
 # of reset/checkout/clean, which is the whole point (qualcomm: "the detector cannot
 # be the thing the failure removes"). The cost of living outside the tree is that it
 # can silently diverge from the committed .githooks/ source. So compare, and refuse.
+#
+# ⚠️ AND A SECOND COST I DID NOT NOTICE I WAS PAYING (measured 2026-08-28). Living
+# there requires `core.hooksPath = .git/holobench-hooks` in .git/config — a LOCAL
+# setting, and local BEATS the fleet's global core.hooksPath. Verified in a scratch
+# repo, not read from docs: with global=fleet and local=repo, the REPO hook runs.
+# So the chain here is
+#         git → .git/holobench-hooks/pre-push → exec → the fleet gate
+# and the fleet gate runs ONLY because a repo-local file chooses to exec it.
+#
+# ⭐ .git/config IS NOT TRACKED BY ANY REPO. One line —
+#       git config --local core.hooksPath /dev/null
+# — disables every hook here, leaves no diff, appears in no history, and defeats every
+# audit in this repo at once: nothing is gutted, so there is no installed-vs-source
+# comparison to fail and no prose to be fooled by. The mechanism was never the file.
+#
+# So "outside the tree" is NOT "outside the repo's control". This move is real hardening
+# against reset/checkout/clean and it is NOT hardening against a config edit; it trades a
+# tracked-file exposure for an untracked-config one. Closing that needs a runner this
+# machine's git cannot decline — CI — which does not exist here. Stated so the next
+# reader does not inherit the stronger claim I was making.
 ROOT="$(git rev-parse --show-toplevel)"
 INSTALLED="$ROOT/.git/holobench-hooks/pre-commit"
 SOURCE="$ROOT/.githooks/pre-commit"
