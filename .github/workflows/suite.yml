@@ -34,6 +34,27 @@
 #      checker asserting each repo's hooksPath — not built.
 #   ❌ It does not exercise QEMU, the boards, or any lab. Those need real hardware and a
 #      real emulator binary; the suite here is the host-side logic only.
+#
+#   ⚠️ AND THIS WORKFLOW'S OWN TRIGGER IS STILL GOVERNED BY STATE IT CANNOT SEE.
+#      qualcomm's sharpened form of the fifth mechanism, which is better than the one it
+#      replaced: THE VERIFIER'S OWN INVOCATION IS GOVERNED BY STATE THE VERIFIER CANNOT
+#      SEE. For git that state is .git/config, untracked by construction. For this file it
+#      is the repository's Actions setting — flip it off and every run stops, with no diff
+#      and no history inside the repo.
+#      What genuinely improved: that state is QUERYABLE FROM OUTSIDE, which .git/config
+#      effectively is not. Measured 2026-08-28:
+#          gh api repos/kylefoxaustin/holobench/actions/permissions -> {"enabled":true}
+#      So this moves the trigger from invisible-and-local to invisible-to-itself but
+#      externally auditable. That is a real improvement and it is NOT a closure: we moved
+#      the check AND the trigger, but the trigger's ENABLEMENT moved with it.
+#
+#   🚨 UNVERIFIED AS OF THE COMMIT THAT ADDED THIS FILE. The steps were rehearsed locally
+#      in a clean venv (pip install -e backend; 155 passed) and the last step was
+#      plant-tested both ways. But THIS WORKFLOW HAS NEVER RUN ON GITHUB — the push was
+#      gated pending approval when it was written. Nothing here may be cited as "CI is
+#      green" until a run has actually been observed. Shipping a check and asserting its
+#      properties before it has ever executed is the exact failure this file exists to
+#      escape, and it would be dishonest to close the day's work by committing it.
 # ═══════════════════════════════════════════════════════════════════════════════════════
 name: suite
 
