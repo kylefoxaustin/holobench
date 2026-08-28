@@ -95,6 +95,31 @@ BEACON="$REPO/tools/l2beacon.py"
 
 RUN_AS="${SUDO_USER:-}"
 as_user() { if [ -n "$RUN_AS" ]; then sudo -u "$RUN_AS" -H "$@"; else "$@"; fi; }
+
+# ── TRANSCRIPT + EVIDENCE DIR ───────────────────────────────────────────────────────────
+# ⚠️ ADDED 2026-08-27, AFTER THE EVIDENCE FROM THIS SCRIPT'S BEST RUN WAS LOST.
+# On 2026-08-25 this control proved the oracle bites: phase ③ planted broken magic and the
+# board reported CORRUPT=30. What survived is that COUNT, in a terminal transcript captured
+# outside this script. The raw L2BEACON CORRUPT lines went to the BOARD's /tmp, were read
+# into a shell variable, counted, and dropped. Board /tmp is gone; so is the only sample of
+# what a corrupt line looks like.
+#
+# ⭐ A COUNT IS A CLAIM ABOUT A SAMPLE; THE SAMPLE IS THE EVIDENCE. Keeping "CORRUPT=30"
+# and discarding the thirty lines is the same trade as reporting a measurement without the
+# log — and it cost a real capability: BOARD_CORRUPT is now the one scorer pattern with no
+# real sample to test against (qualcomm's rule: a detection pattern should be tested
+# against a real sample of what it detects).
+#
+# Two failures, not one, and both are fixed here:
+#   1. the script never recorded ITSELF — the 08-25 transcript exists by luck of how it
+#      was invoked, and a control whose output depends on the caller is not reproducible;
+#   2. it preserved the failure sample onto VOLATILE REMOTE STORAGE, which reads as
+#      preservation right up until you go looking.
+RUN_DIR="$REPO/scratchpad-consoles/runs/oracle-bites-$(date +%Y%m%d-%H%M%S)"
+as_user mkdir -p "$RUN_DIR" 2>/dev/null || mkdir -p "$RUN_DIR"
+as_user touch "$RUN_DIR/transcript.log" 2>/dev/null || touch "$RUN_DIR/transcript.log"
+exec > >(tee -a "$RUN_DIR/transcript.log") 2>&1
+echo "📝 transcript + per-phase board logs: $RUN_DIR"
 ssh_b()   { as_user ssh -o BatchMode=yes -o ConnectTimeout=5 "$@"; }
 scp_b()   { as_user scp -o BatchMode=yes -o ConnectTimeout=5 "$@"; }
 
@@ -229,7 +254,12 @@ PYEOF
     sleep 6
     local log passn rxn corruptn legacyn
     log="$(ssh_b "$FRDM_HOST" "cat $plog 2>/dev/null" 2>/dev/null)"
-    echo "     board log kept at $plog (per-phase; nothing overwrites it)"
+    # ⭐ SAVE THE SAMPLE, NOT JUST THE COUNT. $plog lives on the BOARD's /tmp and does not
+    # survive a reboot or a tmp sweep — which is exactly how the 08-25 corrupt sample was
+    # lost. Copy it beside the transcript before anyone counts anything.
+    local keep="$RUN_DIR/phase${PHASE_N}-${label//[^A-Za-z0-9]/_}.board.log"
+    printf '%s\n' "$log" > "$keep" 2>/dev/null || true
+    echo "     board log kept at $plog (on the board) AND preserved at $keep"
     passn="$(printf '%s' "$log" | grep -c 'L2BEACON PASS' || true)"
     rxn="$(printf '%s' "$log" | sed -n 's/.*[( ]rx=\([0-9]*\).*/\1/p' | tail -1)"
     corruptn="$(printf '%s' "$log" | grep -c 'L2BEACON CORRUPT' || true)"
