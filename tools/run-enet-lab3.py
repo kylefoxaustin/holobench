@@ -309,6 +309,42 @@ def _peer_et(line: str) -> str:
     return m.group(1).lower() if m else "0x????"
 
 
+# ── THE CALIBRATION GATE, AS A PURE FUNCTION ────────────────────────────────────────────
+CAL_OK, CAL_THIN, CAL_UNCALIBRATABLE, CAL_COARSE, CAL_TOO_CLOSE = (
+    "ok", "thin", "uncalibratable", "coarse", "too_close")
+
+
+def calibrate_quiet(nb: int, q: float | None) -> tuple[str, float | None]:
+    """Can this node's departure be scored AT ALL, given `nb` beats and longest NORMAL
+    quiet period `q`? Returns (verdict, headroom-or-None). PURE — so every branch is
+    reachable from a test, which is the entire reason it no longer lives inline.
+
+    ⭐ Lifted out of main() on 2026-08-27. One of its branches (q == 0 -> float("inf")
+    headroom -> PASS at maximum confidence) had never been executed by anything, and
+    COULD NOT BE: reaching it required a whole live lab, so no test could get near it.
+    An unexercised branch that lands on PASS is exactly the shape qualcomm named that
+    day — a zero measures the world only if you have shown the instrument can produce a
+    non-zero. Being inline was not incidental to it going unnoticed; it was the cause.
+
+    Note the asymmetry that makes this gate safe: FOUR of the five verdicts refuse to
+    score, and only one permits it. A calibration check should be hard to satisfy, not
+    easy — it decides whether the measurement that follows means anything."""
+    if nb < 2:
+        return CAL_THIN, None
+    if q is None:
+        return CAL_UNCALIBRATABLE, None
+    if q <= 0.0:
+        # Every non-straddling gap was ZERO — two beats bearing the SAME timestamp.
+        # Unreachable on the LIVE path (beats are loop.time() monotonic floats, which
+        # never coincide), but reachable the moment this scorer is pointed at a SAVED
+        # log with second-resolution timestamps, which is an ordinary thing to want.
+        # "I could not resolve these beats in time" must not become "infinitely
+        # distinguishable from a timeout".
+        return CAL_COARSE, None
+    headroom = BEAT_TIMEOUT_S / q
+    return (CAL_OK if headroom >= QUIET_MARGIN else CAL_TOO_CLOSE), headroom
+
+
 async def main() -> int:
     # ── PREFLIGHT: REFUSE A WIRE THAT IS NOT EMPTY ───────────────────────────────────────
     # ⭐ AN ORPHANED PROCESS ON A SHARED BUS IS NOT A LEAK. IT IS A LIAR THAT OUTLIVED THE
@@ -472,13 +508,14 @@ async def main() -> int:
     for n in lab.nodes:
         q = beats.quiet_period(n.name, dep_window)
         nb = len(beats.beats.get(n.name, []))
-        if nb < 2:
+        verdict, headroom = calibrate_quiet(nb, q)
+        if verdict == CAL_THIN:
             print(f"  ⚠️  {n.name:7} {nb} beat(s) — NOT ENOUGH TO MEASURE ITS OWN SPACING.")
             print(f"           A node with one beat has no interval, and a scorer that asserts")
             print(f"           on intervals cannot see it. Unscoreable, NOT failed.")
             unscoreable.add(n.name)
             continue
-        if q is None:
+        if verdict == CAL_UNCALIBRATABLE:
             # ≥2 beats, but EVERY gap between them straddles the departure window — so we
             # have no sample of this node's NORMAL spacing to judge the timeout against.
             # That is not a healthy node and it is not a broken one: it is a node we cannot
@@ -495,8 +532,26 @@ async def main() -> int:
             unscoreable.add(n.name)
             inconclusive.append(f"{n.name}: no normal beat-gap to calibrate the timeout against")
             continue
-        headroom = BEAT_TIMEOUT_S / q if q else float("inf")
-        ok = headroom >= QUIET_MARGIN
+        if verdict == CAL_COARSE:
+            # ⭐ q == 0 means every non-straddling gap was ZERO — two beats bearing the
+            # SAME timestamp. The old code read that as `float("inf")` headroom and passed
+            # the node at maximum confidence. That is fail-OPEN on the thinnest possible
+            # data: "I could not distinguish these beats in time" became "infinitely
+            # distinguishable from a timeout".
+            #
+            # Unreachable on the LIVE path — beats are loop.time() monotonic floats and two
+            # readings never coincide — but reachable the moment this scorer is pointed at a
+            # SAVED log whose timestamps have second resolution, which is an ordinary thing
+            # to want. An unreachable branch that lands on PASS is a bare null with a
+            # deadline (qualcomm, 2026-08-27: a zero measures the world only if you have
+            # shown the instrument can produce a non-zero).
+            print(f"  ⚠️  {n.name:7} {nb} beat(s) but every normal gap is 0.0s — timestamps")
+            print(f"           too coarse to resolve this node's spacing. Unscoreable, NOT")
+            print(f"           failed, and NOT infinite headroom.")
+            unscoreable.add(n.name)
+            inconclusive.append(f"{n.name}: beat timestamps too coarse to calibrate (all gaps 0.0s)")
+            continue
+        ok = verdict == CAL_OK
         print(f"  {'✅' if ok else '⚠️ '} {n.name:7} longest NORMAL quiet {q:5.1f}s vs "
               f"{BEAT_TIMEOUT_S:.0f}s timeout — {headroom:.1f}x headroom")
         if not ok:

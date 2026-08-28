@@ -1168,3 +1168,65 @@ def test_the_real_silicon_lab_actually_declares_a_tie():
     assert len(starts) != len(set(starts)), (
         "no lab declares two nodes at the same start_at, so the concurrent-arrival "
         "path is unexercised — the guard is real but nothing proves it works")
+
+
+def _runlab_mod():
+    """Import tools/run-enet-lab3.py by path — it lives outside the package."""
+    import importlib.util
+    from pathlib import Path
+
+    spec = importlib.util.spec_from_file_location(
+        "runlab", Path(__file__).resolve().parents[2] / "tools" / "run-enet-lab3.py")
+    m = importlib.util.module_from_spec(spec)
+    spec.loader.exec_module(m)
+    return m
+
+
+def test_calibrate_quiet_every_branch_is_reachable():
+    """⭐ THE POINT OF THIS TEST IS THAT IT CAN RUN AT ALL.
+
+    Until 2026-08-27 this gate was inline in main(), so reaching any branch required a
+    whole live lab and NO test could touch it. One branch — q == 0 -> float("inf")
+    headroom -> scored at maximum confidence — had therefore never been executed by
+    anything, in either direction. qualcomm's rule that day: a zero measures the world
+    only if you have shown the instrument can produce a non-zero. The same holds for a
+    branch: an untaken branch that lands on PASS is not safe, it is unobserved."""
+    m = _runlab_mod()
+    assert m.calibrate_quiet(1, None)[0] == m.CAL_THIN
+    assert m.calibrate_quiet(0, None)[0] == m.CAL_THIN
+    assert m.calibrate_quiet(5, None)[0] == m.CAL_UNCALIBRATABLE
+    assert m.calibrate_quiet(5, 1.0) == (m.CAL_OK, m.BEAT_TIMEOUT_S / 1.0)
+    assert m.calibrate_quiet(5, 10.0)[0] == m.CAL_TOO_CLOSE
+
+    # ⭐ FOUR OF FIVE VERDICTS REFUSE TO SCORE. A calibration gate should be hard to
+    # satisfy — it decides whether the measurement that follows means anything.
+    permits = [v for v in (m.CAL_OK, m.CAL_THIN, m.CAL_UNCALIBRATABLE,
+                           m.CAL_COARSE, m.CAL_TOO_CLOSE) if v == m.CAL_OK]
+    assert len(permits) == 1
+
+
+def test_coincident_beats_are_unscoreable_not_infinite_headroom():
+    """THE REGRESSION. Two beats bearing the SAME timestamp gave q == 0, and the old code
+    read that as float("inf") headroom and PASSED the node. "I could not resolve these
+    beats in time" must never become "infinitely distinguishable from a timeout"."""
+    m = _runlab_mod()
+    for q in (0.0, -0.0, -1.0):
+        verdict, headroom = m.calibrate_quiet(5, q)
+        assert verdict == m.CAL_COARSE, f"q={q} must refuse to score, got {verdict}"
+        assert headroom is None, f"q={q} must yield NO headroom number, got {headroom}"
+        assert verdict != m.CAL_OK
+
+
+def test_coincident_beats_are_actually_constructible_from_Beats():
+    """⚠️ THE HAZARD IS REAL, NOT HYPOTHETICAL — the degenerate input can be BUILT from
+    the scorer's own data structure. Unreachable on the live path, because beats are
+    loop.time() monotonic floats that never coincide; reachable the moment this scorer is
+    pointed at a SAVED log whose timestamps have second resolution, which is an ordinary
+    thing to want. A branch guarded only by 'the current caller cannot get there' is
+    inert by wiring, not by design."""
+    m = _runlab_mod()
+    b = m.Beats()
+    b.beats["n"] = [100.0, 100.0, 100.0]          # a second-resolution log, three beats
+    q = b.quiet_period("n", None)
+    assert q == 0.0, f"expected a 0.0 quiet period from coincident beats, got {q!r}"
+    assert m.calibrate_quiet(len(b.beats["n"]), q)[0] == m.CAL_COARSE
