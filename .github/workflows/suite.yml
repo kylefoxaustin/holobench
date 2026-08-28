@@ -1,0 +1,95 @@
+# ═══════════════════════════════════════════════════════════════════════════════════════
+# THE RUNNER THIS MACHINE'S GIT CANNOT DECLINE.
+#
+# ⚠️ WHY THIS FILE EXISTS. On 2026-08-27/28, working through five failure mechanisms with
+# qualcomm, every local guard in this repo turned out to be reachable only through the
+# thing it guards:
+#     · the pre-commit hook was gutted in both copies — it announced "running the suite…",
+#       printed a fabricated "153 passed", exited 0, and NOTHING caught it;
+#     · the behavioural probe that now catches that lives INSIDE the suite the hook runs,
+#       so on the very commit that guts the hook, the probe does not run either;
+#     · and hook RESOLUTION is repo-local untracked config — `git config --local
+#       core.hooksPath /dev/null` disables everything, leaves no diff, and appears in no
+#       history.
+#
+#   ⭐ A SELF-CHECK CANNOT ESTABLISH THAT IT WAS RUN (qualcomm's fifth mechanism). Any
+#     verification reachable only through the mechanism it verifies has a blind spot
+#     exactly the size of that mechanism failing. It is a topology problem, not a code
+#     problem, and the only fix is a runner outside this machine's control.
+#
+# ═══════════════════════════════════════════════════════════════════════════════════════
+# WHAT THIS CLOSES, precisely — stated because an overstated CI badge is the same
+# reassuring-guard failure one level further out:
+#
+#   ✅ "the suite actually passes on this commit" — re-established on GitHub's runner from
+#      a clean clone, so no local hook, config, or habit can make it merely LOOK true.
+#      Every "N pass" in a commit message becomes checkable by someone who is not me.
+#   ✅ "the committed hook, if run, invokes pytest and refuses a failing suite" — the
+#      behavioural probe in tests/test_setup.py runs here too, on a runner that has no
+#      stake in the answer.
+#
+#   ❌ IT CANNOT SEE WHETHER THE HOOK IS INSTALLED OR ENABLED ON ANY DEVELOPER MACHINE.
+#      .git/config is not pushed. A local checkout with hooks disabled is invisible here,
+#      and this workflow makes no claim about it. Detecting THAT needs a periodic external
+#      checker asserting each repo's hooksPath — not built.
+#   ❌ It does not exercise QEMU, the boards, or any lab. Those need real hardware and a
+#      real emulator binary; the suite here is the host-side logic only.
+# ═══════════════════════════════════════════════════════════════════════════════════════
+name: suite
+
+on:
+  push:
+    branches: ['**']
+  pull_request:
+  workflow_dispatch:
+
+jobs:
+  pytest:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      # ⭐ PINNED TO THE VERSION THE CLAIM WAS MEASURED UNDER (3.10, the local venv).
+      # Widening to a matrix is a deliberate separate step, not a freebie: a CI that is
+      # expected-red for reasons unrelated to the code is a check people learn to ignore,
+      # which is precisely the failure this file was built to escape. backend/pyproject
+      # declares >=3.10; nothing above 3.10 has been run, so nothing above 3.10 is claimed.
+      - uses: actions/setup-python@v5
+        with:
+          python-version: '3.10'
+
+      - name: install
+        run: |
+          python -m pip install --upgrade pip
+          pip install -e backend
+          pip install pytest
+
+      - name: run the suite
+        working-directory: backend
+        run: python -m pytest tests/ -q
+
+      # A skip is not a pass. If the behavioural hook probe SKIPPED (it reports UNVERIFIED
+      # when .githooks/pre-commit is absent), say so loudly rather than letting a green
+      # check stand for a test that never ran.
+      # ⚠️ THIS STEP'S FIRST DRAFT GREPPED THE OUTPUT FOR "UNVERIFIED" and was caught in
+      # rehearsal doing exactly what this whole workflow exists to escape. The probe's
+      # skip path was broken (pytest was never imported, so it raised NameError instead of
+      # skipping) — and the traceback ECHOED THE SOURCE LINE containing the word
+      # UNVERIFIED, so the grep matched my own code and reported the right verdict for
+      # entirely the wrong reason. A guard that asserts on TEXT can be satisfied by the
+      # text of the guard itself.
+      #
+      # ⭐ SO THIS ASSERTS ON THE COUNT, WHICH IS BEHAVIOURAL. "2 passed" is producible
+      # only by two tests that actually ran and actually passed: a skip yields "2 skipped",
+      # an error yields "2 failed", an import failure yields "errors". None of them can
+      # be faked by a traceback quoting this file.
+      - name: the hook probe must have RUN — not skipped, not errored
+        working-directory: backend
+        run: |
+          out="$(python -m pytest tests/test_setup.py -k hook -q --tb=no -rs 2>&1)" || true
+          echo "$out"
+          echo "$out" | grep -qE "^2 passed" || {
+            echo "::error::the pre-commit hook probe did not run-and-pass (skip, error, and"
+            echo "::error::failure all land here — 'could not check' is not 'working')"
+            exit 1
+          }

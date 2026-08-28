@@ -1,5 +1,7 @@
 # SPDX-License-Identifier: GPL-2.0-or-later
 """Setup wizard: per-board artifact manifest derivation + validation."""
+import pytest
+
 from holobench.setup import required_artifacts, validate_manifest, SetupManager
 
 
