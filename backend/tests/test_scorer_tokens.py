@@ -281,3 +281,56 @@ def test_the_commit_gate_is_actually_wired():
             f"{hook} missing or not executable at {installed} — the gate is not armed. "
             f"pre-push also DELEGATES TO THE FLEET PUSH GATE, so a missing one removes "
             f"that too. Fix: bash .githooks/install.sh")
+
+
+def _scorer_mod():
+    import importlib.util
+    from pathlib import Path
+
+    spec = importlib.util.spec_from_file_location(
+        "scorer", Path(__file__).resolve().parents[2] / "tools" / "score-real-silicon.py")
+    m = importlib.util.module_from_spec(spec)
+    spec.loader.exec_module(m)
+    return m
+
+
+# The beacon's designed HONEST NEGATIVE: frames arrived from a required peer, but never
+# all of them in one window. l2beacon.py:418 prints this, and it carries `rx=`.
+_NOPASS_LOG = (
+    "L2BEACON UP: et=0x88b7\n"
+    "L2BEACON STATS: rx_peer=9 rx_self_ignored=0 rx_foreign_ignored=3 corrupt=0 passes=0 tx=40\n"
+    "L2BEACON NO-PASS: required peers were never all seen in one window "
+    "(0x88b7 rx=9). This is a reportable negative, not an error.\n"
+)
+
+
+def test_rx_from_reads_the_whole_log_not_just_PASS_lines():
+    """⚠️ THE DOCSTRING USED TO CLAIM PASS-LINES-ONLY. It scans the whole log, and
+    l2beacon emits rx= from TWO sites — the PASS line AND the NO-PASS line. This test
+    exists so that claim cannot quietly come back: it pins what the function actually
+    measures, which is what the call site's OR-guard depends on."""
+    m = _scorer_mod()
+    assert m._rx_from(_NOPASS_LOG) == 9, "rx= on a NO-PASS line must still be seen"
+    assert _NOPASS_LOG.count(m.BOARD_PASS) == 0, "…and this log has NO PASS lines at all"
+
+
+def test_or_guard_second_half_is_not_redundant():
+    """⭐ qualcomm's test, applied to my shipped scorer: for any guard with an OR,
+    disable the OTHER branch and re-plant. If the failure is still caught, the branch you
+    disabled may be dead.
+
+    Here it came back the other way — the second half is LOAD-BEARING and the first
+    cannot see this case at all. An honest negative (rx=9, passes=0) is a FAIL only
+    because of `or board_passes <= 0`. Drop that half and the scorer reports a false PASS
+    on a run where the required peers were never all seen.
+
+    What made it look droppable was a WRONG COMMENT, not a wrong test: the old docstring
+    implied rx > 0 guaranteed a PASS line. Redundancy hides deadness; an inaccurate
+    comment manufactures the APPEARANCE of redundancy over something alive."""
+    m = _scorer_mod()
+    rx = m._rx_from(_NOPASS_LOG)
+    passes = _NOPASS_LOG.count(m.BOARD_PASS)
+
+    assert not (rx <= 0), "first half does NOT fire on the honest negative"
+    assert passes <= 0, "second half DOES fire on it"
+    assert (rx <= 0 or passes <= 0), "the guard as written catches it"

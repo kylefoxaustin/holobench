@@ -29,19 +29,15 @@ if [ -f "$SOURCE" ] && ! cmp -s "$INSTALLED" "$SOURCE"; then
     exit 1
 fi
 
-cd "$(git rev-parse --show-toplevel)/backend"
-if [ ! -x ../.venv/bin/python ]; then
-    echo "pre-commit: no ../.venv — SKIPPING the suite." >&2
-    echo "  ⚠️ A skip is not a pass. Commit proceeding, but nothing was verified." >&2
-    exit 0
-fi
-echo "pre-commit: running the suite…"
-../.venv/bin/python -m pytest tests/ -q || {
-    echo "pre-commit: TESTS FAILED — commit refused." >&2
-    echo "  (--no-verify bypasses this, and then 'tests green' is not a claim you hold.)" >&2
-    exit 1
-}
-
+# ⭐ THIS RUNS BEFORE THE SUITE, AND THE ORDER IS THE POINT (fixed 2026-08-27).
+# It used to sit at the END of this file — after the `no ../.venv → exit 0` skip. So on
+# any checkout without a venv the hook exited 0 and NEVER CHECKED WHETHER THE PUSH GATE
+# WAS ARMED. That is the worst possible placement: a fresh clone is precisely when .venv
+# is absent AND when the fleet gate is most likely unarmed, so the guard built for fresh
+# clones was disabled by the very condition that defines one. Found by applying
+# qualcomm's test — disable one branch of a multi-part guard and re-plant — to my own
+# hook rather than to my code.
+#
 # ⚠️ SELF-CHECK: this repo sets core.hooksPath=.githooks, which means a plain
 # `git reset --hard` to a commit predating .githooks DELETES THE HOOKS DIRECTORY —
 # and git then silently runs NO hooks at all, including the fleet's pre-push gate.
@@ -52,3 +48,19 @@ if [ ! -x "$(git rev-parse --show-toplevel)/.githooks/pre-push" ]; then
     echo "  for this repo. Restore it before committing: git checkout .githooks" >&2
     exit 1
 fi
+
+cd "$(git rev-parse --show-toplevel)/backend"
+if [ ! -x ../.venv/bin/python ]; then
+    echo "pre-commit: no ../.venv — SKIPPING the suite." >&2
+    echo "  ⚠️ A skip is not a pass. Commit proceeding, but THE SUITE was not run." >&2
+    echo "     (The push-gate arming check above DID run — it is deliberately ahead of" >&2
+    echo "      this skip, because a checkout with no venv is the likeliest to be" >&2
+    echo "      missing the gate too.)" >&2
+    exit 0
+fi
+echo "pre-commit: running the suite…"
+../.venv/bin/python -m pytest tests/ -q || {
+    echo "pre-commit: TESTS FAILED — commit refused." >&2
+    echo "  (--no-verify bypasses this, and then 'tests green' is not a claim you hold.)" >&2
+    exit 1
+}

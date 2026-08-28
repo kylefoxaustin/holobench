@@ -147,11 +147,24 @@ def _ssh(host: str, cmd: str, timeout: float = 10.0) -> tuple[int, str]:
 
 
 def _rx_from(log: str) -> int:
-    """Largest rx= seen in a board's PASS lines.
+    """Largest rx= anywhere in a board log. ⚠️ NOT "in its PASS lines".
 
-    Parses the PASS line — the artifact that CARRIES the assertion — and not the
-    STATS line, which only exists once the beacon has exited. That distinction
-    already cost this lab one false FAIL on a 40/40 run.
+    This docstring used to claim it parsed the PASS line specifically. IT DOES NOT —
+    the regex scans the WHOLE log, and l2beacon emits `rx=` from TWO places:
+        l2beacon.py:402  L2BEACON PASS #N: ... (0x88b7 rx=9)
+        l2beacon.py:418  L2BEACON NO-PASS: ... (0x88b7 rx=9)   <- printed when passes==0
+    So a run that received frames from one required peer but never all of them in one
+    window — the beacon's designed HONEST NEGATIVE — yields rx > 0 with ZERO passes.
+
+    It does correctly skip the STATS line, but by accident of spelling rather than by
+    scoping: STATS says `rx_peer=`, and "rx=" is not a substring of "rx_peer=". A
+    rename there would silently change what this function measures.
+
+    ⭐ THE REASON THIS MATTERS IS AT THE CALL SITE, NOT HERE. The old wording implied
+    rx > 0 guarantees a PASS line exists, which makes the `or board_passes <= 0` half
+    of RULE 2 look like redundant belt-and-braces. It is not redundant; it is the only
+    half that catches the honest negative. A comment that makes a live guard look dead
+    is a deletion waiting to happen.
     """
     vals = [int(m) for m in re.findall(r"[( ]rx=(\d+)", log)]
     return max(vals) if vals else 0
@@ -204,6 +217,16 @@ def score_leg(node, board_log: str, guest_console: str) -> tuple[str, list[str]]
     notes.append(f"board: PASS={board_passes} rx={board_rx} CORRUPT={board_corrupt}")
 
     # RULE 2: a positive integer from the artifact that carries the assertion.
+    #
+    # ⚠️ DO NOT "SIMPLIFY" THIS TO ONE TEST. The two halves catch DIFFERENT failures and
+    # neither subsumes the other — verified 2026-08-27 by qualcomm's test (disable one
+    # branch of an OR and re-plant; if the failure is still caught, the branch you
+    # disabled may be dead):
+    #     board_rx <= 0      alone  → catches a silent wire, MISSES the honest negative
+    #     board_passes <= 0  alone  → catches the honest negative
+    # A real L2BEACON NO-PASS log (rx=9, passes=0) scores FAIL with both halves and
+    # NOT-CAUGHT — a false PASS — with the second removed. Pinned by
+    # test_or_guard_second_half_is_not_redundant.
     if board_rx <= 0 or board_passes <= 0:
         notes.append(f"⭐ the REAL BOARD did not receive 0x{GUEST_ET:04x} — this is a "
                      f"genuine negative and the load-bearing one")
