@@ -242,6 +242,44 @@ class UserCreateRequest(BaseModel):
     role: str = "user"
 
 
+# QEMU says "warning: …" on stderr for things that DID NOT STOP THE BOOT but changed what
+# the board is. holobench merges stderr into qemu.log at launch, so unlike a harness that
+# redirects to /dev/null we do not lose them — but a warning in a file nobody opens is not
+# meaningfully louder than one that was thrown away.
+#
+# ⭐ THE CASE THAT MADE THIS URGENT (95emulator, 2026-09-01): ask the ISI for a host frame
+# file at the wrong geometry and it FALLS BACK TO A SYNTHETIC GRADIENT — the capture path
+# stays live, the panel shows a plausible moving image, and every downstream check passes.
+# The only thing separating "your camera works" from "you are looking at a test pattern"
+# is a warning line. They made the model shout; this is the other half, so the shout
+# reaches whoever is looking at the pane.
+_WARN_CAP = 20
+
+
+def _qemu_warnings(s: Session) -> list[str]:
+    """Deduped `warning:`/`error:` lines from the session's QEMU log, newest last."""
+    path = getattr(s, "log_path", None)
+    if not path:
+        return []
+    try:
+        # Bounded read: a long-running board's log can be large, and this is called on
+        # every session poll. The interesting lines are emitted at launch/first-use.
+        raw = Path(path).read_bytes()[-262144:]
+    except OSError:
+        return []
+    out, seen = [], set()
+    for line in raw.decode("utf-8", "replace").splitlines():
+        t = line.strip()
+        low = t.lower()
+        if not (low.startswith("qemu") and (": warning:" in low or ": error:" in low)) \
+                and not low.startswith(("warning:", "error:")):
+            continue
+        if t not in seen:
+            seen.add(t)
+            out.append(t)
+    return out[-_WARN_CAP:]
+
+
 def _session_view(s: Session) -> dict:
     return {
         "id": s.id,
@@ -252,6 +290,8 @@ def _session_view(s: Session) -> dict:
         "pid": s.pid,
         "owner": s.owner,
         "lab": ({"id": s.lab_id, "node": s.lab_node} if s.lab_id else None),
+        # What QEMU said but did not stop for. See _qemu_warnings.
+        "qemu_warnings": _qemu_warnings(s),
         "serial": [
             {"name": p.name, "chardev": p.chardev, "role": p.role, "default": p.default}
             for p in s.profile.serial

@@ -324,6 +324,10 @@ class Session:
         self._qmp: Optional[QMPClient] = None
         self._cgroup: Optional[SessionCgroup] = None
         self._log_path = self.work_dir / "qemu.log"
+        # QEMU's stdout AND stderr both land here (stderr=STDOUT at launch). Public so the
+        # API can surface what QEMU says: a warning captured in a file nobody reads is one
+        # step better than /dev/null and zero steps better in practice.
+        self.log_path = self._log_path
         self._taps: dict[str, SerialTap] = {}
         # Lazy serial: when on, taps attach on first console connect (ref-counted)
         # and detach on the last disconnect — no always-on serial pump per board

@@ -113,6 +113,13 @@
                     class="px-2 py-0.5 rounded bg-emerald-700 hover:bg-emerald-600 text-xs disabled:opacity-50"
                     title="attach a panel so the DPU scans out — reboots the board">Attach LCD${lbl}</button>`}`}
           </div>
+          ${(session.qemu_warnings || []).length > 0 && html`
+            <div class="mb-1 px-2 py-1 rounded bg-amber-950/60 border border-amber-800/60 text-[11px] text-amber-200">
+              <div class="font-semibold">QEMU said this and kept going —
+                <span class="font-normal text-amber-300/90">what is on screen may not be what you think.</span></div>
+              ${(session.qemu_warnings || []).map(w => html`
+                <div class="font-mono text-[10px] text-amber-100/90 break-all">${w}</div>`)}
+            </div>`}
           <div class="relative flex-1 min-h-0 flex items-center justify-center bg-black rounded border border-slate-800 overflow-hidden">
             <img src=${src} alt="framebuffer" class="max-h-full max-w-full object-contain"
                  style=${{ imageRendering: "pixelated" }} />
