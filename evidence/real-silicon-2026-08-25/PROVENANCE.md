@@ -105,6 +105,23 @@ made non-zero. Two of the three counters here have that; the third borrows it.
 malformed frame written to the guest's macvtap during a live lab run — buildable
 from tools/prove-macvtap-guest.sh, not built.
 
+**6. THE QEMU BINARY BEHIND THIS RESULT NO LONGER EXISTS AT ITS PATH (noted 2026-09-01).**
+The profile pins md5 `748c91ee7e1746873937f74e4269abb8` for
+`95emulator/build/qemu-system-aarch64`. That file was rebuilt in place on 2026-08-30
+16:10 and now hashes `4c573eaeecbe0d9bdfbf1586658350f6` (branch `imx95-v2-clean`,
+4721c743b74). Same path, different build.
+⭐ THIS IS THE PIN WORKING, NOT FAILING. It is the exact scenario the pin was added for:
+95emulator rebuilds often, and without a pin the binary behind a published number can be
+replaced with nothing saying so. The lab now REFUSES to launch on drift, which is correct.
+⚠️ WHAT IT MEANS FOR THIS BUNDLE: the numbers here remain what was measured — they were
+produced by the pinned build, and nothing retroactively changes that. What is no longer
+available is REPRODUCTION from the current tree: re-running this lab today requires
+rebuilding the pinned commit or re-earning the pin against the new build by re-running
+the lab and re-validating. Until someone does that, treat this bundle as a record rather
+than a recipe.
+⚠️ THE PIN HAS DELIBERATELY NOT BEEN UPDATED. Re-pinning to whatever is on disk would
+silently bless a binary nobody validated, which is the only thing a pin exists to prevent.
+
 ## What this does NOT show
 Nothing here speaks to the negative control (that is a separate run, and only 2 of
 its 4 observed clean runs have preserved transcripts). Nothing here is a claim about

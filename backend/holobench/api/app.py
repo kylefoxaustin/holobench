@@ -259,8 +259,24 @@ def _session_view(s: Session) -> dict:
         "display": {
             "enabled": s.profile.display.enabled,
             "vnc": s.profile.display.vnc,
-            # An attachable panel exists for this board -> the UI offers "Attach LCD".
-            "attachable": bool(s.profile.display.attach_dtb),
+            # ⭐ ATTACHABLE MEANS THE DTB IS ON DISK, NOT MERELY NAMED IN THE PROFILE.
+            # This used to be bool(attach_dtb) — a check that the profile SET A STRING.
+            # attach_dtb is not in setup.required_artifacts (it is not boot-critical, and
+            # should not be: a board without a panel boots fine, faithfully). So nothing
+            # anywhere demanded the file existed, and a profile naming a dtb the operator
+            # had not provisioned still offered a confident "Attach LCD" button that
+            # reboots the board into a failure.
+            #
+            # ⚠️ AND THE TWO STATES MUST NOT LOOK THE SAME. "this board has no panel" is a
+            # hardware fact; "this board has a panel you have not provisioned" is a setup
+            # gap. Collapsing them lets a provisioning gap masquerade as faithful
+            # bare-EVK behaviour — the UI already explains a dark panel as "correct, not a
+            # bug", which is exactly the sentence that would hide it. Hence attach_missing.
+            "attachable": bool(_attach_dtb_path(s.profile)),
+            "attach_declared": bool(s.profile.display.attach_dtb),
+            "attach_missing": (bool(s.profile.display.attach_dtb)
+                               and not _attach_dtb_path(s.profile)),
+            "attach_dtb": s.profile.display.attach_dtb,
             "attach_label": s.profile.display.attach_label,
             "lcd_attached": s.lcd_attached,
         },
@@ -310,6 +326,24 @@ def _get_session(session_id: str) -> Session:
 
 
 # --- auth ------------------------------------------------------------------
+
+
+
+def _attach_dtb_path(profile) -> "Path | None":
+    """The panel dtb's resolved path, or None if it is not actually there.
+
+    CLAUDE.md §2: when a capability is absent the profile flags it and the UI degrades
+    gracefully. That only works if "absent" is measured rather than declared."""
+    name = profile.display.attach_dtb
+    if not name:
+        return None
+    p = Path(name)
+    if p.is_absolute():
+        return p if p.is_file() else None
+    d = default_asset_dir(profile.id)
+    if d is None:
+        return None
+    return (d / name) if (d / name).is_file() else None
 
 
 @app.get("/api/public-config")

@@ -121,6 +121,15 @@
                 Bare EVK — no panel attached, so the DPU has nothing to scan out (faithful to real hardware).
                 Click <span class="text-emerald-300">Attach LCD</span> to plug in a ${disp.attach_label || "panel"} and reboot.
               </div>`}
+            ${disp.attach_missing && html`
+              <div class="absolute inset-x-0 bottom-0 p-2 text-center text-[11px] text-amber-300 bg-slate-900/80">
+                This board HAS a panel (${disp.attach_label || "LCD"}) but its device tree is not provisioned:
+                <span class="font-mono text-amber-200">${disp.attach_dtb}</span> is missing from this board's assets.
+                <div class="text-slate-400 mt-0.5">
+                  A dark panel here is a SETUP GAP, not the faithful bare-EVK behaviour — generate the dtb
+                  (see docs/SETUP.md) and the Attach LCD control returns.
+                </div>
+              </div>`}
           </div>
         </div>`;
     }

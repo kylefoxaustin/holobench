@@ -36,3 +36,60 @@ def test_require_admin():
     assert A._require_admin(req("admin")).is_admin
     with pytest.raises(Exception):
         A._require_admin(req("user"))
+
+
+# ═══════════════════════════════════════════════════════════════════════════════════════
+# "ATTACHABLE" MUST MEAN THE PANEL DTB IS THERE, NOT THAT THE PROFILE NAMED ONE.
+#
+# ⚠️ Found 2026-09-01 while 95emulator was asking which profile to target for the
+# camera→LCD path. The API reported attachable = bool(profile.display.attach_dtb) — a
+# check that a STRING WAS SET. attach_dtb is deliberately NOT in setup.required_artifacts
+# (it is not boot-critical; a panel-less board boots fine and faithfully), so nothing
+# anywhere demanded the file exist. A profile naming a dtb the operator had not
+# provisioned still offered a confident "Attach LCD" that reboots the board into failure.
+#
+# ⭐ AND THE PART THAT MAKES IT WORSE THAN A MISSING FILE: the UI already explains a dark
+# panel as "Bare EVK — no panel attached … faithful to real hardware. correct, not a bug."
+# That sentence is TRUE for a board with no panel and FALSE for a board whose panel dtb
+# was never generated — and without this distinction both render identically. A setup gap
+# would wear the costume of a hardware fact, which is the most expensive kind of quiet.
+# ═══════════════════════════════════════════════════════════════════════════════════════
+
+def test_attachable_is_measured_not_declared():
+    from holobench.api.app import _attach_dtb_path
+    from holobench.profiles.loader import load_profile
+
+    # a board whose panel dtb IS provisioned
+    p = load_profile("imx95-evk-sd")
+    assert p.display.attach_dtb, "this profile is supposed to declare a panel"
+    resolved = _attach_dtb_path(p)
+    if resolved is None:
+        pytest.skip("panel dtb not provisioned on this box — cannot test the positive path")
+    assert resolved.is_file()
+
+    # ⭐ THE PLANT: declared, not provisioned. Must degrade, not offer a broken button.
+    p.display.attach_dtb = "imx95-19x19-evk-lcd-cam.dtb"   # real name, deliberately absent
+    assert _attach_dtb_path(p) is None, (
+        "a declared-but-missing panel dtb must not resolve — otherwise the UI offers an "
+        "Attach LCD that reboots into failure")
+
+
+def test_no_panel_and_unprovisioned_panel_are_different_states():
+    """A board with no panel is a HARDWARE FACT. A board whose panel dtb was never
+    generated is a SETUP GAP. They must not produce the same payload, or the gap inherits
+    the fact's explanation ('correct, not a bug') and stops being findable."""
+    from holobench.api.app import _attach_dtb_path
+    from holobench.profiles.loader import load_profile
+
+    bare = load_profile("imx95-evk")                # declares no panel at all
+    assert bare.display.attach_dtb is None
+    assert _attach_dtb_path(bare) is None
+
+    gap = load_profile("imx95-evk-sd")
+    gap.display.attach_dtb = "definitely-not-generated.dtb"
+    assert _attach_dtb_path(gap) is None            # both unattachable…
+
+    # …but only one of them DECLARED a panel, and that is the bit the UI needs to tell
+    # "this board has none" from "yours is missing".
+    assert bool(bare.display.attach_dtb) is False
+    assert bool(gap.display.attach_dtb) is True

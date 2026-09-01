@@ -432,13 +432,32 @@ def test_binary_pin_refuses_a_binary_it_was_not_validated_against():
     p = load_profile("imx95-evk-enet-lab3-2port")
     assert p.qemu.binary_pin, "the 2-port profile must pin its binary"
 
-    # ⚠️ THE POSITIVE HALF NEEDS THE REAL BINARY, which lives in a sibling checkout and
-    # cannot exist on a CI runner. Skip with a reason rather than fail: an absent
-    # cross-repo artifact is not a broken pin. The NEGATIVE half below — that a wrong
-    # hash is REFUSED — is the load-bearing assertion and it needs no binary, so it is
-    # deliberately left outside this guard.
+    # ⚠️ THE POSITIVE HALF NEEDS THE VALIDATED BINARY — the exact one, not merely a file
+    # at that path. It lives in a sibling checkout and cannot exist on a CI runner. Skip
+    # with a reason rather than fail; an absent or REPLACED cross-repo artifact is not a
+    # broken pin. The NEGATIVE half below — that a wrong hash is REFUSED — is the
+    # load-bearing assertion, needs no binary, and is deliberately outside this guard.
     if not Path(p.qemu.binary).is_file():
         pytest.skip(f"QEMU binary absent ({p.qemu.binary}) — cannot verify the accept path")
+
+    # ⭐ DRIFT IS NOT ABSENCE, AND MUST NOT SKIP SILENTLY AS IF IT WERE (2026-09-01).
+    # 95emulator rebuilt QEMU on 2026-08-30 and the binary behind holobench's published
+    # real-silicon result was replaced in place. The pin caught it — that is the pin
+    # working, not failing. But "file missing" and "file is a DIFFERENT BUILD" are
+    # different facts and the second one is a finding, so it gets its own message with
+    # both hashes rather than inheriting the absent-artifact excuse.
+    #
+    # ⚠️ THE PIN IS NOT UPDATED HERE, DELIBERATELY. Re-pinning to whatever is on disk
+    # would silently bless a binary nobody validated, which destroys the only thing a pin
+    # is for. It stays until someone re-runs the lab against the new build and earns it.
+    import hashlib
+    on_disk = hashlib.md5(Path(p.qemu.binary).read_bytes()).hexdigest()
+    if on_disk != p.qemu.binary_pin:
+        pytest.skip(
+            f"QEMU BINARY DRIFTED — pinned {p.qemu.binary_pin}, on disk {on_disk}. "
+            f"The validated build was replaced in place; the accept path cannot be "
+            f"verified against a binary that is not the validated one. The lab will "
+            f"REFUSE to launch until the pin is re-earned, which is correct.")
 
     s = Session.__new__(Session)          # the check needs no work dir
     s.profile, s.argv = p, [p.qemu.binary]
