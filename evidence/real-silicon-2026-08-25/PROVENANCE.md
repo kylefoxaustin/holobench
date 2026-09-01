@@ -108,8 +108,22 @@ from tools/prove-macvtap-guest.sh, not built.
 **6. THE QEMU BINARY BEHIND THIS RESULT NO LONGER EXISTS AT ITS PATH (noted 2026-09-01).**
 The profile pins md5 `748c91ee7e1746873937f74e4269abb8` for
 `95emulator/build/qemu-system-aarch64`. That file was rebuilt in place on 2026-08-30
-16:10 and now hashes `4c573eaeecbe0d9bdfbf1586658350f6` (branch `imx95-v2-clean`,
-4721c743b74). Same path, different build.
+16:10 and now hashes `4c573eaeecbe0d9bdfbf1586658350f6`. Same path, different build.
+
+⚠️ CORRECTION, same day, to the first version of this note: I originally attributed the new
+binary to commit `4721c743b74` (branch `imx95-v2-clean`) because that is what the sibling
+checkout had at HEAD. That was an inference from the checkout, not a measurement of the
+binary, AND IT IS WRONG. Checked properly:
+
+    binary mtime       2026-08-30 16:10
+    checked-out HEAD   4721c743b74, dated 2026-08-25   ← OLDER than the binary
+    imx95-v2.5.0 tag   9af44bc7d63, dated 2026-09-01   ← newer, and not checked out
+
+⭐ THE BINARY CORRESPONDS TO NO REF. It is not HEAD and it is not the tag; it is an
+artifact of a worktree state that no longer exists. That is materially worse than a stale
+pin — a stale pin can be re-earned against a named build, but this one cannot be
+regenerated from anything fetchable, so re-pinning to it would bless something
+unreproducible. The refusal to re-pin was correct for a weaker reason than the real one.
 ⭐ THIS IS THE PIN WORKING, NOT FAILING. It is the exact scenario the pin was added for:
 95emulator rebuilds often, and without a pin the binary behind a published number can be
 replaced with nothing saying so. The lab now REFUSES to launch on drift, which is correct.
