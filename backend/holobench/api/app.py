@@ -292,6 +292,16 @@ def _session_view(s: Session) -> dict:
         "lab": ({"id": s.lab_id, "node": s.lab_node} if s.lab_id else None),
         # What QEMU said but did not stop for. See _qemu_warnings.
         "qemu_warnings": _qemu_warnings(s),
+        # ⭐ WHICH BINARY ACTUALLY RAN. Every profile in this repo names a path inside a
+        # sibling emulator checkout that another session rebuilds at will, and only one
+        # profile carries a binary_pin. Recording the hash does not gate anything and
+        # needs no validation — it just means a result can be tied to the program that
+        # produced it, instead of to a path that happened to hold something that day.
+        "qemu_binary": {
+            "path": (s.argv[0] if getattr(s, "argv", None) else s.profile.qemu.binary),
+            "md5": getattr(s, "qemu_binary_md5", None),
+            "pinned": bool(s.profile.qemu.binary_pin),
+        },
         "serial": [
             {"name": p.name, "chardev": p.chardev, "role": p.role, "default": p.default}
             for p in s.profile.serial

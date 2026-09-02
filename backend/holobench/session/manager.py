@@ -328,6 +328,9 @@ class Session:
         # API can surface what QEMU says: a warning captured in a file nobody reads is one
         # step better than /dev/null and zero steps better in practice.
         self.log_path = self._log_path
+        # md5 of the QEMU binary this session actually launched, measured at start.
+        # None until _verify_binary_pin runs, or if the binary could not be read.
+        self.qemu_binary_md5: Optional[str] = None
         self._taps: dict[str, SerialTap] = {}
         # Lazy serial: when on, taps attach on first console connect (ref-counted)
         # and detach on the last disconnect — no always-on serial pump per board
@@ -510,17 +513,39 @@ class Session:
         stops one.
         """
         want = self.profile.qemu.binary_pin
-        if not want:
-            return
         import hashlib
         path = Path(self.argv[0]) if self.argv else Path(self.profile.qemu.binary)
+
+        # ⭐ HASH EVERY TIME, ENFORCE ONLY WHEN PINNED (2026-09-01).
+        # This used to `return` immediately when a profile had no pin, which meant the
+        # binary that actually ran was never recorded for 24 of this repo's 25 profiles.
+        # EVERY profile here names a path inside a sibling emulator checkout — 95emulator,
+        # 91emulator, 93emulator, mcxn947qemu, rt1180emulator — each owned by a different
+        # session that rebuilds it for its own reasons. 95emulator confirmed on 2026-09-01
+        # that their build/ sits on an upstream-prep branch which "was never a valid target
+        # for the lab; that it worked for a while was luck, not design."
+        #
+        # ⚠️ THE DRIFT WAS CAUGHT IN THE ONE PROFILE THAT HAPPENED TO BE PINNED. The other
+        # 24 are exposed to the identical silent substitution and would have said nothing.
+        # A pin must be EARNED — validated against that profile's lab — so pinning 24
+        # binaries nobody has validated would be worse than pinning none. But RECORDING
+        # what ran costs nothing and requires no validation, and it turns a silent
+        # substitution into a fact somebody can see. Law 1: a MEASURED number about the run.
         try:
             got = hashlib.md5(path.read_bytes()).hexdigest()
         except OSError as exc:
+            self.qemu_binary_md5 = None
+            if not want:
+                # No pin to check, and QEMU is about to fail on its own for a missing
+                # binary with a better message than anything invented here.
+                return
             raise SessionError(
                 f"{self.profile.id}: cannot hash the QEMU binary at {path}: {exc}. "
                 f"A pinned binary that cannot be read is not a passed check."
             ) from exc
+        self.qemu_binary_md5 = got
+        if not want:
+            return
         if got != want:
             raise SessionError(
                 f"{self.profile.id}: THE QEMU BINARY CHANGED.\n"

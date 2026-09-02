@@ -479,3 +479,49 @@ def test_binary_pin_refuses_a_binary_it_cannot_read():
     s.profile, s.argv = p, ["/nonexistent/qemu-system-aarch64"]
     with pytest.raises(SessionError, match="cannot hash the QEMU binary"):
         s._verify_binary_pin()
+
+
+def test_every_profile_naming_a_sibling_checkout_is_known_and_counted():
+    """⭐ THE SCOPE OF THE PROBLEM, PINNED SO IT CANNOT QUIETLY GROW.
+
+    On 2026-09-01 95emulator confirmed their build/ tree — which six of this repo's
+    profiles pointed at — sits on an upstream-prep branch and "was never a valid target
+    for the lab; that it worked for a while was luck, not design."
+
+    The drift was caught by the ONE profile carrying a binary_pin. Every other profile
+    names a path inside some sibling emulator checkout owned by a different session that
+    rebuilds it at will, and would have said nothing at all.
+
+    ⚠️ THIS TEST DOES NOT DEMAND PINS. A pin must be EARNED by validating that binary
+    against that profile's lab; pinning 24 binaries nobody validated would be strictly
+    worse than pinning none, because it would look like provenance. What it does is make
+    the exposure a COUNTED, VISIBLE number, so nobody discovers it again by accident."""
+    from pathlib import Path as _P
+    import re
+
+    root = _P(__file__).resolve().parents[2] / "profiles"
+    sibling = re.compile(r"^\s*binary:\s*(/home/[^\s#]+)")
+    named, pinned = [], []
+    for f in sorted(root.glob("*.yaml")):
+        text = f.read_text()
+        for line in text.splitlines():
+            m = sibling.match(line)
+            if m and "/GitHub/" in m.group(1):
+                named.append(f.name)
+                if re.search(r"^\s*binary_pin:", text, re.M):
+                    pinned.append(f.name)
+                break
+
+    assert named, "expected profiles naming absolute sibling-checkout binaries"
+    # Every such profile is exposed to silent substitution unless it is pinned.
+    unpinned = [n for n in named if n not in pinned]
+    assert len(pinned) >= 1, "at least the 2-port lab profile must stay pinned"
+    # A guard rail, not a target: if this ever fails because `unpinned` SHRANK, someone
+    # earned a pin and should lower the number deliberately. If it fails because it GREW,
+    # a new profile joined the exposed set and should be noticed.
+    # MEASURED 2026-09-01: 22 profiles name a sibling-checkout binary, 1 pinned, 21 not.
+    #   mcxn947qemu 7 · 95emulator 6 · 91emulator 4 · 93emulator 3 · rt1180emulator 2
+    assert len(unpinned) <= 21, (
+        f"{len(unpinned)} profiles name a rebuildable sibling binary with no pin — this "
+        f"GREW past the 21 measured on 2026-09-01, so a new profile joined the exposed "
+        f"set: {unpinned}")
