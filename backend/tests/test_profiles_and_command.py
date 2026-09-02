@@ -533,32 +533,42 @@ def test_volatile_binary_exposure_is_counted_and_cannot_quietly_grow():
     assert pinned, "the 2-port lab profile's earned binary_pin has gone missing"
 
 
-def test_no_isp_tuning_knob_is_exposed_until_the_model_honours_it():
-    """⭐ A KNOB THAT SILENTLY DOES NOTHING IS THE WORST THING THIS UI COULD SHIP.
+def test_only_the_INERT_isp_stages_are_gated_and_the_live_one_is_not():
+    """⭐ A KNOB THAT SILENTLY DOES NOTHING IS THE WORST THING THIS UI COULD SHIP —
+    but the set of such knobs SHRANK, and a gate enforcing a stale claim is its own defect.
 
-    95emulator, 2026-09-02, on the i.MX95 ISP at tag imx95-v2.6.0: the tuning params node
-    (NNIP, 8912 bytes) "is read and thrown away, so an engineer who changes ISP tuning will
-    see the output NOT change." They asked, before I could trip over it:
+    2026-09-02, 00:20 — 95emulator: the ISP tuning params node "is read and thrown away…
+    gate it until I tell you this is live." I wrote a blanket ban.
+    2026-09-02, 00:25 — same session, unprompted, five minutes later: OB_WB0 is now LIVE.
+    Per-Bayer-channel BLACK LEVEL and WHITE BALANCE gain are applied at the site whose
+    colour it actually is, with a qtest that halves red gain and requires red to fall WHILE
+    GREEN DOES NOT MOVE — which is what separates white balance from a brightness control.
 
-        "If your UI ever exposes ISP tuning, gate it until I tell you this is live."
+        LIVE       black level, white balance      (OB_WB0, tip 7eba41c2140)
+        STILL NO-OP  gamma, colour-correction matrix, denoise, tone mapping
 
-    ⚠️ THIS IS THE SAME FAILURE CLASS AS THE TWO WE EACH FIXED LAST WEEK — their gradient
-    fallback and my dark panel — but WORSE, because those substituted something for
-    something. A tuning control that accepts input and changes nothing invites an engineer
-    to conclude the SILICON behaves that way. They would not be reading a broken pane; they
-    would be reading a wrong answer about hardware, produced by a control I built.
+    So the blanket ban is now WRONG in the expensive direction: it would block a control
+    that works. This gate covers the second list only.
 
-    So this test exists to fail the moment someone adds the knob, and to hand them the
-    reason rather than making them find this conversation. WHEN IT FIRES: do not delete it
-    — confirm with the emulator session that the params node is honoured, then remove this
-    test in the same commit that ships the control, so the removal is reviewable.
+    ⭐ AND THE BLOB CONTROL STAYS BANNED FOR A SHARPER REASON THAN BEFORE. A single
+    "load your NNIP tuning file" control is now PARTIALLY honoured — WB takes effect, gamma
+    does not. That is worse than total inertness, not better: an engineer who adjusts white
+    balance sees it work, then adjusts gamma and sees nothing, and concludes GAMMA DOES NOT
+    AFFECT THIS HARDWARE. A specific false belief about silicon, arrived at BECAUSE part of
+    the control was honest. Until every stage is live, tuning must be exposed per-stage or
+    not at all.
 
-    A bus message decays. A failing test with the reason in it does not."""
+    WHEN THIS FIRES: confirm with the emulator session which stage went live, move it out of
+    INERT_STAGES in the same commit that ships the control, and say which tag made it true."""
     from pathlib import Path as _P
     import re
 
     root = _P(__file__).resolve().parents[2]
-    banned = re.compile(r"\b(isp_tuning|tuning_params|isp_params|nnip)\b", re.I)
+    # Still ignored by the model → must not be presented as a working control.
+    INERT_STAGES = r"gamma|denoise|tone_map(?:ping)?|ccm|colou?r_correction(?:_matrix)?"
+    # Whole-blob controls: partially honoured, which is worse than inert. See docstring.
+    BLOB = r"nnip|isp_params|tuning_params|isp_tuning"
+    knob = re.compile(rf"\b(?:{INERT_STAGES}|{BLOB})\s*[:=]", re.I)
 
     offenders = []
     for f in list((root / "profiles").glob("*.yaml")) + \
@@ -567,13 +577,31 @@ def test_no_isp_tuning_knob_is_exposed_until_the_model_honours_it():
         if not f.is_file():
             continue
         for i, line in enumerate(f.read_text(errors="replace").splitlines(), 1):
-            if line.lstrip().startswith(("#", "//")):
+            if line.lstrip().startswith(("#", "//", "*")):
                 continue                      # a comment ABOUT the gate is not the knob
-            if banned.search(line):
+            if knob.search(line):
                 offenders.append(f"{f.relative_to(root)}:{i}: {line.strip()[:90]}")
 
     assert not offenders, (
-        "an ISP tuning control appeared, but the modelled ISP ACCEPTS AND IGNORES tuning "
-        "params (95emulator, imx95-v2.6.0). Shipping it would let an engineer change a "
-        "setting, see no change, and conclude that is how the silicon behaves.\n  "
-        + "\n  ".join(offenders))
+        "an ISP control appeared for a stage the model still IGNORES (gamma / CCM / denoise "
+        "/ tone mapping), or a whole-blob tuning control which is only PARTIALLY honoured. "
+        "Either lets an engineer change a setting, see no change, and conclude that is how "
+        "the silicon behaves.\n  " + "\n  ".join(offenders))
+
+
+def test_the_live_isp_stage_is_NOT_gated():
+    """⭐ THE OTHER HALF, AND THE ONE A NARROWED GATE ACTUALLY NEEDS. Black level and white
+    balance went live at 7eba41c2140. If the gate above still caught them it would be
+    enforcing a claim the model has already outgrown — blocking real work to honour a
+    warning that expired. A gate must be re-measured against its subject, not just kept."""
+    import re
+    INERT_STAGES = r"gamma|denoise|tone_map(?:ping)?|ccm|colou?r_correction(?:_matrix)?"
+    BLOB = r"nnip|isp_params|tuning_params|isp_tuning"
+    knob = re.compile(rf"\b(?:{INERT_STAGES}|{BLOB})\s*[:=]", re.I)
+
+    for live in ("  black_level: 64", "  white_balance: {r: 256, g: 256, b: 256}",
+                 "wb_gain_r = 128"):
+        assert not knob.search(live), f"gate wrongly blocks a LIVE control: {live!r}"
+    for inert in ("  gamma: 2.2", "  denoise: on", "  ccm: [1,0,0]",
+                  "  tone_mapping: reinhard", "  isp_tuning: /path/nnip.bin"):
+        assert knob.search(inert), f"gate missed an INERT control: {inert!r}"
