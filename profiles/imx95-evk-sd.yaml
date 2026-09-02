@@ -17,7 +17,13 @@ soc:          "i.MX 95"
 description:  "6x Cortex-A55 + M33 SM, full imx-image-full distro from SD. Reinstall = factory reset."
 
 qemu:
-  binary:  /home/kyle/Documents/GitHub/95emulator/build/qemu-system-aarch64
+  binary:  /home/kyle/Documents/GitHub/95emu-tagbuild/build/qemu-system-aarch64
+  # ⬆ STABLE release build: 95emu-tagbuild is detached at tag imx95-v2.5.0 with no
+  # branch to advance, so nothing rebuilds it under us. The old path
+  # (95emulator/build/) is 95emulator's upstream-prep tree, rebuilt whenever they
+  # prepare patches for qemu-devel — it drifted under this repo on 2026-08-30 and
+  # they confirmed it "was never a valid target for the lab; that it worked for a
+  # while was luck, not design." See 95emu-tagbuild/BUILD-PROVENANCE.txt.
   machine: imx95-19x19-evk
   memory:  "4G"
   audio:   none

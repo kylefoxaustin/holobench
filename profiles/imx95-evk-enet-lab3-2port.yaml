@@ -117,7 +117,13 @@ soc:          "NXP i.MX 95"
 description:  "Emulated i.MX 95 with TWO ENETC ports on TWO real host NICs — beacons 0x88B7 on each and independently watches the real FRDM (0x88B9, LAN) and the real Jetson Orin (0x88BA, USB)."
 
 qemu:
-  binary:  /home/kyle/Documents/GitHub/95emulator/build/qemu-system-aarch64
+  binary:  /home/kyle/Documents/GitHub/95emu-tagbuild/build/qemu-system-aarch64
+  # ⬆ STABLE release build: 95emu-tagbuild is detached at tag imx95-v2.5.0 with no
+  # branch to advance, so nothing rebuilds it under us. The old path
+  # (95emulator/build/) is 95emulator's upstream-prep tree, rebuilt whenever they
+  # prepare patches for qemu-devel — it drifted under this repo on 2026-08-30 and
+  # they confirmed it "was never a valid target for the lab; that it worked for a
+  # while was luck, not design." See 95emu-tagbuild/BUILD-PROVENANCE.txt.
   # PIN THE BINARY, not just the boot artifacts. 95emulator rebuilt QEMU ~6x in
   # one day while leg0's 333/0 was being quoted; it survived only because their
   # rebuilds landed in build-upstream/ and this reads build/ — a directory

@@ -454,10 +454,15 @@ def test_binary_pin_refuses_a_binary_it_was_not_validated_against():
     on_disk = hashlib.md5(Path(p.qemu.binary).read_bytes()).hexdigest()
     if on_disk != p.qemu.binary_pin:
         pytest.skip(
-            f"QEMU BINARY DRIFTED — pinned {p.qemu.binary_pin}, on disk {on_disk}. "
-            f"The validated build was replaced in place; the accept path cannot be "
-            f"verified against a binary that is not the validated one. The lab will "
-            f"REFUSE to launch until the pin is re-earned, which is correct.")
+            f"PIN NOT SATISFIED — pinned {p.qemu.binary_pin}, at the profile's path "
+            f"{on_disk}. The accept path cannot be verified against a binary that is not "
+            f"the validated one, so the lab will REFUSE to launch until the pin is "
+            f"re-earned. That is correct.\n"
+            f"  ⚠️ This says the two DIFFER; it does not say how. The first time it fired "
+            f"(2026-08-30) the binary had been rebuilt in place under a fixed path. It now "
+            f"also fires because the profile was deliberately REPOINTED onto a stable "
+            f"tag-build. Same evidence, different causes — naming a mechanism the hash "
+            f"cannot distinguish would be asserting past the vantage.")
 
     s = Session.__new__(Session)          # the check needs no work dir
     s.profile, s.argv = p, [p.qemu.binary]
@@ -481,47 +486,48 @@ def test_binary_pin_refuses_a_binary_it_cannot_read():
         s._verify_binary_pin()
 
 
-def test_every_profile_naming_a_sibling_checkout_is_known_and_counted():
-    """⭐ THE SCOPE OF THE PROBLEM, PINNED SO IT CANNOT QUIETLY GROW.
+def test_volatile_binary_exposure_is_counted_and_cannot_quietly_grow():
+    """⭐ THE SCOPE OF THE PROBLEM, MEASURED SO IT CANNOT DRIFT BACK.
 
     On 2026-09-01 95emulator confirmed their build/ tree — which six of this repo's
-    profiles pointed at — sits on an upstream-prep branch and "was never a valid target
-    for the lab; that it worked for a while was luck, not design."
+    profiles launched from — sits on an upstream-prep branch and "was never a valid target
+    for the lab; that it worked for a while was luck, not design." The drift was caught by
+    the ONE profile carrying a binary_pin, added in August for an unrelated lab.
 
-    The drift was caught by the ONE profile carrying a binary_pin. Every other profile
-    names a path inside some sibling emulator checkout owned by a different session that
-    rebuilds it at will, and would have said nothing at all.
+    ⭐ WHAT COUNTS IS VOLATILITY, NOT ABSOLUTENESS. An absolute path into somebody's tree
+    is only dangerous because that tree MOVES. 95emu-tagbuild is detached at a tag with no
+    branch to advance and a BUILD-PROVENANCE.txt, so pointing at it is not the same act as
+    pointing at a dev checkout, and a test that scored them alike would report exposure
+    that no longer exists — a stale claim of the kind this repo keeps finding elsewhere.
 
     ⚠️ THIS TEST DOES NOT DEMAND PINS. A pin must be EARNED by validating that binary
-    against that profile's lab; pinning 24 binaries nobody validated would be strictly
-    worse than pinning none, because it would look like provenance. What it does is make
-    the exposure a COUNTED, VISIBLE number, so nobody discovers it again by accident."""
+    against that profile's lab; pinning binaries nobody validated would be strictly worse
+    than pinning none, because it would LOOK like provenance while certifying nothing."""
     from pathlib import Path as _P
     import re
 
     root = _P(__file__).resolve().parents[2] / "profiles"
     sibling = re.compile(r"^\s*binary:\s*(/home/[^\s#]+)")
-    named, pinned = [], []
+    STABLE_TREES = ("95emu-tagbuild",)          # detached at a tag; nothing rebuilds it
+
+    volatile = []
     for f in sorted(root.glob("*.yaml")):
-        text = f.read_text()
-        for line in text.splitlines():
+        for line in f.read_text().splitlines():
             m = sibling.match(line)
             if m and "/GitHub/" in m.group(1):
-                named.append(f.name)
-                if re.search(r"^\s*binary_pin:", text, re.M):
-                    pinned.append(f.name)
+                repo = m.group(1).split("/GitHub/")[1].split("/")[0]
+                if repo not in STABLE_TREES:
+                    volatile.append(f.name)
                 break
 
-    assert named, "expected profiles naming absolute sibling-checkout binaries"
-    # Every such profile is exposed to silent substitution unless it is pinned.
-    unpinned = [n for n in named if n not in pinned]
-    assert len(pinned) >= 1, "at least the 2-port lab profile must stay pinned"
-    # A guard rail, not a target: if this ever fails because `unpinned` SHRANK, someone
-    # earned a pin and should lower the number deliberately. If it fails because it GREW,
-    # a new profile joined the exposed set and should be noticed.
-    # MEASURED 2026-09-01: 22 profiles name a sibling-checkout binary, 1 pinned, 21 not.
-    #   mcxn947qemu 7 · 95emulator 6 · 91emulator 4 · 93emulator 3 · rt1180emulator 2
-    assert len(unpinned) <= 21, (
-        f"{len(unpinned)} profiles name a rebuildable sibling binary with no pin — this "
-        f"GREW past the 21 measured on 2026-09-01, so a new profile joined the exposed "
-        f"set: {unpinned}")
+    # MEASURED 2026-09-01, after repointing the six i.MX95 profiles onto the tagbuild:
+    #   22 profiles name a sibling binary · 6 stable · 16 volatile
+    #   volatile by repo: mcxn947qemu 7 · 91emulator 4 · 93emulator 3 · rt1180emulator 2
+    assert len(volatile) <= 16, (
+        f"{len(volatile)} profiles launch from a tree somebody else rebuilds — this GREW "
+        f"past the 16 measured on 2026-09-01: {volatile}")
+
+    # And the one earned pin must not silently disappear.
+    pinned = [f.name for f in root.glob("*.yaml")
+              if re.search(r"^\s*binary_pin:", f.read_text(), re.M)]
+    assert pinned, "the 2-port lab profile's earned binary_pin has gone missing"
