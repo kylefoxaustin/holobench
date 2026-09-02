@@ -303,6 +303,12 @@ def run(iface: str, my_et: int, peers: list[int], runtime: float | None) -> int:
     rx.bind((iface, 0))
     rx.settimeout(SEND_EVERY_MS / 1000.0)
 
+    # ⭐ THE BANNER STATES THE CAP. A corpse is far easier to explain when its intended
+    # lifetime is on the record: the run's own log then says how long this process meant to
+    # live, so anyone finding it later can tell "still within its cap" from "should have
+    # been gone days ago" without guessing. 95emulator's suggestion.
+    print("L2BEACON RUNTIME: %s" % ("unlimited (explicit --runtime 0)" if runtime is None
+                                    else "%.0fs cap" % runtime), flush=True)
     print("L2BEACON UP: if=%s et=0x%04x mac=%s incarnation=0x%08x need=%s"
           % (iface, my_et, _mac_str(src), incarn,
              ",".join("0x%04x" % p for p in peers) or "(none — broadcast only)"),
@@ -426,18 +432,34 @@ def main(argv: list[str]) -> int:
             return 2
         return 0 if idle_control(argv[2], float(argv[3])) == 0 else 1
 
-    runtime = None
+    # ⭐ BOUNDED BY DEFAULT, UNBOUNDED ONLY ON PURPOSE (2026-09-02).
+    # This used to default to None — run FOREVER — and one beacon started on 2026-08-25 was
+    # still transmitting eight days later. It sat on the Orin's wire through a later run and
+    # made that leg's counts unattributable. An eight-day process was not a leak or a wedge;
+    # it was the documented behaviour of the default path, which is worse.
+    #
+    # ⚠️ AND A BARE DEFAULT TTL TRADES ONE SILENT FAILURE FOR ANOTHER (95emulator's caution,
+    # which is why this is not just `runtime = 3600`). A cap that expires mid-run makes the
+    # node go quiet, and A NODE THAT QUIETLY WENT QUIET LOOKS IDENTICAL TO ONE THAT NEVER
+    # STARTED — the exact ambiguity the vantage rule exists to prevent. So the default is
+    # generous enough that no real lab reaches it (a lab run is ~2 min), and unbounded stays
+    # available as something a person TYPED and can be found in a process list, rather than
+    # the default nobody chose.
+    DEFAULT_RUNTIME_S = 3600.0
+    runtime = DEFAULT_RUNTIME_S
     args = list(argv[1:])
     for i, a in enumerate(args):
         if a == "--runtime":
-            runtime = float(args[i + 1])
+            v = float(args[i + 1])
+            runtime = None if v == 0 else v      # 0 = unlimited, EXPLICITLY
             del args[i:i + 2]
             break
 
     if len(args) < 2:
         print("usage: %s [--runtime SECS] <ifname> <my_ethertype> [peer_ethertype ...]\n"
-              "       %s --idle-control <ifname> <secs>" % (argv[0], argv[0]),
-              file=sys.stderr)
+              "       (--runtime defaults to %.0fs; 0 means unlimited and must be typed)\n"
+              "       %s --idle-control <ifname> <secs>"
+              % (argv[0], DEFAULT_RUNTIME_S, argv[0]), file=sys.stderr)
         return 2
 
     iface = args[0]

@@ -372,3 +372,30 @@ def test_the_negative_control_detects_an_oracle_that_cannot_refuse():
     # WRONG-ET is ethertype-level, so a body-crippled oracle still refuses it.
     # Stated so the asymmetry is deliberate rather than an unnoticed gap.
     assert "WRONG-ET" not in broke
+
+
+def test_beacon_is_bounded_by_default_and_unbounded_only_when_typed():
+    """⭐ AN EIGHT-DAY PROCESS WAS THE DOCUMENTED BEHAVIOUR OF THE DEFAULT PATH.
+
+    l2beacon defaulted runtime=None, so `if runtime is not None and ...` skipped the exit
+    check entirely and the beacon ran forever. One started 2026-08-25 was still transmitting
+    eight days later, sat on the Orin's wire through a later run, and made that leg's counts
+    unattributable. That was not a leak or a wedge — it was the default.
+
+    ⚠️ AND A BARE DEFAULT TTL WOULD TRADE ONE SILENT FAILURE FOR ANOTHER (95emulator):
+    a cap expiring mid-run makes the node go quiet, and A NODE THAT QUIETLY WENT QUIET LOOKS
+    IDENTICAL TO ONE THAT NEVER STARTED. So the default is generous against a ~2 minute lab,
+    and unbounded remains available as something a person TYPED — findable in a process list
+    rather than being the default nobody chose."""
+    from pathlib import Path
+    import re
+
+    src = (Path(__file__).resolve().parents[2] / "tools" / "l2beacon.py").read_text()
+    assert "DEFAULT_RUNTIME_S = 3600.0" in src, "the default must be bounded"
+    assert re.search(r"runtime\s*=\s*DEFAULT_RUNTIME_S", src), \
+        "the bounded default must actually be assigned, not merely defined"
+    assert re.search(r"runtime\s*=\s*None\s+if\s+v\s*==\s*0", src), \
+        "--runtime 0 must be the EXPLICIT way to ask for unlimited"
+    assert "L2BEACON RUNTIME:" in src, \
+        "the banner must state the cap — a corpse is easier to explain when its intended " \
+        "lifetime is on the record"
