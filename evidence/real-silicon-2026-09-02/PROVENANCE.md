@@ -30,7 +30,39 @@ carries a known ISP defect — `TRIG_CAM0.TRIGGER` is latched rather than self-c
 forever and presents as an intermittent fault. It cannot reach this lab. It is recorded
 here so the pin is never read as a general blessing.
 
-**2. ⚠️ THE ORIN'S COUNT IN THIS BUNDLE IS INCOMPLETE, AND THAT IS A COLLECTION DEFECT OF
+**2. 🛑 THE ORIN LEG WAS CONTAMINATED BY MY OWN CORPSE, AND ITS COUNTS MUST NOT BE
+CITED.** Found during the post-run corpse check, after this bundle was first written.
+
+    pid 735507 on the Orin, started Tue Aug 25 13:58:01 — EIGHT DAYS before this run
+    /usr/bin/python3 /usr/local/sbin/l2beacon.py l4tbr0 0x88ba 0x88b7
+    same interface, same ethertype, same watch list as this run's orin node
+
+So during this run there were **TWO** beacons on `l4tbr0` transmitting `0x88ba` and both
+watching `0x88b7`. The guest saw `0x88ba` from two sources; the board's PASS lines came
+from two processes writing the same log path.
+
+⭐ THAT ALSO UNDERMINES MY FIRST EXPLANATION OF THE GAP BELOW. I attributed the missing
+block to a truncated ssh read. A second writer to the same file is at least as good an
+explanation and I CANNOT DISTINGUISH THEM from what I have. The gap is real; my stated
+cause for it was a guess wearing the clothes of a finding, and it is withdrawn.
+
+⚠️ CONSEQUENCE: **the orin leg's numbers are uninterpretable.** Not wrong — unattributable.
+Nothing here can say which beacon produced which line. The leg still shows real hardware on
+a real USB wire receiving the emulated board's frames with `CORRUPT=0`, but no count from it
+may be quoted.
+
+⭐ **THE frdm95 LEG IS CLEAN AND IS WHAT THE PIN RESTS ON.** Checked: no stale beacon on the
+FRDM, `PASS=381 rx=381 CORRUPT=0`, one transmitter, one receiver. That leg alone establishes
+the claim the pin needs — an emulated i.MX95 on imx95-v2.6.0 exchanging body-validated raw
+L2 frames with real silicon that accepted them. The USB leg was corroboration and is
+downgraded to "reached the far end", nothing quantitative.
+
+⚠️ AND IT IS A LAW 2 FAILURE OF MINE, EIGHT DAYS OLD. The August run left that beacon
+running and my release said no resources were held. That was false and nothing caught it —
+the corpse list I published counted macvtaps on the host and never asked the boards what was
+still running on them. A corpse check that only looks where you can see is not a corpse check.
+
+**3. ⚠️ THE ORIN'S COUNT IN THIS BUNDLE IS ALSO INCOMPLETE, AND THAT IS A COLLECTION DEFECT OF
 MINE, NOT A WIRE RESULT.** `orin.board.log` holds 770 `L2BEACON PASS` lines, but the
 beacon numbers its own passes and they run `#1..#837` with exactly one contiguous block
 `#386..#452` (67 lines) absent. The board asserted 837 passes; my collection preserved
@@ -45,11 +77,11 @@ established many times over — but the *number* would have been wrong, and I wo
 published it. Found by checking the beacon's sequence numbers against the line count
 rather than trusting either alone.
 
-**3. The August bundle was checked for the same signature and is CLEAN** —
+**4. The August bundle was checked for the same signature and is CLEAN** —
 `evidence/real-silicon-2026-08-25/` has zero missing sequence numbers on both boards, so
 the previously published 391 / 380 stand exactly as measured.
 
-**4. `m33_image_M2.elf` is NOT hash-pinned.** It is now a real file rather than a symlink
+**5. `m33_image_M2.elf` is NOT hash-pinned.** It is now a real file rather than a symlink
 into 95emulator's upstream-prep tree (which rebuilds), so it can no longer drift under a
 run — but `boot.pin` only covers `boot.artifacts`, and the M33 firmware is supplied via
 `qemu.extra_args`, which has no pin slot. That is a real gap, dated and unclosed rather
