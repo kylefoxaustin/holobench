@@ -376,6 +376,32 @@ class NinePShare(_Strict):
     device: str = "virtio-9p-device"
 
 
+class BatchShare(_Strict):
+    """A pair of virtio-9p mounts for BULK WORK whose results must OUTLIVE THE SESSION.
+
+    ⚠️ WHY THIS IS NOT nine_p (found 2026-09-02, before anything was built on it).
+    nine_p's host dir is `work_dir/"share"`, work_dir lives under /tmp, and cleanup()
+    rmtree's it. That is right for a drop-box — you push a kernel in, you boot, you are
+    done. It is CATASTROPHIC for a batch deliverable: an engineer processes 5,000 captured
+    frames, closes the board, and the outputs are not merely lost on reboot, they are
+    ACTIVELY DELETED by us. 95emulator was hours from building a batch runner whose output
+    folder was that directory.
+
+    So these mounts are rooted at OPERATOR-CHOSEN HOST PATHS supplied at run time and are
+    never touched by cleanup(). The profile declares only that the board CAN do this and
+    which tags the guest will see — the folders themselves are a property of the run, not
+    of the board, and board profiles must not carry them (CLAUDE.md §5).
+
+    ⭐ INPUT IS MOUNTED READ-ONLY AT THE FSDEV, not by convention. Those files may be an
+    engineer's only copy of frames captured off real silicon; a batch tool that can write
+    its own input is a hazard, and `readonly=on` is stock QEMU.
+    """
+    enabled: bool = False
+    input_tag: str = "hbbatchin"     # guest sees this, mounted read-only
+    output_tag: str = "hbbatchout"   # guest sees this, writable, survives the session
+    device: str = "virtio-9p-device"
+
+
 class ToggleOnly(_Strict):
     enabled: bool = False
 
@@ -387,6 +413,7 @@ class ImageSwap(_Strict):
 
 class FileInjection(_Strict):
     nine_p: NinePShare = Field(default_factory=NinePShare)
+    batch: BatchShare = Field(default_factory=BatchShare)
     tftp: ToggleOnly = Field(default_factory=ToggleOnly)
     nfs: ToggleOnly = Field(default_factory=ToggleOnly)
     image_swap: ImageSwap = Field(default_factory=ImageSwap)

@@ -229,6 +229,8 @@ class Session:
         append_extra: Optional[str] = None,
         dtb_override: Optional[str] = None,
         qemu_binary: Optional[str] = None,
+        batch_in_dir: Optional[Path] = None,
+        batch_out_dir: Optional[Path] = None,
         inherit_fds: Optional[list[int]] = None,
         reap_with_parent: bool = True,
     ) -> None:
@@ -269,6 +271,23 @@ class Session:
             else None
         )
         self.share_dir = share_dir
+
+        # ⭐ THE BATCH FOLDERS ARE THE OPERATOR'S, AND cleanup() MUST NEVER REACH THEM.
+        # Refuse at construction if either sits inside the work dir — that is exactly the
+        # mistake this feature exists to prevent, and it must be impossible rather than
+        # merely discouraged. An engineer's 5,000 processed frames must not be deletable
+        # by us closing a board.
+        for label, d in (("input", batch_in_dir), ("output", batch_out_dir)):
+            if d is None:
+                continue
+            d = Path(d).resolve()
+            if d == self.work_dir.resolve() or self.work_dir.resolve() in d.parents:
+                raise SessionError(
+                    f"batch {label} folder {d} is inside the session work dir "
+                    f"({self.work_dir}), which cleanup() deletes. A batch deliverable "
+                    f"must outlive the session — point it at a host folder outside it.")
+        self.batch_in_dir = Path(batch_in_dir).resolve() if batch_in_dir else None
+        self.batch_out_dir = Path(batch_out_dir).resolve() if batch_out_dir else None
         gdb_port = _free_tcp_port() if profile.introspection.gdbstub.enabled else None
         self.gdb_port = gdb_port
         snapshot_disk = (
@@ -299,6 +318,8 @@ class Session:
             },
             asset_dir=asset_dir,
             share_dir=share_dir,
+            batch_in_dir=self.batch_in_dir,
+            batch_out_dir=self.batch_out_dir,
             gdb_port=gdb_port,
             snapshot_disk=snapshot_disk,
             disk_overlay=disk_overlay,

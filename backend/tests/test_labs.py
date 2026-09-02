@@ -1239,3 +1239,100 @@ def test_coincident_beats_are_actually_constructible_from_Beats():
     q = b.quiet_period("n", None)
     assert q == 0.0, f"expected a 0.0 quiet period from coincident beats, got {q!r}"
     assert m.calibrate_quiet(len(b.beats["n"]), q)[0] == m.CAL_COARSE
+
+
+# ═══════════════════════════════════════════════════════════════════════════════════════
+# DURABLE BATCH MOUNTS — the deliverable must outlive the session.
+#
+# 🚨 2026-09-02. I told 95emulator "the deliverable is the OUTPUT FOLDER", then read my own
+# code: nine_p's host dir is work_dir/"share", work_dir is under /tmp, and cleanup() calls
+# shutil.rmtree on it. A guest writing 5,000 processed frames to /mnt would have them
+# DELETED when the board was released — not lost on reboot, actively removed by us. They
+# were hours from building a batch runner whose output folder was that directory.
+# ═══════════════════════════════════════════════════════════════════════════════════════
+
+def test_batch_input_is_mounted_READ_ONLY_at_the_fsdev():
+    """⭐ NOT BY CONVENTION IN THE GUEST RUNNER. The input may be an engineer's only copy
+    of frames captured off real silicon. Enforcing it at the fsdev means a buggy or
+    hostile runner cannot damage it, and `readonly=on` is stock QEMU — no shim."""
+    from holobench.profiles.loader import load_profile
+    from holobench.session.command import SessionRuntime, build_command
+    from pathlib import Path
+
+    p = load_profile("imx95-evk-sd")
+    p.file_injection.batch.enabled = True
+    rt = _bare_rt(p, batch_in_dir=Path("/srv/captures/in"),
+                  batch_out_dir=Path("/srv/captures/out"))
+    argv = build_command(p, rt)
+    joined = " ".join(argv)
+
+    assert "path=/srv/captures/in" in joined
+    fsdev_in = [a for a in argv if a.startswith("local,id=hbbin")]
+    assert fsdev_in and "readonly=on" in fsdev_in[0], \
+        f"batch INPUT must be readonly at the fsdev, got {fsdev_in}"
+
+    fsdev_out = [a for a in argv if a.startswith("local,id=hbbout")]
+    assert fsdev_out and "readonly=on" not in fsdev_out[0], \
+        "batch OUTPUT must be writable — it is where results land"
+
+    assert f"mount_tag={p.file_injection.batch.input_tag}" in joined
+    assert f"mount_tag={p.file_injection.batch.output_tag}" in joined
+
+
+def _bare_rt(profile=None, **kw):
+    """A SessionRuntime complete enough for build_command: every chardev the profile
+    declares needs an allocated socket, or the resolver refuses (correctly)."""
+    from holobench.session.command import SessionRuntime
+    from pathlib import Path
+    wd = Path("/tmp/hb-probe")
+    socks = {}
+    if profile is not None:
+        socks = {port.chardev: wd / f"{port.chardev}.sock" for port in profile.serial}
+    return SessionRuntime(work_dir=wd, qmp_socket=wd / "qmp.sock",
+                          asset_dir=Path("/tmp/hb-assets"),
+                          serial_sockets=socks, **kw)
+
+
+def test_batch_mounts_are_absent_unless_requested():
+    """No existing launch changes. A board with batch disabled, or with no folders
+    supplied, must emit exactly what it emitted before."""
+    from holobench.profiles.loader import load_profile
+    from holobench.session.command import SessionRuntime, build_command
+
+    p = load_profile("imx95-evk-sd")
+    assert p.file_injection.batch.enabled is False, "batch must be opt-in per profile"
+    argv = " ".join(build_command(p, _bare_rt(p)))
+    assert "hbbin" not in argv and "hbbout" not in argv
+
+    # enabled, but the operator supplied no folders -> still nothing
+    p.file_injection.batch.enabled = True
+    argv = " ".join(build_command(p, _bare_rt(p)))
+    assert "hbbin" not in argv and "hbbout" not in argv
+
+
+def test_a_batch_folder_inside_the_work_dir_is_REFUSED(tmp_path):
+    """⭐ THE WHOLE POINT, MADE IMPOSSIBLE RATHER THAN DISCOURAGED.
+
+    cleanup() rmtree's the work dir. If a batch folder could sit inside it, this feature
+    would reintroduce the exact defect it exists to prevent — and it would do so quietly,
+    because a folder full of outputs looks identical right up until the session ends.
+    So it is refused at construction, where the mistake is cheap, instead of discovered at
+    cleanup, where it is unrecoverable."""
+    from holobench.profiles.loader import load_profile
+    from holobench.session.manager import Session, SessionError
+    import pytest as _pytest
+
+    p = load_profile("imx95-evk-sd")
+    sid = "probe-batch"
+    work = tmp_path / sid                       # Session sets work_dir = base_dir / id
+    (work / "share" / "out").mkdir(parents=True)
+
+    for bad in (work / "share" / "out", work):
+        with _pytest.raises(SessionError, match="cleanup"):
+            Session(p, base_dir=tmp_path, session_id=sid, batch_out_dir=bad)
+
+    # a folder OUTSIDE the work dir is fine
+    good = tmp_path / "operator-chosen"
+    good.mkdir()
+    s = Session(p, base_dir=tmp_path, session_id=sid, batch_out_dir=good)
+    assert s.batch_out_dir == good.resolve()

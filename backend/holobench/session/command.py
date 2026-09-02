@@ -39,6 +39,10 @@ class SessionRuntime:
     asset_dir: Optional[Path] = None
     # Host dir shared into the guest over virtio-9p (file injection).
     share_dir: Optional[Path] = None
+    # Operator-chosen HOST folders for a batch run. Outside the session work dir on
+    # purpose — see BatchShare. None unless a batch was requested for this session.
+    batch_in_dir: Optional[Path] = None
+    batch_out_dir: Optional[Path] = None
     # Scratch qcow2 backing savevm/loadvm snapshots (not used by the guest).
     snapshot_disk: Optional[Path] = None
     # Per-session qcow2 overlay over the golden disk (image-swap / reinstall).
@@ -366,6 +370,28 @@ def build_command(profile: Profile, rt: SessionRuntime) -> list[str]:
             f"local,id=hbfs0,path={rt.share_dir},security_model=none",
             "-device",
             f"{nine_p.device},fsdev=hbfs0,mount_tag={nine_p.mount_tag}",
+        ]
+
+    # Batch work: two more 9p mounts pointing at host folders the OPERATOR chose, which
+    # cleanup() never touches. Emitted only when a batch is actually requested, so no
+    # existing launch changes.
+    batch = profile.file_injection.batch
+    if batch.enabled and rt.batch_in_dir is not None:
+        # ⭐ readonly=on at the FSDEV, not by convention in the guest runner. The input may
+        # be the engineer's only copy of frames captured off real silicon; enforcing it
+        # here means a buggy or hostile runner cannot damage it, and it costs nothing.
+        argv += [
+            "-fsdev",
+            f"local,id=hbbin,path={rt.batch_in_dir},security_model=none,readonly=on",
+            "-device",
+            f"{batch.device},fsdev=hbbin,mount_tag={batch.input_tag}",
+        ]
+    if batch.enabled and rt.batch_out_dir is not None:
+        argv += [
+            "-fsdev",
+            f"local,id=hbbout,path={rt.batch_out_dir},security_model=none",
+            "-device",
+            f"{batch.device},fsdev=hbbout,mount_tag={batch.output_tag}",
         ]
 
     # Virtual camera: feed the per-session frames dir to the board's ISI via the
