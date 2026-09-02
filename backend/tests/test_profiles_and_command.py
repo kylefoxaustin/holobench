@@ -531,3 +531,49 @@ def test_volatile_binary_exposure_is_counted_and_cannot_quietly_grow():
     pinned = [f.name for f in root.glob("*.yaml")
               if re.search(r"^\s*binary_pin:", f.read_text(), re.M)]
     assert pinned, "the 2-port lab profile's earned binary_pin has gone missing"
+
+
+def test_no_isp_tuning_knob_is_exposed_until_the_model_honours_it():
+    """⭐ A KNOB THAT SILENTLY DOES NOTHING IS THE WORST THING THIS UI COULD SHIP.
+
+    95emulator, 2026-09-02, on the i.MX95 ISP at tag imx95-v2.6.0: the tuning params node
+    (NNIP, 8912 bytes) "is read and thrown away, so an engineer who changes ISP tuning will
+    see the output NOT change." They asked, before I could trip over it:
+
+        "If your UI ever exposes ISP tuning, gate it until I tell you this is live."
+
+    ⚠️ THIS IS THE SAME FAILURE CLASS AS THE TWO WE EACH FIXED LAST WEEK — their gradient
+    fallback and my dark panel — but WORSE, because those substituted something for
+    something. A tuning control that accepts input and changes nothing invites an engineer
+    to conclude the SILICON behaves that way. They would not be reading a broken pane; they
+    would be reading a wrong answer about hardware, produced by a control I built.
+
+    So this test exists to fail the moment someone adds the knob, and to hand them the
+    reason rather than making them find this conversation. WHEN IT FIRES: do not delete it
+    — confirm with the emulator session that the params node is honoured, then remove this
+    test in the same commit that ships the control, so the removal is reviewable.
+
+    A bus message decays. A failing test with the reason in it does not."""
+    from pathlib import Path as _P
+    import re
+
+    root = _P(__file__).resolve().parents[2]
+    banned = re.compile(r"\b(isp_tuning|tuning_params|isp_params|nnip)\b", re.I)
+
+    offenders = []
+    for f in list((root / "profiles").glob("*.yaml")) + \
+             list((root / "backend" / "holobench").rglob("*.py")) + \
+             [root / "frontend" / "index.html"]:
+        if not f.is_file():
+            continue
+        for i, line in enumerate(f.read_text(errors="replace").splitlines(), 1):
+            if line.lstrip().startswith(("#", "//")):
+                continue                      # a comment ABOUT the gate is not the knob
+            if banned.search(line):
+                offenders.append(f"{f.relative_to(root)}:{i}: {line.strip()[:90]}")
+
+    assert not offenders, (
+        "an ISP tuning control appeared, but the modelled ISP ACCEPTS AND IGNORES tuning "
+        "params (95emulator, imx95-v2.6.0). Shipping it would let an engineer change a "
+        "setting, see no change, and conclude that is how the silicon behaves.\n  "
+        + "\n  ".join(offenders))
