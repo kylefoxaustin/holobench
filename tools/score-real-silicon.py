@@ -53,6 +53,7 @@ import re
 import shutil
 import subprocess
 import sys
+from datetime import datetime
 from pathlib import Path
 
 sys.path.insert(0, str(Path(__file__).resolve().parent.parent / "backend"))
@@ -317,7 +318,59 @@ def score_leg(node, board_log: str, guest_console: str) -> tuple[str, list[str]]
     return ("PASS" if guest_saw else "INCONCLUSIVE", notes)
 
 
+class _Tee:
+    """Write to the real stream AND a transcript file."""
+
+    def __init__(self, stream, fh):
+        self._s, self._f = stream, fh
+
+    def write(self, data):
+        self._s.write(data)
+        self._f.write(data)
+        self._f.flush()
+        return len(data)
+
+    def flush(self):
+        self._s.flush()
+        self._f.flush()
+
+    def isatty(self):
+        return self._s.isatty()
+
+
+def _install_transcript() -> Path:
+    """Tee stdout AND stderr to a file under scratchpad-consoles/runs/.
+
+    ⚠️ ADDED 2026-09-02, MONTHS LATE. Kyle asked for exactly this in August — "please have
+    the script output to a file that you can read yourself" — and I added it to
+    prove-macvtap-guest.sh and prove-oracle-bites.sh and NOT to this one, which is the
+    script that produces the actual verdict. A lesson applied to two files out of three is
+    not a lesson applied, and the file it was missing from was the one that matters.
+
+    Installed BEFORE the preflight, because an ABORTED run is exactly the one you want a
+    record of. Chowned to the invoking user: this runs under sudo, and a transcript only
+    root can read is one I cannot read.
+    """
+    d = Path(__file__).resolve().parents[1] / "scratchpad-consoles" / "runs"
+    d.mkdir(parents=True, exist_ok=True)
+    path = d / f"real-silicon-{datetime.now():%Y%m%d-%H%M%S}.log"
+    fh = open(path, "w", buffering=1)
+    sys.stdout = _Tee(sys.stdout, fh)
+    sys.stderr = _Tee(sys.stderr, fh)
+    uid = os.environ.get("SUDO_UID")
+    gid = os.environ.get("SUDO_GID")
+    if uid and gid:
+        try:
+            os.chown(path, int(uid), int(gid))
+            os.chown(d, int(uid), int(gid))
+        except OSError:
+            pass
+    return path
+
+
 async def main() -> int:
+    _tpath = _install_transcript()
+    print(f"📝 transcript: {_tpath}")
     lab = load_lab(LAB_ID)
     silicon = lab.silicon_nodes
     emulated = [n for n in lab.nodes if n.kind == "emulated"]
