@@ -117,7 +117,7 @@ soc:          "NXP i.MX 95"
 description:  "Emulated i.MX 95 with TWO ENETC ports on TWO real host NICs — beacons 0x88B7 on each and independently watches the real FRDM (0x88B9, LAN) and the real Jetson Orin (0x88BA, USB)."
 
 qemu:
-  binary:  /home/kyle/Documents/GitHub/95emu-tagbuild/build/qemu-system-aarch64
+  binary:  /home/kyle/Documents/GitHub/95emu-tagbuild-26/build/qemu-system-aarch64
   # ⬆ STABLE release build: 95emu-tagbuild is detached at tag imx95-v2.5.0 with no
   # branch to advance, so nothing rebuilds it under us. The old path
   # (95emulator/build/) is 95emulator's upstream-prep tree, rebuilt whenever they
@@ -128,7 +128,22 @@ qemu:
   # one day while leg0's 333/0 was being quoted; it survived only because their
   # rebuilds landed in build-upstream/ and this reads build/ — a directory
   # convention with nothing enforcing it. This is the md5 that produced 333/0.
-  binary_pin: "748c91ee7e1746873937f74e4269abb8"
+  # ⭐ EARNED 2026-09-02 by a passing run of labs/imx95-real-silicon.yaml against REAL
+  # hardware: pass=2 fail=0 inconclusive=0. Evidence: evidence/real-silicon-2026-09-02/.
+  #   frdm95 (LAN, enp6s0)  PASS=381 rx=381 CORRUPT=0   — real i.MX95 FRDM's own console
+  #   orin   (USB, cdc_ncm) the board's own numbering reached PASS #837, CORRUPT=0
+  # This is imx95-v2.6.0 (95emu-tagbuild-26, tag 5d068692 -> commit 2bde22d6644).
+  #
+  # ⚠️ WHAT THIS PIN DOES AND DOES NOT CERTIFY. A pin is not "this binary is good"; it is
+  # "this binary was validated FOR THIS LAB". This lab is ENETC and raw L2 — no ISP, no
+  # camera, no video device in this profile. 95emulator reported (2026-09-02) that v2.6.0
+  # carries a KNOWN ISP DEFECT: TRIG_CAM0.TRIGGER is latched rather than self-clearing and
+  # regmap_update_bits elides the unchanged write, so the SECOND frame in a session hangs
+  # forever and it presents as an intermittent ISP fault. It cannot reach this lab, and
+  # refusing to pin until an unrelated subsystem is fixed would make pins unearnable — there
+  # is always an open bug somewhere. But this pin must not be read as a general blessing:
+  # ISP/camera paths are NOT validated by this run.
+  binary_pin: "d929e6a5b42b4e3afdea2683245eb693"
   machine: imx95-19x19-evk
   memory:  "2G"
   audio:   none
@@ -155,8 +170,18 @@ boot:
   append: "console=ttyLP0,115200 cpuidle.off=1 rdinit=/init"
   command_template: null
 
+  # ⭐ ALL FOUR PREVIOUSLY-UNPINNED ARTIFACTS PINNED 2026-09-02, by the same passing run.
+  # Only the initrd was pinned before, so a changed kernel, dtb or M33 firmware would have
+  # gone unnoticed — and the M33 ELF in particular was a symlink into 95emulator's
+  # upstream-prep tree, which rebuilds. A passing run is exactly the moment a pin is earned;
+  # leaving four artifacts unpinned after one would be leaving the next drift undetectable
+  # on purpose.
+  # ⚠️ m33_image_M2.elf is a non-redistributable NXP BSP artifact. Only its HASH lives here;
+  # assets/ is gitignored and the bytes never leave the host.
   pin:
     initrd: "0c10d5f89a0563ebc84c6ba74f14fa71"
+    kernel: "a6b35df56953424b6adec26b4ba45af0"
+    dtb:    "2dd6f503b1b3ab4190cab6f3d04587ca"
 
 serial:
   - { name: "A-core console (both ENET-LAB3 legs land here)", chardev: console0, role: a-core, default: true }

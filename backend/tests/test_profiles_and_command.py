@@ -506,19 +506,44 @@ def test_volatile_binary_exposure_is_counted_and_cannot_quietly_grow():
     from pathlib import Path as _P
     import re
 
+    import subprocess
+
     root = _P(__file__).resolve().parents[2] / "profiles"
     sibling = re.compile(r"^\s*binary:\s*(/home/[^\s#]+)")
-    STABLE_TREES = ("95emu-tagbuild",)          # detached at a tag; nothing rebuilds it
 
-    volatile = []
+    def _is_stable(tree: _P) -> bool:
+        """⭐ MEASURED, NOT NAMED. This was a hardcoded tuple ("95emu-tagbuild",) and it
+        broke the moment a SECOND tagbuild appeared for v2.6.0 — the new tree was every bit
+        as stable and got scored volatile because its name was not on a list I wrote.
+        A whitelist of names is a declaration; stability is a property, and the property is
+        checkable: HEAD detached, and sitting exactly on a tag, so there is no branch to
+        advance under anyone."""
+        try:
+            head = subprocess.run(["git", "-C", str(tree), "rev-parse", "--abbrev-ref", "HEAD"],
+                                  capture_output=True, text=True, timeout=10)
+            tag = subprocess.run(["git", "-C", str(tree), "describe", "--tags", "--exact-match"],
+                                 capture_output=True, text=True, timeout=10)
+        except (OSError, subprocess.SubprocessError):
+            return False
+        return head.returncode == 0 and head.stdout.strip() == "HEAD" and tag.returncode == 0
+
+    volatile, unmeasurable = [], []
     for f in sorted(root.glob("*.yaml")):
         for line in f.read_text().splitlines():
             m = sibling.match(line)
             if m and "/GitHub/" in m.group(1):
-                repo = m.group(1).split("/GitHub/")[1].split("/")[0]
-                if repo not in STABLE_TREES:
+                tree = _P(m.group(1).split("/GitHub/")[0] + "/GitHub/"
+                          + m.group(1).split("/GitHub/")[1].split("/")[0])
+                if not (tree / ".git").exists():
+                    unmeasurable.append(f.name)
+                elif not _is_stable(tree):
                     volatile.append(f.name)
                 break
+
+    if unmeasurable and not volatile:
+        pytest.skip(f"UNVERIFIED: {len(unmeasurable)} sibling checkout(s) absent on this box "
+                    f"— stability is measured from the tree, and 'could not check' is not "
+                    f"'stable'")
 
     # MEASURED 2026-09-01, after repointing the six i.MX95 profiles onto the tagbuild:
     #   22 profiles name a sibling binary · 6 stable · 16 volatile

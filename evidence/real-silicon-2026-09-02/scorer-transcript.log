@@ -1,0 +1,40 @@
+📝 transcript: /home/kyle/Documents/GitHub/holobench/scratchpad-consoles/runs/real-silicon-20260902-105919.log
+══════════════════════════════════════════════════════════════════════════
+ Emulated i.MX 95 ⟷ REAL i.MX 95 FRDM (LAN) + REAL Jetson AGX Orin (USB)
+══════════════════════════════════════════════════════════════════════════
+  wire     lan -> macvtap on enp6s0 (REAL — frames leave this host)
+  wire     usb -> macvtap on enx42b8036560ca (REAL — frames leave this host)
+  wire     imx95 -> hb-mvt0 on enp6s0 mac=02:5c:5e:d1:ec:21 fd=7
+  wire     imx95 -> hb-mvt1 on enx42b8036560ca mac=fa:05:f3:b6:87:60 fd=8
+  t+   0.3s  ARRIVE  imx95 (imx95-evk-enet-lab3-2port) pid=1276023
+  ... waiting 30s for frdm95, orin to join (segment is live without it)
+  t+  30.0s  SILICON orin BEACONING (kyle@10.0.1.124 l4tbr0 et=0x88ba) — real hardware, not launched by holobench
+  t+  30.0s  SILICON frdm95 BEACONING (root@10.0.1.181 eth1 et=0x88b9) — real hardware, not launched by holobench
+
+  holding 75s for the segment to exercise …
+  reaped macvtap hb-mvt0 (on enp6s0, /dev/tap56)
+  reaped macvtap hb-mvt1 (on enx42b8036560ca, /dev/tap57)
+
+  evidence preserved to /home/kyle/Documents/GitHub/holobench/scratchpad-consoles/real-silicon
+
+══════════════════════════════════════════════════════════════════════════
+ PER-LEG VERDICT — graded on the SILICON side; the guest corroborates
+══════════════════════════════════════════════════════════════════════════
+
+✅ frdm95   (eth1 @ root@10.0.1.181, et=0x88b9) — PASS
+     board: PASS=381 rx=381 CORRUPT=0
+     guest corroborates: reached PASS on this leg's peer 0x88b9; the guest's 1135 PASS lines are a POOLED TOTAL across BOTH legs and cannot be attributed per-leg (its PASS line carries no ethertype). Do not sum across legs.
+
+✅ orin     (l4tbr0 @ kyle@10.0.1.124, et=0x88ba) — PASS
+     board: PASS=770 rx=837 CORRUPT=0
+     guest corroborates: reached PASS on this leg's peer 0x88ba; the guest's 1135 PASS lines are a POOLED TOTAL across BOTH legs and cannot be attributed per-leg (its PASS line carries no ethertype). Do not sum across legs.
+
+══════════════════════════════════════════════════════════════════════════
+ VERDICT   pass=2  fail=0  inconclusive=0  (of 2 legs)
+ ⭐⭐ THE MODEL IS INDISTINGUISHABLE FROM THE SILICON, TO THE SILICON —
+    on every leg, asserted by hardware on the far side of a cable.
+
+ ⚠️  A leg is scored on the REAL BOARD's log. The guest sits on a macvtap
+    where frames can be locally switched, so its own PASS is compatible
+    with nothing leaving the NIC. Only the far end can refute that.
+══════════════════════════════════════════════════════════════════════════
