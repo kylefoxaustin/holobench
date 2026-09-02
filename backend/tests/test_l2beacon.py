@@ -399,3 +399,24 @@ def test_beacon_is_bounded_by_default_and_unbounded_only_when_typed():
     assert "L2BEACON RUNTIME:" in src, \
         "the banner must state the cap — a corpse is easier to explain when its intended " \
         "lifetime is on the record"
+
+    # ⭐ PRINT THE VALUE, NEVER A LITERAL (95emulator, 2026-09-02). A banner that formats a
+    # constant is a SECOND SOURCE OF TRUTH for a fact that already has one, and the two
+    # drift the moment a default changes or a caller overrides it. Then the log misstates
+    # the process's own intended lifetime — which is worse than printing nothing, because
+    # the entire point is that someone who is NOT suspicious can date a corpse from the log
+    # alone. They would check it against the wrong number and conclude it died on schedule.
+    banner = re.search(r'print\("L2BEACON RUNTIME:.*?\n.*?\n', src, re.S)
+    assert banner, "could not locate the runtime banner"
+    # ⚠️ NO TRAILING \b. The first version of this assertion used \b\d{3,}\b and was INERT:
+    # the literal it exists to catch is "3600s cap" — digits followed by a LETTER — so the
+    # trailing word boundary never matched and a planted hardcoded banner sailed through.
+    # Caught by planting it, which is the only reason this line is right.
+    assert not re.search(r"\d{3,}", banner.group(0)), (
+        f"the runtime banner contains a hardcoded number: {banner.group(0)!r} — format the "
+        f"runtime variable instead, or the log will misstate the process's own lifetime")
+    assert "runtime" in banner.group(0), \
+        "the banner must format the same `runtime` variable the exit check compares against"
+
+    # …and that variable is the one the exit check uses, in the same function.
+    assert re.search(r"if runtime is not None and now - started >= runtime", src)
