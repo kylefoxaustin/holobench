@@ -148,3 +148,85 @@ def test_pre_commit_hook_actually_refuses_a_failing_suite(tmp_path):
     rc, invocation = _hook_probe(tmp_path, stub_exit=1)
     assert "-m pytest" in invocation, "the suite was not invoked, so rc says nothing"
     assert rc == 1, f"a FAILING suite must refuse the commit, got rc={rc}"
+
+
+# ═══════════════════════════════════════════════════════════════════════════════════════
+# qemu-img RESOLUTION — and an error message the reader can actually act on.
+#
+# ⚠️ 2026-09-02, from an Ubuntu 22.04 VM with no sudo and no route to getting it: launching
+# a 95 EVK failed with "snapshot disk create needs qemu-img, which is not installed
+# (install qemu-utils)". Two defects in one line:
+#   1. it looked ONLY on $PATH, while holobench already knew where the profile's QEMU binary
+#      lives — and a source build puts qemu-img in that same directory;
+#   2. ⭐ the entire remedy it offered REQUIRED ROOT. For a reader who cannot get root, that
+#      is not unhelpful advice, it is an instruction they cannot carry out, presented as the
+#      whole answer. The failure was real; the guidance was a dead end wearing the costume
+#      of a fix.
+# ═══════════════════════════════════════════════════════════════════════════════════════
+
+def test_qemu_img_is_looked_for_beside_the_qemu_we_already_run(tmp_path):
+    import os
+    from holobench.session.manager import Session
+
+    build = tmp_path / "build"
+    build.mkdir()
+    qsys = build / "qemu-system-aarch64"
+    qimg = build / "qemu-img"
+    for f in (qsys, qimg):
+        f.write_text("#!/bin/sh\nexit 0\n")
+        os.chmod(f, 0o755)
+
+    assert Session._find_qemu_img(str(qsys)) == str(qimg), \
+        "a source build puts qemu-img beside qemu-system-*; that hint must be used"
+
+    # a build WITHOUT qemu-img must fall through, not fabricate a path
+    bare = tmp_path / "bare"
+    bare.mkdir()
+    only_sys = bare / "qemu-system-aarch64"
+    only_sys.write_text("#!/bin/sh\nexit 0\n")
+    os.chmod(only_sys, 0o755)
+    got = Session._find_qemu_img(str(only_sys))
+    assert got != str(bare / "qemu-img"), "must not return a path that does not exist"
+
+
+def test_qemu_img_override_must_be_real_not_merely_set(tmp_path, monkeypatch):
+    """⭐ AN ENV VAR POINTING AT NOTHING IS WORSE THAN AN UNSET ONE. Trusting it would turn
+    'you configured this' into a FileNotFoundError at exec time, in a code path whose entire
+    job is to fail with a useful message."""
+    import os
+    from holobench.session.manager import Session
+
+    monkeypatch.setenv("HOLOBENCH_QEMU_IMG", str(tmp_path / "does-not-exist"))
+    assert Session._find_qemu_img() != str(tmp_path / "does-not-exist")
+
+    real = tmp_path / "qemu-img"
+    real.write_text("#!/bin/sh\nexit 0\n")
+    os.chmod(real, 0o755)
+    monkeypatch.setenv("HOLOBENCH_QEMU_IMG", str(real))
+    assert Session._find_qemu_img() == str(real), "a valid override must win over PATH"
+
+
+def test_the_missing_qemu_img_message_offers_a_route_without_root(monkeypatch):
+    """⭐ THE POINT OF THIS TEST. The old message said "(install qemu-utils)" and stopped.
+    A reader with no sudo could do nothing with that. Every remedy named here must be one
+    an unprivileged user can actually perform."""
+    import asyncio
+    from holobench.session.manager import Session, SessionError
+
+    monkeypatch.setattr(Session, "_find_qemu_img", staticmethod(lambda near=None: None))
+    with pytest.raises(SessionError) as ei:
+        asyncio.get_event_loop_policy().new_event_loop().run_until_complete(
+            Session._run_qemu_img("create", what="snapshot disk create"))
+    msg = str(ei.value)
+
+    assert "HOLOBENCH_QEMU_IMG" in msg, "must name the override that needs no install"
+    assert "dpkg-deb -x" in msg, "must give the unpack-into-$HOME route (no root required)"
+    assert "introspection.snapshots: false" in msg, "must name the way to not need it at all"
+    # ⚠️ NOT `"sudo" not in msg`. My first version asserted exactly that and failed — on the
+    # phrase "(no sudo needed)", which is the OPPOSITE of a root requirement. Matching a
+    # substring without reading its context, inside the test written about a message whose
+    # whole problem was context. Check the root-REQUIRING FORMS instead.
+    for needs_root in ("sudo apt", "apt install", "apt-get install", "sudo dpkg", "sudo pip"):
+        assert needs_root not in msg, (
+            f"the message offers {needs_root!r}, which a reader without root cannot do — "
+            f"that was the original bug")

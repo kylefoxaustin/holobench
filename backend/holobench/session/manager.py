@@ -390,7 +390,8 @@ class Session:
             # setup + DQBUF itself). Staged whenever the camera is enabled.
             self._stage_capture_helper()
         if self.runtime.snapshot_disk is not None:
-            await self._create_snapshot_disk(self.runtime.snapshot_disk)
+            await self._create_snapshot_disk(
+                self.runtime.snapshot_disk, near=self.profile.qemu.binary)
         if self.runtime.disk_overlay is not None:
             if self._golden_disk and self._golden_disk.exists():
                 await self._create_overlay(self._golden_disk, self.runtime.disk_overlay)
@@ -781,26 +782,64 @@ class Session:
     # -- snapshots (savevm/loadvm; needs the scratch qcow2) -----------------
 
     @staticmethod
-    async def _run_qemu_img(*args: str, what: str) -> None:
+    def _find_qemu_img(near: Optional[str] = None) -> Optional[str]:
+        """Locate qemu-img: explicit override, then BESIDE THE QEMU WE ALREADY RUN, then PATH.
+
+        ⭐ WE ALREADY KNOW WHERE QEMU IS. A source build puts qemu-img in the same build
+        directory as qemu-system-*, and holobench has that path in the profile — so looking
+        only on PATH threw away the best hint available, and then told the user to install a
+        package. On a machine where the operator has no root, that advice is not merely
+        unhelpful: IT IS AN INSTRUCTION THEY CANNOT CARRY OUT, offered as the whole answer.
+        (Reported 2026-09-02 from an Ubuntu 22.04 VM with no sudo and no route to it.)
+        """
+        import shutil
+
+        env = os.environ.get("HOLOBENCH_QEMU_IMG")
+        if env and Path(env).is_file() and os.access(env, os.X_OK):
+            return env
+        if near:
+            cand = Path(near).resolve().parent / "qemu-img"
+            if cand.is_file() and os.access(cand, os.X_OK):
+                return str(cand)
+        return shutil.which("qemu-img")
+
+    @staticmethod
+    async def _run_qemu_img(*args: str, what: str, near: Optional[str] = None) -> None:
+        exe = Session._find_qemu_img(near)
+        if exe is None:
+            # ⚠️ NOT INSTALLED IS NOT THE ONLY REASON, AND "install it" IS NOT THE ONLY FIX.
+            # This used to say only "(install qemu-utils)". Say what else works, because the
+            # person reading it may have no way to install anything.
+            raise SessionError(
+                f"{what} needs qemu-img and none was found.\n"
+                f"  Looked at: $HOLOBENCH_QEMU_IMG, then beside the profile's qemu binary"
+                + (f" ({Path(near).parent}/qemu-img)" if near else "")
+                + f", then $PATH.\n"
+                f"  WITHOUT ROOT, any of these work:\n"
+                f"    · point at one you already have:  export HOLOBENCH_QEMU_IMG=/path/to/qemu-img\n"
+                f"    · unpack the package into $HOME (no sudo needed):\n"
+                f"        apt-get download qemu-utils && dpkg-deb -x qemu-utils_*.deb ~/opt/qu\n"
+                f"        export HOLOBENCH_QEMU_IMG=~/opt/qu/usr/bin/qemu-img\n"
+                f"    · or turn this feature off in the profile: introspection.snapshots: false\n"
+                f"      (the board boots fine; you lose savevm/loadvm, nothing else)"
+            )
         try:
             proc = await asyncio.create_subprocess_exec(
-                "qemu-img", *args,
+                exe, *args,
                 stdout=asyncio.subprocess.DEVNULL, stderr=asyncio.subprocess.PIPE,
             )
         except FileNotFoundError as exc:
-            # qemu-img not installed -> degrade cleanly instead of a raw 500.
-            raise SessionError(
-                f"{what} needs qemu-img, which is not installed "
-                f"(install qemu-utils)"
-            ) from exc
+            raise SessionError(f"{what}: {exe} vanished between check and exec") from exc
         _, err = await proc.communicate()
         if proc.returncode != 0:
             raise SessionError(f"{what} failed: {err.decode(errors='replace')}")
 
     @classmethod
-    async def _create_snapshot_disk(cls, path: Path, size: str = "256M") -> None:
+    async def _create_snapshot_disk(cls, path: Path, size: str = "256M",
+                                    near: Optional[str] = None) -> None:
         await cls._run_qemu_img(
-            "create", "-f", "qcow2", str(path), size, what="snapshot disk create"
+            "create", "-f", "qcow2", str(path), size, what="snapshot disk create",
+            near=near,
         )
 
     # The QEMU SD-card model requires the image size to be a multiple of 512 KiB.
