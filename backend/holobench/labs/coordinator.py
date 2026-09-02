@@ -112,7 +112,14 @@ async def _start_silicon_beacon(node, lab) -> tuple[bool, str]:
     # surfacing as "peer did not start" with nothing pointing at the cause.
     # Naming it absolutely removes the assumption instead of testing it.
     py = "/usr/bin/python3" if node.sudo else "python3"
-    run = f"{py} {remote} {node.iface} 0x{node.ethertype:04x} {watch}"
+    # ⭐ BOUND THE LIFETIME AT BIRTH. Without --runtime the beacon runs FOREVER, and on a
+    # sudo node nothing downstream can kill it — one started on 2026-08-25 was still
+    # beaconing eight days later and contaminated a later run's leg. A TTL is the only
+    # reaper that works on a node we deliberately cannot get root on.
+    # Generous on purpose: a cap that expires mid-run would turn a healthy segment into a
+    # false FAIL, which is far worse than litter. ~15 min against a ~2 min lab.
+    run = (f"{py} {remote} --runtime {BEACON_TTL_S:.0f} "
+           f"{node.iface} 0x{node.ethertype:04x} {watch}")
     # `sudo -n`: a board needing an INTERACTIVE password cannot be driven from a
     # backgrounded launch, and pretending otherwise produces a log full of sudo
     # errors that the scorer then reads as silence from the wire.
@@ -159,18 +166,57 @@ async def _start_silicon_beacon(node, lab) -> tuple[bool, str]:
     return (True, out.strip().splitlines()[0][:160])
 
 
-async def _stop_silicon_beacon(node) -> None:
+# Wall-clock cap on a silicon beacon. See _start_silicon_beacon.
+BEACON_TTL_S = 900.0
+
+
+async def _stop_silicon_beacon(node) -> tuple[bool, str]:
     """Reap a real board's beacon. A peer that outlives its run is not litter —
-    on a shared segment its testimony is indistinguishable from a live peer's."""
+    on a shared segment its testimony is indistinguishable from a live peer's.
+
+    🛑 THIS FUNCTION EXISTED, WAS CALLED AT TEARDOWN, AND COULD NOT WORK ON A SUDO NODE.
+    Found 2026-09-02 when a beacon started on 2026-08-25 turned up still running, having
+    sat on the Orin's wire through a later run and made that leg's counts unattributable.
+    Two independent reasons, either alone sufficient:
+
+      1. IT PKILLED THE WRONG PATTERN. `pkill -f holobench-l2beacon.py` matches only the
+         NON-sudo remote path. A sudo node runs the ROOT-OWNED /usr/local/sbin/l2beacon.py,
+         which that pattern never matches — so the one node type we cannot otherwise clean
+         up was the one the reaper could not see.
+      2. AND IT COULD NOT HAVE KILLED IT ANYWAY. The beacon on a sudo node runs as root;
+         the invoking user cannot pkill it, and the NOPASSWD rule deliberately covers only
+         RUNNING l2beacon.py, not killing things. Widening that rule to fix this would be
+         trading a leak for a root hole.
+
+    ⭐ AND ITS FAILURE WAS UNOBSERVABLE BY CONSTRUCTION: stdout and stderr to DEVNULL, the
+    whole thing inside `except Exception: pass`, and `; true` on the end so even the exit
+    status could not disagree. Three separate mufflers on one call. It returns a verdict
+    now, and the caller reports it.
+
+    The real fix is upstream of this: the beacon is started with a bounded --runtime so it
+    self-terminates. This remains as the fast path and as a check on that.
+    """
+    remote = "/usr/local/sbin/l2beacon.py" if getattr(node, "sudo", False) \
+        else "/tmp/holobench-l2beacon.py"
     try:
         proc = await asyncio.create_subprocess_exec(
             *_as_invoking_user((
                 "ssh", "-o", "BatchMode=yes", "-o", "ConnectTimeout=5", node.host,
-                "pkill -f holobench-l2beacon.py 2>/dev/null; true")),
-            stdout=asyncio.subprocess.DEVNULL, stderr=asyncio.subprocess.DEVNULL)
-        await proc.communicate()
-    except Exception:
-        pass
+                # Match the path THIS node actually runs. Report what is left rather than
+                # asserting success: on a sudo node the kill is expected to fail, and the
+                # --runtime cap is what actually collects it.
+                f"pkill -f '{remote}' 2>/dev/null; sleep 1; "
+                f"pgrep -cf '{remote}' 2>/dev/null || echo 0")),
+            stdout=asyncio.subprocess.PIPE, stderr=asyncio.subprocess.STDOUT)
+        out, _ = await proc.communicate()
+        left = (out.decode(errors="replace").strip().splitlines() or ["?"])[-1].strip()
+        if left in ("0", ""):
+            return (True, f"{node.name}: beacon reaped")
+        return (False, f"{node.name}: {left} beacon(s) STILL RUNNING on {node.host} "
+                       f"({remote}) — a sudo node's beacon is root-owned and cannot be "
+                       f"killed from here; it will self-terminate at its --runtime cap")
+    except Exception as exc:
+        return (False, f"{node.name}: could not check for leftover beacons — {exc}")
 
 
 def _usb_args(role, cid: str, sock: str) -> list[str]:
@@ -855,9 +901,19 @@ class LabCoordinator:
                 await self.manager.destroy(sid)
             except SessionError:
                 pass
+        # ⭐ REPORT WHAT COULD NOT BE REAPED. This used to discard the result, so a reaper
+        # that had never once worked on a sudo node looked identical to one that always
+        # did. A corpse list that only counts what you were able to remove is not a corpse
+        # list — it is a list of your successes.
         for node in running.lab.nodes:
             if node.kind == "silicon":
-                await _stop_silicon_beacon(node)
+                ok, msg = await _stop_silicon_beacon(node)
+                # Same idiom as the macvtap reap below: PRINT what was and was not
+                # collected. Discarding this result is what let a reaper that had never
+                # once worked on a sudo node look identical to one that always did — a
+                # corpse list that counts only what you managed to remove is a list of
+                # your successes, not of what is still out there.
+                print(f"  reaped beacon on {node.name}" if ok else f"  ⚠️  {msg}")
         try:
             for group in seg_group.values():
                 self._free_group(group)

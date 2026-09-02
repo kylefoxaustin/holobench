@@ -1336,3 +1336,62 @@ def test_a_batch_folder_inside_the_work_dir_is_REFUSED(tmp_path):
     good.mkdir()
     s = Session(p, base_dir=tmp_path, session_id=sid, batch_out_dir=good)
     assert s.batch_out_dir == good.resolve()
+
+
+def test_the_beacon_reaper_targets_the_path_the_node_actually_uses():
+    """🛑 THE REAPER EXISTED, WAS CALLED AT TEARDOWN, AND COULD NOT WORK ON A SUDO NODE.
+
+    Found 2026-09-02: a beacon started on 2026-08-25 was still running eight days later,
+    had sat on the Orin's wire through a later run, and made that leg's counts
+    unattributable. Two independent causes, either alone sufficient:
+
+      1. `pkill -f holobench-l2beacon.py` matches only the NON-sudo remote path. A sudo
+         node runs the root-owned /usr/local/sbin/l2beacon.py, which that pattern never
+         matches — so the one node type that cannot otherwise be cleaned up was precisely
+         the one the reaper could not see.
+      2. It could not have killed it regardless: that process runs as root, the invoking
+         user cannot pkill it, and the NOPASSWD rule deliberately covers only RUNNING the
+         beacon. Widening it would trade a leak for a root hole.
+
+    ⭐ AND THE FAILURE WAS UNOBSERVABLE BY CONSTRUCTION — stdout and stderr to DEVNULL,
+    the body inside `except Exception: pass`, and `; true` appended so even the exit status
+    could not disagree. Three mufflers on one call.
+
+    This pins cause 1. Cause 2 is why --runtime exists: a TTL is the only reaper that works
+    on a node you have deliberately chosen not to have root on."""
+    import inspect
+    from holobench.labs import coordinator as C
+
+    src = inspect.getsource(C._stop_silicon_beacon)
+    assert "/usr/local/sbin/l2beacon.py" in src, \
+        "the reaper must know the sudo node's root-owned path"
+    assert "getattr(node, \"sudo\"" in src or "node.sudo" in src, \
+        "the reaper must branch on whether the node is a sudo node"
+
+    # ⚠️ CHECK THE CODE, NOT THE PROSE. The first version of this assertion grepped the
+    # whole source for "DEVNULL" and failed — on the DOCSTRING, where the old defect is
+    # described. A grep hit is not a finding until you read what it hit, committed inside
+    # the test written to enforce exactly that. Strip the docstring first.
+    body = src.replace(C._stop_silicon_beacon.__doc__ or "", "")
+    assert "DEVNULL" not in body, \
+        "the reaper must not silence its own output — that is how it hid for eight days"
+    assert "except Exception:\n        pass" not in body, \
+        "a bare pass swallows the reaper's failure, which is how this went unnoticed"
+
+
+def test_silicon_beacons_are_started_with_a_bounded_runtime():
+    """⭐ A TTL IS THE ONLY REAPER THAT WORKS ON A NODE YOU CANNOT GET ROOT ON.
+
+    l2beacon defaults runtime=None — it runs FOREVER — and the coordinator passed nothing,
+    so every silicon beacon it started was immortal. On a sudo node nothing downstream can
+    kill it, which is how one ran for eight days into an empty segment.
+
+    Generous on purpose: a cap that expired mid-run would turn a healthy segment into a
+    false FAIL, which is far worse than litter."""
+    import inspect
+    from holobench.labs import coordinator as C
+
+    assert C.BEACON_TTL_S >= 600, "a cap this short risks expiring mid-run"
+    src = inspect.getsource(C._start_silicon_beacon)
+    assert "--runtime" in src, "the beacon must be started with a bounded lifetime"
+    assert "BEACON_TTL_S" in src
