@@ -55,16 +55,57 @@ elif [ -n "${HB_QEMU_URL:-}" ]; then
     curl -fL --progress-bar -o "$QEMU" "$HB_QEMU_URL" && chmod +x "$QEMU" \
         && ok "downloaded" || { no "download failed"; QEMU=""; }
 elif [ "${HB_BUILD:-0}" = 1 ]; then
-    command -v meson >/dev/null && command -v ninja >/dev/null && command -v gcc >/dev/null || {
-        no "HB_BUILD=1 but gcc/meson/ninja are missing, and installing them needs root."
-        echo "     Use HB_QEMU_URL=<release asset> or HB_QEMU_SRC=<path> instead."; exit 2; }
+    # ⭐ A C COMPILER IS THE ONLY THING YOU CANNOT WORK AROUND WITHOUT ROOT.
+    # meson and ninja install from pip; the -dev headers unpack from .debs; gcc does neither.
+    command -v gcc >/dev/null || {
+        no "no C compiler. meson/ninja come from pip and headers unpack from .debs, but gcc"
+        echo "     cannot be obtained without root. Use HB_QEMU_URL=<release asset> instead."
+        exit 2; }
+    ok "gcc: $(gcc -dumpversion)"
+
+    # meson + ninja via pip --user (verified: both are pip-installable, no root)
+    export PATH="$HOME/.local/bin:$PATH"
+    for t in meson ninja; do
+        command -v $t >/dev/null || { echo "  pip installing $t…"
+            python3 -m pip install --user -q "$t" 2>&1 | tail -1
+            command -v $t >/dev/null && ok "$t $( $t --version 2>/dev/null | head -1)" \
+                                     || { no "pip could not provide $t"; exit 2; }; }
+    done
+
+    # QEMU's hard pkg-config requirements are exactly these three (from its meson.build).
+    # Stage the -dev packages into $PREFIX if the headers are not already present.
+    export PKG_CONFIG_PATH="$LIB/pkgconfig:$PREFIX/usr/lib/x86_64-linux-gnu/pkgconfig:${PKG_CONFIG_PATH:-}"
+    need=""
+    for m in glib-2.0 pixman-1 zlib; do pkg-config --exists "$m" 2>/dev/null || need="$need $m"; done
+    if [ -n "$need" ]; then
+        warn "missing dev headers for:$need — trying to stage them without root"
+        # ⚠️ THE FRAGILE PART, AND I AM NOT PRETENDING OTHERWISE. glib's .pc file pulls
+        # transitive deps (libffi, pcre2, mount, blkid, selinux) whose own .pc files must
+        # also be staged, and one missing link fails configure with a confusing message.
+        # If this does not work, the release-asset route is faster than debugging it.
+        ( cd "$WORK" && for d in libglib2.0-dev libpixman-1-dev zlib1g-dev \
+                                 libffi-dev libpcre2-dev libmount-dev libblkid-dev libselinux1-dev; do
+            apt-get download "$d" >/dev/null 2>&1 && dpkg-deb -x "$d"_*.deb "$PREFIX" 2>/dev/null \
+              && echo "      staged $d"; done ) || true
+        still=""
+        for m in glib-2.0 pixman-1 zlib; do pkg-config --exists "$m" 2>/dev/null || still="$still $m"; done
+        [ -z "$still" ] && ok "headers resolve now" || {
+            no "still missing:$still — use HB_QEMU_URL=<release asset> instead"; exit 2; }
+    else
+        ok "glib-2.0, pixman-1, zlib headers all present"
+    fi
+
     src="$WORK/qemu-imx95"
-    [ -d "$src/.git" ] || git clone --depth 1 https://github.com/kylefoxaustin/qemu-imx95 "$src" || exit 2
+    [ -d "$src/.git" ] || git clone --depth 1 --branch "${HB_QEMU_REF:-main}" \
+        https://github.com/kylefoxaustin/qemu-imx95 "$src" || exit 2
+    # ⭐ --enable-tools EXPLICITLY: that is what produces qemu-img. The tagbuild on the
+    # reference host omitted it and has no qemu-img, which is exactly the gap that started
+    # this whole thread.
     ( cd "$src" && mkdir -p build && cd build \
-      && ../configure --target-list=aarch64-softmmu --prefix="$PREFIX" \
+      && ../configure --target-list=aarch64-softmmu --enable-tools --prefix="$PREFIX" \
       && make -j"$(nproc)" ) || { no "build failed — see above"; exit 2; }
     cp "$src/build/qemu-system-aarch64" "$QEMU"
-    [ -x "$src/build/qemu-img" ] && cp "$src/build/qemu-img" "$BIN/qemu-img"
+    [ -x "$src/build/qemu-img" ] && cp "$src/build/qemu-img" "$BIN/qemu-img" && ok "qemu-img built too"
     ok "built from source"
 else
     no "no forked QEMU yet, and none requested."
