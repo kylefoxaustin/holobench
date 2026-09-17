@@ -230,3 +230,33 @@ def test_the_missing_qemu_img_message_offers_a_route_without_root(monkeypatch):
         assert needs_root not in msg, (
             f"the message offers {needs_root!r}, which a reader without root cannot do — "
             f"that was the original bug")
+
+
+def test_no_module_hardcodes_the_session_base_dir():
+    """⭐ ONE DEFINITION, AND A GUARD SO IT STAYS ONE.
+
+    🛑 2026-09-17. DEFAULT_BASE_DIR was made UID-scoped because a lab run under sudo left
+    /tmp/holobench owned by root and every later non-root launch died with a raw
+    PermissionError — for every account on the host, for two weeks. The fix went into
+    manager.py. cli.py had TWO MORE hardcoded `Path("/tmp/holobench")` sites, for `command`
+    and `console`, which bypassed it entirely: the repair covered one subcommand and left
+    the other two broken in exactly the way that had just been diagnosed.
+
+    ⚠️ Found only because a dress rehearsal ran the OTHER subcommands. A fix applied to one
+    file is not a fix applied — and I hit that inside the very commit that fixed the first
+    instance, which is why this is a test and not a note."""
+    from pathlib import Path as _P
+    import re
+
+    root = _P(__file__).resolve().parents[1] / "holobench"
+    bad = []
+    for f in root.rglob("*.py"):
+        for i, line in enumerate(f.read_text(errors="replace").splitlines(), 1):
+            if line.lstrip().startswith("#"):
+                continue                       # a comment ABOUT the old path is not the path
+            if re.search(r'["\']/tmp/holobench["\'/]', line):
+                bad.append(f"{f.relative_to(root)}:{i}: {line.strip()[:80]}")
+    assert not bad, (
+        "a hardcoded session base dir reappeared — it must come from "
+        "session.manager.DEFAULT_BASE_DIR so UID-scoping applies everywhere:\n  "
+        + "\n  ".join(bad))

@@ -21,7 +21,7 @@ from .profiles.loader import default_asset_dir
 from .session import SessionError, build_command, command_str
 from .session import control
 from .session.command import SessionRuntime
-from .session.manager import Session, SessionManager
+from .session.manager import DEFAULT_BASE_DIR, Session, SessionManager
 
 
 def _print_err(msg: str) -> None:
@@ -66,7 +66,11 @@ def cmd_command(args: argparse.Namespace) -> int:
     except ProfileError as exc:
         _print_err(str(exc))
         return 1
-    work = Path("/tmp/holobench") / f"{p.id}-preview"
+    # ⚠️ USE THE ONE DEFINITION. Hardcoding /tmp/holobench here bypassed the
+    # UID-scoping fix entirely, so `command` and `console` still landed in the
+    # shared path a sudo run had left root-owned — the fix covered `launch` and
+    # nothing else. Found by a dress rehearsal running the OTHER subcommands.
+    work = DEFAULT_BASE_DIR / f"{p.id}-preview"
     fi = p.file_injection
     rt = SessionRuntime(
         work_dir=work,
@@ -191,7 +195,7 @@ def cmd_console(args: argparse.Namespace) -> int:
         return 1
 
     asset_dir = _resolve_assets(p.id, args.assets)
-    work = Path("/tmp/holobench") / f"{p.id}-console"
+    work = DEFAULT_BASE_DIR / f"{p.id}-console"
     shutil.rmtree(work, ignore_errors=True)
     work.mkdir(parents=True, exist_ok=True)
 
