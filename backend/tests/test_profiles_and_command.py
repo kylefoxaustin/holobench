@@ -517,15 +517,32 @@ def test_volatile_binary_exposure_is_counted_and_cannot_quietly_grow():
         as stable and got scored volatile because its name was not on a list I wrote.
         A whitelist of names is a declaration; stability is a property, and the property is
         checkable: HEAD detached, and sitting exactly on a tag, so there is no branch to
-        advance under anyone."""
+        advance under anyone.
+
+        ⚠️ RETURNS THREE STATES, NOT TWO (fixed 2026-09-17, found by a dress rehearsal).
+        This used to `except (OSError, subprocess.SubprocessError): return False` — and
+        subprocess.TimeoutExpired IS a SubprocessError. So "I could not measure this tree"
+        and "I measured it and it moves" produced THE SAME ANSWER, and the test then
+        accused a correctly-pinned profile of being misconfigured.
+
+        ⭐ That is the exact conflation this repo has spent a week finding in other people's
+        code — absent vs drifted, no-panel vs unprovisioned, transport-proven vs
+        per-frame-proven — sitting in the guard I wrote to catch it. A check that cannot
+        distinguish "the thing is bad" from "I failed to look" reports my own failure as
+        the subject's.
+
+        None = could not measure. The caller must not count that as volatile.
+        """
         try:
             head = subprocess.run(["git", "-C", str(tree), "rev-parse", "--abbrev-ref", "HEAD"],
-                                  capture_output=True, text=True, timeout=10)
+                                  capture_output=True, text=True, timeout=30)
             tag = subprocess.run(["git", "-C", str(tree), "describe", "--tags", "--exact-match"],
-                                 capture_output=True, text=True, timeout=10)
+                                 capture_output=True, text=True, timeout=30)
         except (OSError, subprocess.SubprocessError):
-            return False
-        return head.returncode == 0 and head.stdout.strip() == "HEAD" and tag.returncode == 0
+            return None                      # UNMEASURABLE — not a verdict about the tree
+        if head.returncode != 0:
+            return None                      # git itself could not answer; still not a verdict
+        return head.stdout.strip() == "HEAD" and tag.returncode == 0
 
     volatile, unmeasurable = [], []
     for f in sorted(root.glob("*.yaml")):
@@ -536,8 +553,12 @@ def test_volatile_binary_exposure_is_counted_and_cannot_quietly_grow():
                           + m.group(1).split("/GitHub/")[1].split("/")[0])
                 if not (tree / ".git").exists():
                     unmeasurable.append(f.name)
-                elif not _is_stable(tree):
-                    volatile.append(f.name)
+                else:
+                    verdict = _is_stable(tree)
+                    if verdict is None:
+                        unmeasurable.append(f.name)   # could not look ≠ it moves
+                    elif verdict is False:
+                        volatile.append(f.name)
                 break
 
     if unmeasurable and not volatile:

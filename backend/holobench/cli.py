@@ -3,7 +3,7 @@
 
 Phase 0 surface: list/show profiles, preview the resolved QEMU command line,
 and `launch` a board to prove QMP control end-to-end (query-status +
-system_reset + quit). No web UI yet — that arrives in later phases.
+system_reset + quit). `serve` runs the full web UI (console, LCD, memory map, devices, events, gdb, snapshots, files, camera) at http://127.0.0.1:8080.
 """
 
 from __future__ import annotations

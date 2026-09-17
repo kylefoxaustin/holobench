@@ -39,7 +39,18 @@ from .command import (
 from .isolation import SessionCgroup, memory_max_bytes
 
 
-DEFAULT_BASE_DIR = Path(tempfile.gettempdir()) / "holobench"
+# ⭐ UID-SCOPED, AND THAT IS THE WHOLE POINT (fixed 2026-09-17, found by a dress rehearsal).
+# This was `tempfile.gettempdir()/"holobench"` — ONE shared path for every user on the box.
+# A single lab run under sudo (macvtap needs root) created /tmp/holobench owned by root:root,
+# and from then on EVERY non-root launch on that machine died with
+#     PermissionError: [Errno 13] Permission denied: '/tmp/holobench/<session>'
+# as a raw Python traceback. Not just for the account that ran it — for every account, until
+# somebody thought to look at the ownership of a temp directory.
+#
+# Scoping by UID means a root run uses /tmp/holobench-0 and a user run /tmp/holobench-1000,
+# so they cannot collide BY CONSTRUCTION rather than by everyone remembering. It also closes
+# the multi-user case nobody had hit yet: two people on one host, first one wins forever.
+DEFAULT_BASE_DIR = Path(tempfile.gettempdir()) / f"holobench-{os.getuid()}"
 
 
 def _make_qemu_preexec(
@@ -368,7 +379,33 @@ class Session:
         if self.state not in (SessionState.CREATED,):
             raise SessionError(f"session {self.id} already launched")
         self.state = SessionState.LAUNCHING
-        self.work_dir.mkdir(parents=True, exist_ok=True)
+        # ⚠️ DIAGNOSE, DO NOT TRACEBACK. Someone hitting this sees a work dir they did not
+        # create and cannot write, and a stack trace naming pathlib — the one component that
+        # is definitely not the problem.
+        try:
+            self.work_dir.mkdir(parents=True, exist_ok=True)
+        except PermissionError as exc:
+            base = self.work_dir.parent
+            detail = ""
+            try:
+                import pwd
+                st = base.stat()
+                detail = (f" It is owned by uid {st.st_uid} "
+                          f"({pwd.getpwuid(st.st_uid).pw_name}); you are uid {os.getuid()} "
+                          f"({pwd.getpwuid(os.getuid()).pw_name}).")
+            except Exception:
+                pass
+            raise SessionError(
+                f"cannot create the session work dir {self.work_dir}.{detail}\n"
+                f"  This usually means a PREVIOUS RUN UNDER sudo created {base} as root and "
+                f"left it there — a lab needing macvtap runs as root, and the directory "
+                f"outlives it.\n"
+                f"  Fix either way:\n"
+                f"    - remove the stale dir:  sudo rm -rf {base}\n"
+                f"    - or choose your own:    export HOLOBENCH_BASE_DIR=~/.holobench\n"
+                f"  New installs are UID-scoped so root and user runs cannot collide; this "
+                f"path predates that, or was set explicitly."
+            ) from exc
         if self.share_dir is not None:
             self.share_dir.mkdir(parents=True, exist_ok=True)
         if self.camera_frames_dir is not None:

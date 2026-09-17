@@ -140,6 +140,7 @@ three. See the **Camera** panel; each board ships its exact capture recipe.
 ```bash
 cd backend && python -m venv ../.venv && . ../.venv/bin/activate
 pip install -e .
+pip install pytest && python -m pytest tests/ -q   # verify the install (optional)
 holobench serve                 # → http://127.0.0.1:8080
 holobench serve --host 0.0.0.0 --port 8080   # serve the farm on your LAN
 ```
