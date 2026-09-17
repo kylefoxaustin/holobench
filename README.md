@@ -133,7 +133,12 @@ three. See the **Camera** panel; each board ships its exact capture recipe.
 > registers the machine — the companion repos, see *[Related repos](#related-repos-the-boards-holobench-drives)*
 > (each profile's `qemu.binary` points at it); and (2) its **boot artifacts**
 > (`Image` / `dtb` / `.wic`) in `assets/<profile-id>/` — build them with *Build me
-> a board* (below) or supply your own. `holobench serve` starts the UI right away;
+> a board* (below), supply your own, or — **cheapest for the i.MX95** — take the kernel and
+> dtb from a **mainline** arm64 `defconfig` build, any aarch64 initramfs, and build only the
+> one mandatory vendor piece, the M33 System Manager, from public source:
+> `git clone https://github.com/nxp-imx/imx-sm.git && cd imx-sm && make config=mx95evk`
+> (minutes, not a BSP build — see *[Why the i.MX95 needs the SM](#why-the-imx95-needs-the-m33-system-manager)*).
+> `holobench serve` starts the UI right away;
 > *Reserve & Boot* is the step that needs those two things. Running **two** boards
 > (e.g. i.MX95 + i.MX93) means a QEMU fork + artifacts for **each**.
 
@@ -281,6 +286,27 @@ it. None of that is doable on a bench.
 Adding a board to a link, or a whole new link type, is a small profile block — no
 code. Full detail (the socket contracts + how to author your own lab):
 **[`docs/TOPOLOGIES.md`](docs/TOPOLOGIES.md)**.
+
+## Why the i.MX95 needs the M33 System Manager
+
+The 91 and 93 can boot a fully-OSS, zero-vendor image. **The 95 cannot**, and the reason is
+architectural rather than a packaging choice — so it will not change:
+
+> On the i.MX95 the **M33 System Manager is the only SCMI provider**. There is no software
+> SCMI server in the machine model, so Linux's clocks, power domains, perf domains and
+> sensors all arrive over SCMI from that firmware. With the M33 halted, Linux hangs at
+> `arm-scmi` probe. The 91 and 93 have no System Manager at all — they drive CCM/ANATOP
+> directly, which is exactly why a zero-vendor bundle is possible there and not here.
+> — 95emulator, 2026-09-17, confirmed against `docs/system/arm/imx95-evk.rst`
+
+So the honest i.MX95 cold start is **"clone, build the SM, boot"** — not "build a BSP".
+Everything else (kernel, dtb, initramfs) can come from mainline sources.
+
+⚠️ **Whether a prebuilt `m33_image.elf` may be redistributed is an open licensing question
+and is deliberately unanswered here.** `imx-sm`'s own `LICENSE.txt` reads BSD-3-Clause, which
+on its face would permit it — but this project's standing rule has been *operator supplies*
+that file, and changing it is a licensing decision, not an engineering one. Build it yourself
+from the public repo above; that needs no permission from anyone.
 
 ## Build a board image yourself (the *Build me a board* wizard)
 
