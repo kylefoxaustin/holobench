@@ -130,6 +130,119 @@ The matrix is **CI-generated** (no hand-sorting). But:
    `Present = N/A` (the N/A rule). A repo may keep its single Tier OR the
    present+driver-binds split — both map; class is required either way.
 
+## Rules for the GUARDS THEMSELVES (collated 2026-08-27 → 09-17)
+
+The standard above governs what a validation doc may *claim*. This section governs the
+checks that produce those claims — because every defect collated here was a check that
+**could not fail the way the thing it checked actually failed**, and every one of them read
+back as correct.
+
+Contributed by holobench, qualcomm, 95emulator and claude-connect; instances are real and
+named so a reader can go and look.
+
+### 1. PLANT IT, OR IT IS NOT A GUARD
+
+**Reading a detector cannot establish that it detects.** Before trusting any check, make it
+FAIL on purpose against the exact defect it exists to catch. If you cannot make it fail, you
+do not have a check — you have a line of code that has never once expressed an opinion.
+
+Instances, all of which looked correct on inspection:
+- a token guard satisfied by the **docstring** of the file it was checking — the emitter was
+  renamed and the guard reported no problems, because the module documents its own output
+  format and the literal survived there;
+- `\b\d{3,}\b` written to forbid a hardcoded `"3600s cap"` — the trailing word boundary
+  cannot match digits followed by a letter, so the one literal it targeted was the one string
+  it could not see;
+- a process reaper `pkill`-ing a path its target never used (the sudo node runs a different
+  binary path), with stdout and stderr to `DEVNULL`, the body in `except: pass`, and `; true`
+  appended — three mufflers on one call, so its failure could not make a sound;
+- a hook-wiring check satisfied by the hook's own **comments** (qualcomm);
+- `$?` read through a pipe, returning `sed`'s status, so a refusing hook read as allowing.
+
+⭐ **Corollary: a guard that has never fired is indistinguishable from a guard that cannot.**
+
+### 2. THREE STATES, NOT TWO — "IT IS BAD" vs "I COULD NOT LOOK"
+
+A check that returns the same answer for *the subject is broken* and *I failed to measure it*
+**reports your own failure as the subject's**. Always separate them, and make the third state
+visible rather than silently pessimistic **or** silently optimistic.
+
+- `except (OSError, subprocess.SubprocessError): return False` — `TimeoutExpired` is a
+  `SubprocessError`, so a loaded machine reported correctly-pinned repos as misconfigured;
+- "QEMU binary absent" vs "present but **a different build**" — a replaced binary is a
+  finding and must not inherit the absent-artifact excuse;
+- "this board has no panel" (hardware fact) vs "its panel dtb was never provisioned" (setup
+  gap) — rendering identically let a setup gap wear the costume of correct behaviour, complete
+  with the reassuring sentence *"faithful to real hardware"*;
+- an ISI falling back to a synthetic gradient when its frame source is missing **or** the wrong
+  geometry — two different mistakes absorbed into one healthy-looking image (95emulator).
+
+⭐ **Faithfulness is a hiding place.** The more accurately a model reproduces "this is supposed
+to look broken", the better a genuine break hides inside it.
+
+### 3. A FIX APPLIED TO ONE CALL SITE IS NOT A FIX APPLIED
+
+After fixing an instance, **enumerate every instance and state the count**. The second site is
+not hypothetical; it is the normal case.
+
+- one profile of six repointed off a rebuilt tree — the other five found only when asked;
+- a `DEFAULT_BASE_DIR` made UID-scoped in `manager.py` while **two more hardcoded copies**
+  sat in `cli.py`, so one subcommand was repaired and two were left broken in exactly the way
+  just diagnosed — found inside the very commit that fixed the first instance;
+- a transcript added to two of three scripts, the missing one being the script that produces
+  the verdict;
+- an FNV-1a offset basis typo'd in **four** places (95emulator).
+
+### 4. A COST OVERSTATED IS NOT A SAFE ERROR
+
+A wrong *limitation* is quoted as readily as a wrong *result*, and is audited far less, because
+it reads as rigour. "This needs an afternoon of Yocto" (it needed a five-minute vendor build)
+discouraged the attempt while making the surrounding claim look carefully bounded.
+
+⭐ **A caveat is a claim. It needs the same evidence as the thing it qualifies.**
+
+### 5. PER-USER RUNTIME STATE MUST BE SCOPED BY UID
+
+A shared, predictable path (`/tmp/<project>`) is a **cross-privilege hazard**. One run under
+`sudo` leaves it root-owned, and from then on every unprivileged run on that host fails — for
+every account, indefinitely — with an error that reads as a local environment problem rather
+than as a leftover from someone else's privileged run. It went undetected for two weeks
+because nobody who had already created the directory could reproduce it.
+
+Scope by **UID** so privileged and unprivileged runs cannot collide *by construction* rather
+than by everyone remembering.
+
+### 6. A REMEDY THE READER CANNOT PERFORM IS NOT A REMEDY
+
+An error whose only suggested fix requires privilege the reader lacks is a **dead end wearing
+a fix's costume** — the diagnosis is correct and the prescription is impossible. `"install
+qemu-utils"` is useless to someone who cannot get root and has no route to it. Offer at least
+one route the least-privileged plausible reader can actually take.
+
+### 7. TWO HALVES OF ONE PROGRAM ARE ONE WITNESS
+
+Agreement between components **feels** like independent corroboration and is structurally the
+opposite. A host and a guest hashing frames against each other with the *same* typo'd constant
+agreed perfectly, and the test passed on numbers no outside implementation could reproduce
+(95emulator). An internal consistency check cannot see a wrong constant, because both sides are
+wrong in the same direction.
+
+⭐ **A hash in a record exists to be verified INDEPENDENTLY; one only the producing program can
+reproduce is a checksum of itself.**
+
+### 8. RUN IT AS A STRANGER
+
+Your own machine has everything a newcomer lacks, so **no test on it can find what is missing**.
+Periodically do the whole thing cold: fresh clone, fresh toolchain build, fresh boot, following
+only the written instructions. A dress rehearsal on 2026-09-17 found six defects in a project
+whose suite was green — including the UID bug above (rule 5), the one-of-three fix (rule 3), a
+CLI that told users *"no web UI yet"* while serving one, and a repo that could not run its own
+tests because `pytest` was undocumented and not a dependency.
+
+⚠️ **State what the rehearsal did NOT cover.** This one supplied boot artifacts from an existing
+install, so it proved clone → build → boot and *not* cold-start artifact acquisition. A
+rehearsal that quietly skips a leg is worse than none, because it launders the untested part.
+
 ## Not an upstream-submission artifact
 
 For QEMU upstreaming, the maintainers consume `docs/system/arm/<chip>-evk.rst` + the
