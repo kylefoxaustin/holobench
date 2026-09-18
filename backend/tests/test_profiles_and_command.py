@@ -651,3 +651,41 @@ def test_the_live_isp_stage_is_NOT_gated():
     for inert in ("  gamma: 2.2", "  denoise: on", "  ccm: [1,0,0]",
                   "  tone_mapping: reinhard", "  isp_tuning: /path/nnip.bin"):
         assert knob.search(inert), f"gate missed an INERT control: {inert!r}"
+
+
+def test_no_profile_can_produce_an_UNREAPABLE_qemu():
+    """⭐ EVERY BOARD MUST BE WAKEABLE AND KILLABLE THROUGH ITS OWN MONITOR.
+
+    🧟 2026-09-17, from 91emulator: four of their QEMUs sat on this host for TWENTY-NINE DAYS
+    having consumed 00:00:00 CPU. Cause — they were probe spawns launched
+    `-S -monitor none -serial none -nodefaults`, frozen at startup, and their parent test
+    died without un-pausing or killing them. Their words, and it is the transferable part:
+
+        "-S with no monitor is a spawn that CANNOT be woken except by the process that
+         started it, so if that process dies the qemu is unreapable by anything but pid."
+
+    That is why it survived a month, and why no pattern-based sweep would ever have found it.
+
+    Holobench cannot currently produce that shape: `-qmp` is emitted unconditionally and no
+    profile starts paused. But that is true by accident of where the code sits, not by any
+    enforced invariant — make `-qmp` conditional one day and this repo starts minting the
+    same corpse class. So it is an invariant now."""
+    from holobench.profiles.loader import load_profile, list_profiles
+    from holobench.session.command import SessionRuntime, build_command
+    from pathlib import Path as _P
+
+    offenders = []
+    for entry in list_profiles():
+        pid = entry.id if hasattr(entry, "id") else entry
+        p = load_profile(pid)
+        wd = _P("/tmp/hb-invariant-probe")
+        rt = SessionRuntime(
+            work_dir=wd, qmp_socket=wd / "qmp.sock", asset_dir=_P("/tmp/hb-assets"),
+            serial_sockets={s.chardev: wd / f"{s.chardev}.sock" for s in p.serial})
+        argv = build_command(p, rt)
+        if "-qmp" not in argv:
+            offenders.append(f"{pid}: no -qmp — nothing could stop this board but its pid")
+        if "-S" in argv:
+            offenders.append(f"{pid}: starts PAUSED — unwakeable if its launcher dies")
+
+    assert not offenders, "\n  ".join(["unreapable spawn(s) possible:"] + offenders)
