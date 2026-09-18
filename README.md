@@ -302,11 +302,12 @@ architectural rather than a packaging choice — so it will not change:
 So the honest i.MX95 cold start is **"clone, build the SM, boot"** — not "build a BSP".
 Everything else (kernel, dtb, initramfs) can come from mainline sources.
 
-⚠️ **Whether a prebuilt `m33_image.elf` may be redistributed is an open licensing question
-and is deliberately unanswered here.** `imx-sm`'s own `LICENSE.txt` reads BSD-3-Clause, which
-on its face would permit it — but this project's standing rule has been *operator supplies*
-that file, and changing it is a licensing decision, not an engineering one. Build it yourself
-from the public repo above; that needs no permission from anyone.
+⚠️ **Holobench does not and will not ship a prebuilt `m33_image.elf`. Decided 2026-09-17.**
+`imx-sm`'s own `LICENSE.txt` reads BSD-3-Clause, which on its face would appear to permit it —
+but "appears to permit" is not a licensing review, and the downside of being wrong is not
+symmetric with the convenience of being right. The operator supplies that file, always.
+Building it yourself from the public repo above takes minutes and needs no permission from
+anyone, which is why this costs you very little.
 
 ## Build a board image yourself (the *Build me a board* wizard)
 

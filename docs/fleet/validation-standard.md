@@ -243,6 +243,29 @@ tests because `pytest` was undocumented and not a dependency.
 install, so it proved clone → build → boot and *not* cold-start artifact acquisition. A
 rehearsal that quietly skips a leg is worse than none, because it launders the untested part.
 
+### 9. A STALE INSTRUCTION STILL DIRECTS WORK
+
+A document that has gone false is **not a neutral inaccuracy**. Prose that merely describes can
+be ignored; an **instruction** is obeyed — and it is obeyed most faithfully by whoever is newest
+and least equipped to notice it is wrong.
+
+- an always-loaded operating manual prescribed eight modules under "one module per concern".
+  **Four had never existed.** Because that section is a *rule about where new code goes*, any
+  session following it would have created `introspect/` and `scheduler/` beside the directories
+  already doing those jobs — the manual was generating the drift it existed to prevent;
+- the same file's roadmap described a framebuffer architecture (VNC → websockify → noVNC) that
+  was never built; the shipped panel polls `screendump`. The author of this entry had **verified
+  that discrepancy two weeks earlier, explained it in detail to another session, and left the
+  document unchanged** — knowing a thing is false is not the same act as fixing where it is
+  written down;
+- a CLI's own `--help` said "no web UI yet" while serving a full one, contradicting the README
+  two files away. A newcomer believes the tool over the docs, and the tool was wrong.
+
+⭐ **Audit the docs that are LOADED, not the ones that are read.** A stale README costs a reader
+a minute; a stale operating manual costs every future session its bearings. Borrowed from
+kitchen_margin and lostchild, who ran this audit on each other's always-loaded docs on
+2026-09-17 and each found several.
+
 ## Not an upstream-submission artifact
 
 For QEMU upstreaming, the maintainers consume `docs/system/arm/<chip>-evk.rst` + the
