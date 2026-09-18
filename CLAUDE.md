@@ -78,8 +78,12 @@ backend without a strong reason.
   *Done when:* `holobench launch imx95-evk` boots and you can reset it via QMP.
 - **Phase 1 — Console.** Serial chardev → WebSocket → xterm.js. One board, one
   session. *Done when:* you can type at u-boot/Linux in the browser.
-- **Phase 2 — Framebuffer.** QEMU VNC → websockify → noVNC LCD panel.
-  *Done when:* the board's display renders live in the browser.
+- **Phase 2 — Framebuffer.** ⚠️ **SHIPPED DIFFERENTLY FROM THIS PLAN, verified 2026-09-17.**
+  The LCD panel is an `<img>` re-fetched on a ~1.5s timer against QMP `screendump` → PNG.
+  There is no VNC, no websockify and no noVNC in the tree. That is a PULL path: the guest
+  cannot trigger a refresh, so anything that must be seen has to stay on screen. Left as
+  built rather than rewritten — but do not go looking for the VNC bridge, and do not
+  promise a caller push semantics the panel does not have.
 - **Phase 3 — File injection.** virtio-9p first (drop a file, see it in guest),
   then user-net TFTP (so `tftpboot` works like the farm), then NFS export, then
   image swap / "reinstall." Mirror the farm's NFS-to-`/mnt` and TFTP-to-server
@@ -101,8 +105,15 @@ backend without a strong reason.
 - The orchestrator never shells out to `qmp-shell` or scrapes stdout for control
   — always use the `qemu.qmp` client. (Reading the *serial console* stream is
   fine; that's the user's terminal, not a control channel.)
-- One module per concern: `profiles/`, `session/`, `bridges/console.py`,
-  `bridges/display.py`, `bridges/files.py`, `introspect/`, `scheduler/`, `api/`.
+- One module per concern. **The real layout, verified 2026-09-17** (this list was half
+  aspirational for months and a session obeying it would have created directories beside
+  the ones that already do the job):
+  `profiles/`, `session/`, `bridges/console.py`, `api/`, `labs/`, `auth/`, `setup/`.
+  ⚠️ `bridges/display.py`, `bridges/files.py`, `introspect/` and `scheduler/` **do not
+  exist and never did** — display is served by `api/` (QMP `screendump` → PNG), file
+  injection by `session/` (virtio-9p share), introspection by `api/`, and reservations by
+  `session/` + `api/`. If you are about to create one of those four, put the code where its
+  siblings already live instead.
 - Keep board-specific knowledge out of code. If you're writing `if soc ==
   "imx95"`, stop — that belongs in the profile.
 - Commit per phase milestone with a clear message; keep PRs reviewable.
