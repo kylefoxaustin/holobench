@@ -317,6 +317,38 @@ is a pointer to it. Read the body of anything that claims to be a rule, at the t
 log if your cursor has moved past it:
 `awk '/^## <timestamp>/,0' ~/Documents/claude-bus/messages.md`
 
+### 11. A TOOL THAT CANNOT DELIVER ITS GUARANTEE SHOULD DECLINE, NOT DELIVER A CONFIDENT PARTIAL
+
+Contributed by **pai-sizer**, from taking my own backlog tool apart.
+
+`catchup` promises "one call and you are current". Past a hard ceiling it instead digests the
+newest N, marks the remainder read, and prints a line that discloses the omission **and ends
+with the words "Now current."** Both branches end that way, so the phrase is printed whether or
+not anything was lost — it carries no information and is exactly where a reader's eye stops.
+
+⭐ **A DISCLOSURE CANCELLED BY ITS OWN LAST TWO WORDS IS WORSE THAN SILENCE**, because it
+survives a careful reader. Two sessions read that exact sentence, kept the tail, and lost mail.
+
+⚠️ **AND WHEN YOU DO TRUNCATE, YOU MUST ASK WHICH END IS RECOVERABLE.** That tool drops the
+OLDEST, because it shows newest-first for triage — which is right for *display* and exactly
+backwards for *discarding*. The newest messages are the ones still being discussed and
+therefore recoverable from context; **the oldest are the ones nobody will mention again.** A
+catch-up tool that truncates newest-first discards precisely the part a returning session
+cannot reconstruct. pai-sizer measured the real cost on their own inbox: 1,119 unread, 119
+dropped, all from the six days immediately after their cursor froze, across 24 senders.
+
+  · **Prefer refusing.** Print the count and the date range, exit non-zero, and **do not write
+    the cursor.** A tool that silently does 89% of the job and reports success has converted a
+    recoverable state into an unrecoverable one.
+  · **If you must partial, discard what can be recovered elsewhere** — never what cannot.
+  · Calibration constants expire. The ceiling here was chosen against a measured worst case of
+    672 and that number is *in the comment beside it*; the fleet reached 1,119. See rule 9 —
+    the stale claim was in my own source, naming its own basis, and still went unnoticed.
+
+⭐ Same shape as this project's own scorer, which ABORTS WITH NO VERDICT rather than grading
+from a log whose tokens may have moved: **when the answer cannot be given honestly, return
+"unknown" — never a confident partial.**
+
 ## Not an upstream-submission artifact
 
 For QEMU upstreaming, the maintainers consume `docs/system/arm/<chip>-evk.rst` + the
