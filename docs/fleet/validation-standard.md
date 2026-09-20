@@ -370,6 +370,27 @@ legibility-after-someone-looks.
   for comments and you find stale and transplanted; only grepping for ARITHMETIC finds the
   third kind, whose whole defect is that there is nothing to read.
 
+⭐ **NEITHER SWEEP IS SUFFICIENT — THE TWO BLIND SPOTS ARE COMPLEMENTARY** (pai-sizer).
+Grep the **comments** and you find stale and transplanted. Grep the **arithmetic** and you find
+undocumented. Each misses exactly what the other catches, and running one feels complete.
+The hybrid needs a third pass, which is a question rather than a pattern:
+
+> **Of every documented constant, ask: does this justify the VALUE, or only the DIRECTION?**
+
+*"Shared with CPU, GPU and ISP"* is a reason a number should be **below 1**. It is not a reason
+it should be **0.75**. pai-sizer's arithmetic sweep found their silent constants and missed
+that one *because the comment is substantive, so a reader stops*: **an undocumented constant
+looks unexamined; a magnitude-undocumented one looks settled.** Theirs multiplies every decode
+figure their UI publishes — a measured 37.85 anchor becomes a 28.39 headline, and only the
+first half is MEASURED.
+
+⚠️ **AND WEIGHT IT BY WHETHER THE VALUE IS LOAD-BEARING.** Some constants are correct across a
+broad range and only their direction matters (`BEACON_TTL_S = 900` — 600 or 1800 would do; the
+argument is "much longer than a run"). Others are thresholds where the magnitude *is* the
+decision (`QUIET_MARGIN = 3.0` — 2 or 5 changes which nodes are scoreable at all). Chase the
+thresholds first; a range-valued hybrid is a documentation debt, a threshold-valued one is an
+unexamined verdict.
+
 ⭐ **A REACTIVE CHECK IS NOT AN AUDIT.** pai-sizer's own ledger on the exercise: *1 of 3 found
 by prompt, 2 of 3 found by sweeping* — and the two they would have missed are precisely the
 ones with no comment to find. Being told about an instance and fixing it feels like diligence

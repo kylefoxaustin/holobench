@@ -134,6 +134,14 @@ INCARN_LEGACY = 0x5A5A5A5A
 BEACON_ET_LO = 0x88B5
 BEACON_ET_HI = 0x88BF
 
+# ⚠️ BOTH UNDOCUMENTED (found 2026-09-20, third sweep). SEND_EVERY_MS sets this beacon's
+# transmit rate, so it bounds how many frames a fixed-length run can possibly produce — the
+# same family as HOLD_S in score-real-silicon.py. Nobody recorded why 200, or why 5000.
+# ⭐ AND AN OBSERVATION I AM DELIBERATELY NOT PROMOTING TO A FINDING: 75s ÷ 200ms = 375, and
+# the published FRDM count was 381. Striking, and it would explain the number as rate-bound
+# rather than wire-bound — but the Orin leg was 837 on the same constants, which refutes the
+# simple product, and the PASS rate is driven by the GUEST's sender, not by this one. I have
+# not established the mechanism. Recorded as a coincidence worth chasing, not as a cause.
 SEND_EVERY_MS = 200
 QUIET_MS = 5000
 
