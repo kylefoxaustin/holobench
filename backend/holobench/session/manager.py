@@ -375,11 +375,20 @@ class Session:
 
     # -- lifecycle ----------------------------------------------------------
 
-    # ⚠️ qmp_timeout IS A THRESHOLD WITH NO BASIS (found 2026-09-20, widened sweep). It
-    # decides whether a board is declared to have FAILED TO LAUNCH, so a board merely slower
-    # than this guess — a large .wic, a loaded host — is reported identically to a broken one.
-    # Nobody measured 15. Not replaced with another invented number; recorded so the next
-    # launch failure is read as "or it was slow" until someone times a cold start.
+    # ⚠️ qmp_timeout IS A THRESHOLD WITH NO RECORDED BASIS — but DORMANT, not live, and I
+    # overstated it before measuring (2026-09-20).
+    # It decides whether a board is declared to have FAILED TO LAUNCH, so its magnitude IS a
+    # verdict. I wrote that a board "merely slower than this guess is reported identically to
+    # a broken one" and then measured the exposure:
+    #     imx95-evk        1.5s        imx93-evk   3.4s
+    #     imx95-evk-sd     0.9s        ← 11.9 GB golden + qemu-img overlay, the worst case
+    #                                    (qcow2 overlay creation is O(1), not O(size))
+    # 17x headroom at the slowest board. NOTHING SITS NEAR 15.
+    # ⭐ Threshold-class by STRUCTURE, quiescent by DATA (pai-sizer's two-axis severity). That
+    # is not "fine" — it is the state nobody ever corrects, BECAUSE TODAY IT IS RIGHT, and it
+    # stops being harmless the first time a host is loaded enough or an asset dir remote
+    # enough to put a board in the band. Recorded with its measurement so the next reader
+    # inherits the number rather than the alarm.
     async def launch(self, *, qmp_timeout: float = 15.0, tap_serial: bool = True) -> None:
         if self.state not in (SessionState.CREATED,):
             raise SessionError(f"session {self.id} already launched")

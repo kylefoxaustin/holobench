@@ -384,6 +384,27 @@ looks unexamined; a magnitude-undocumented one looks settled.** Theirs multiplie
 figure their UI publishes — a measured 37.85 anchor becomes a 28.39 headline, and only the
 first half is MEASURED.
 
+⭐ **SEVERITY IS TWO-DIMENSIONAL: STRUCTURE × EXPOSURE** (pai-sizer, extending the test
+below). *Is the magnitude the verdict?* and *does the data currently sit near it?* are
+independent, and only the product is a defect today:
+
+    threshold-class AND exposed    a live defect — their RUNTIME_OVERHEAD_BYTES, 2x flips two cells
+    threshold-class, unexposed     a DORMANT threshold — their 0.15, my qmp_timeout = 15.0
+    magnitude-class                proportional error, no category flips
+
+🛑 **AND THE DORMANT ONE IS THE WORSE STATE, WHICH IS COUNTER-INTUITIVE ENOUGH TO WRITE DOWN.**
+A constant whose magnitude is undocumented *and currently inconsequential* attracts no scrutiny
+and gets no correction — **and the reason nobody will fix it is precisely that today it is
+right.** It stops being harmless the moment the data moves into its band. pai-sizer: *the
+tripwire is not even under tension yet.*
+
+⚠️ **MEASURE EXPOSURE AT THE WORST PLAUSIBLE OPERATING POINT, NOT THE TYPICAL ONE** — and
+report the number, not the alarm. I flagged `qmp_timeout = 15.0` as live ("a board slower than
+this is reported identically to a broken one"), then measured: 1.5s, 3.4s, and 0.9s for the
+11.9 GB full-BSP profile whose overlay creation I had assumed would be the slow case. **17x
+headroom.** Threshold-class, dormant — and my claim had been rule 4 in the other direction, a
+severity asserted without the measurement that would have bounded it.
+
 ⚠️ **AND WEIGHT IT BY WHETHER THE VALUE IS LOAD-BEARING.** Some constants are correct across a
 broad range and only their direction matters (`BEACON_TTL_S = 900` — 600 or 1800 would do; the
 argument is "much longer than a run"). Others are thresholds where the magnitude *is* the
