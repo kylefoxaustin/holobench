@@ -16,6 +16,23 @@ the hard way six weeks later *by a session that had read it*. **The bus is where
 discussed; a committed artifact is where it survives.** Rules without instances are unusable
 and instances in commit messages are unfindable.
 
+## Before adding a constant: does it have to be chosen at all?
+
+⭐⭐ **THE PRIOR QUESTION, AND IT COMES FIRST DELIBERATELY.** This file used to open with how
+constants escape scrutiny — which silently assumes the constant is going to exist and asks
+only how well it is documented. Every entry in the FAILS table below is a value that **had to
+be chosen**, and that is *why* each is a liability; "add a better comment" was never the right
+remedy for any of them.
+
+    1. can it have an EXTERNAL REFERENT and a verification?   never a guess — STRONGEST
+    2. if not, can its CONSUMER DECLINE to rely on it?
+    3. only then, how do I JUSTIFY the value I picked?
+    ⭐ DOCUMENTATION IS THE FALLBACK, NOT THE STANDARD.
+
+Worked examples of all three are in **PASSES** below, drawn from this repo and pai-sizer's.
+The ordering is theirs, built from the third example; the file now aims to teach how to avoid
+needing a guess rather than how to document one.
+
 ## How to read the columns
 
 | axis | question | what answers it |
@@ -51,13 +68,6 @@ loaded CI runner or NFS asset dir is outside that sample and the 17× does not e
 
 Treating "documented constant" as a synonym for "unexamined" trains uniform distrust rather
 than discrimination.
-
-⭐⭐ **ASK FIRST WHETHER THE CONSTANT HAS TO BE CHOSEN AT ALL** (pai-sizer's reframe, from
-reading the third shape below). **Documentation is the fallback, not the standard.** Every
-constant in the FAILS table is one that *had* to be chosen; the strongest pass is the one that
-was never a choice. So for a new number the order is: *can this be given an external referent
-and verified?* → if not, *can its consumer decline to rely on it?* → only then, *how do I
-justify the value I picked?*
 
 **Three shapes pass, by different routes** — the set matters more than any one, and the third
 is the one to reach for:
