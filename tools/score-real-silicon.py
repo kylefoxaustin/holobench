@@ -63,6 +63,13 @@ from holobench.labs.coordinator import LabCoordinator     # noqa: E402
 from holobench.session.manager import SessionManager      # noqa: E402
 
 LAB_ID = "imx95-real-silicon"
+# ⚠️ UNDOCUMENTED BASIS (found 2026-09-19 by sweeping for arithmetic, pai-sizer's method).
+# This decides how long the segment runs before evidence is collected, so it DIRECTLY sets the
+# frame counts this scorer publishes — 381 and 837 in the 2026-09-02 bundle were 75 seconds of
+# beaconing, not a property of the wire. Nobody recorded why 75.
+# ⭐ NOT REPLACING IT WITH A FABRICATED JUSTIFICATION. A number with no basis is honest about
+# having none; inventing one would make it look audited while changing nothing. What it needs
+# is a measurement of how long a leg takes to reach a stable rate — logged, not guessed.
 HOLD_S = 75.0
 GUEST_ET = 0x88B7
 

@@ -360,8 +360,36 @@ legibility-after-someone-looks.
     memory architecture. **The comment discloses the transplant while the code performs it
     anyway.** Measured sensitivity: a 2× move in that guess flips two verdicts from `fits` to
     `tight`.
+  · **UNDOCUMENTED** — no basis was ever recorded. pai-sizer found two by sweeping their own
+    engine after reporting the first: a `tight` threshold (`headroom < available * 0.15`, two
+    call sites, zero documentation) that decides every feasibility verdict, and a
+    `** 0.5` exponent shaping cross-class projections.
   ⭐ A stale constant was once true here. A transplanted one was never about here at all, and
-  its comment is not a tripwire but a confession nobody read as one.
+  its comment is not a tripwire but a confession nobody read as one. **An undocumented one has
+  neither — and is therefore INVISIBLE TO EXACTLY THE SWEEP THAT FINDS THE OTHER TWO.** Grep
+  for comments and you find stale and transplanted; only grepping for ARITHMETIC finds the
+  third kind, whose whole defect is that there is nothing to read.
+
+⭐ **A REACTIVE CHECK IS NOT AN AUDIT.** pai-sizer's own ledger on the exercise: *1 of 3 found
+by prompt, 2 of 3 found by sweeping* — and the two they would have missed are precisely the
+ones with no comment to find. Being told about an instance and fixing it feels like diligence
+and terminates the search at the one item somebody happened to mention.
+
+🛑 **RECEIPTS, AGAIN MINE.** I told pai-sizer I had not swept holobench — that `672` was found
+because they asked, not because I looked. Doing it properly afterwards, by arithmetic:
+`HOLD_S = 75.0` in the real-silicon scorer has **no comment at all**, and it sets how long the
+segment runs — so the 381 and 837 frame counts published in the 2026-09-02 evidence bundle are
+75 seconds of beaconing, not a property of the wire. `QUIET_MARGIN = 3.0` documents what it
+means and never why 3 rather than 2 — documented intent, undocumented magnitude, which reads
+as justified *because the sentence beside it is*.
+⭐ And the one that got it right shows the target: `BEAT_TIMEOUT_S` does not trust itself. The
+scorer MEASURES whether that timeout is defensible for each node and refuses to score the ones
+it is not — a constant that declines rather than asserts, which is rule 11 applied to a number
+instead of a tool.
+
+⚠️ **NONE OF THEM FIXED, ON PURPOSE.** Replacing an undocumented guess with a fabricated
+justification makes code look audited while changing nothing real. Marked findable, logged for
+a run that can measure them.
 
 ⭐ **AND NOT FIXING IT CAN BE THE CORRECT ACT.** pai-sizer left theirs in place and said why:
 correcting it needs a measured NPU-runtime overhead they do not have, and **replacing a

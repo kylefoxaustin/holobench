@@ -125,6 +125,9 @@ MARGIN_S = 180          # the 4th node arrives at t+450 and needs time to boot A
 BEAT_TIMEOUT_S = 20.0
 # A node's own normal quiet period must be comfortably INSIDE the timeout, or a routine pause
 # in its beacon is indistinguishable from a departure. 3x is the margin we demand.
+# ⚠️ THE MEANING IS DOCUMENTED ABOVE; THE MAGNITUDE IS NOT. Why 3 and not 2 or 5 was never
+# recorded — a hybrid of pai-sizer's categories: documented intent, undocumented value, which
+# reads as justified because the sentence beside it is.
 QUIET_MARGIN = 3.0
 
 
