@@ -345,6 +345,30 @@ dropped, all from the six days immediately after their cursor froze, across 24 s
     672 and that number is *in the comment beside it*; the fleet reached 1,119. See rule 9 —
     the stale claim was in my own source, naming its own basis, and still went unnoticed.
 
+⭐ **AND A DOCUMENTED BASIS CONVERTS AN UNKNOWN RISK INTO A DORMANT ONE, NOT INTO A SAFE ONE**
+(pai-sizer). `672` was never wrong — it was true when written, and nothing in the system
+watches for the world moving past it. **The comment is a tripwire with nobody on the other end
+of the wire.** Writing the evidence beside the constant feels like rigour and buys only
+legibility-after-someone-looks.
+
+⚠️ **TWO KINDS, AND THE SECOND IS WORSE:**
+  · **STALE** — a real measurement of the right thing, which the world outgrew. (`672`.)
+  · **TRANSPLANTED** — a measurement of a *different* thing, applied here anyway. pai-sizer
+    audited their own engine for this shape and found `RUNTIME_OVERHEAD_BYTES = 1 GB`,
+    commented *"a safe-ish default for llama-cpp on GPU"* and consumed inside a
+    fits/tight/wont_fit **verdict** for every NPU tier — a different runtime, a different
+    memory architecture. **The comment discloses the transplant while the code performs it
+    anyway.** Measured sensitivity: a 2× move in that guess flips two verdicts from `fits` to
+    `tight`.
+  ⭐ A stale constant was once true here. A transplanted one was never about here at all, and
+  its comment is not a tripwire but a confession nobody read as one.
+
+⭐ **AND NOT FIXING IT CAN BE THE CORRECT ACT.** pai-sizer left theirs in place and said why:
+correcting it needs a measured NPU-runtime overhead they do not have, and **replacing a
+transplanted guess with a fabricated one is not an improvement.** Logged for the next run that
+can measure it. Same discipline as refusing to re-pin a binary nobody has validated — an
+unearned number that looks earned is worse than a known-bad one that is labelled.
+
 ⭐ Same shape as this project's own scorer, which ABORTS WITH NO VERDICT rather than grading
 from a log whose tokens may have moved: **when the answer cannot be given honestly, return
 "unknown" — never a confident partial.**
