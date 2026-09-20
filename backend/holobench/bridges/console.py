@@ -51,11 +51,23 @@ class SerialTap:
         last: Optional[Exception] = None
         while asyncio.get_event_loop().time() < deadline:
             try:
-                self._reader, self._writer = await asyncio.open_unix_connection(
-                    str(self.socket_path)
-                )
+                # ⭐ UNIX SOCKET *OR* host:port. QEMU hands us a unix chardev socket;
+                # Renode's `emulation CreateServerSocketTerminal <port> <name> false`
+                # hands us a TCP one carrying the identical raw guest bytes (verified
+                # 2026-09-20: b'MCUX SDK version: 2026.06.00\r\nhello world.\r\n' off
+                # an RT1180 CM33, no telnet negotiation, no log framing).
+                # ⚠️ telnetMode MUST be false on the Renode side or the stream is
+                # prefixed with IAC negotiation bytes and stops being the guest's output.
+                target = str(self.socket_path)
+                if ":" in target and not Path(target).exists():
+                    host, _, port = target.rpartition(":")
+                    self._reader, self._writer = await asyncio.open_connection(
+                        host or "127.0.0.1", int(port)
+                    )
+                else:
+                    self._reader, self._writer = await asyncio.open_unix_connection(target)
                 break
-            except (FileNotFoundError, ConnectionRefusedError) as exc:
+            except (FileNotFoundError, ConnectionRefusedError, OSError) as exc:
                 last = exc
                 await asyncio.sleep(0.1)
         else:
