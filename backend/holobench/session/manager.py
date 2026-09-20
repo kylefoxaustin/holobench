@@ -375,6 +375,11 @@ class Session:
 
     # -- lifecycle ----------------------------------------------------------
 
+    # ⚠️ qmp_timeout IS A THRESHOLD WITH NO BASIS (found 2026-09-20, widened sweep). It
+    # decides whether a board is declared to have FAILED TO LAUNCH, so a board merely slower
+    # than this guess — a large .wic, a loaded host — is reported identically to a broken one.
+    # Nobody measured 15. Not replaced with another invented number; recorded so the next
+    # launch failure is read as "or it was slow" until someone times a cold start.
     async def launch(self, *, qmp_timeout: float = 15.0, tap_serial: bool = True) -> None:
         if self.state not in (SessionState.CREATED,):
             raise SessionError(f"session {self.id} already launched")

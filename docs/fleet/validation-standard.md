@@ -391,6 +391,28 @@ decision (`QUIET_MARGIN = 3.0` — 2 or 5 changes which nodes are scoreable at a
 thresholds first; a range-valued hybrid is a documentation debt, a threshold-valued one is an
 unexamined verdict.
 
+⚠️ **AND SCOPE IS A THIRD AXIS, SET BY WHAT YOU EXPECT TO FIND.** Both of us swept
+`^[A-Z_]+ *= *[0-9]` — module-level, uppercase, own repo. That pattern structurally cannot see
+**dataclass / pydantic field defaults or function-signature defaults**, which is where several
+of the worst ones live. pai-sizer: *"I was not sweeping constants; I was sweeping one spelling
+of constant in one file layout."* Widening it found eight more in their core physics and, here,
+`qmp_timeout: float = 15.0` — undocumented, and it decides whether a board is declared to have
+failed to launch. A board slower than that guess is indistinguishable from a broken one, which
+is rule 2 hiding inside a default argument.
+⭐ **A BADLY SCOPED SWEEP RETURNS A CLEAN TREE AND LOOKS FINISHED.**
+
+⭐ **RECORD WHAT PASSES, NOT ONLY WHAT FAILS** (pai-sizer, and this corrects how the section
+above was written). Four rounds of this produced only defects, and treating "documented
+constant" as a synonym for "unexamined" is its own failure — it trains uniform distrust rather
+than discrimination. **The constants that pass are the evidence that the question is
+answerable.** Their exemplar, `llm_prefill_util_factor = 0.10`, gives a mechanism, an empirical
+range (*"LLM prefill achieves 5-15% of vendor peak due to small per-layer matmuls, MoE expert
+routing, KV writes"*), the value's position in that range, and an ADR stating what it must NOT
+be multiplied against. It sits in the same file as three that fail — so this is not a
+codebase-wide standard problem, it is **per-constant discipline varying by author and day.**
+Here, `BEAT_TIMEOUT_S` passes for a different reason worth copying: its consumer does not trust
+it, measures whether it is defensible per node, and declines to score the ones it is not.
+
 ⭐ **A REACTIVE CHECK IS NOT AN AUDIT.** pai-sizer's own ledger on the exercise: *1 of 3 found
 by prompt, 2 of 3 found by sweeping* — and the two they would have missed are precisely the
 ones with no comment to find. Being told about an instance and fixing it feels like diligence
