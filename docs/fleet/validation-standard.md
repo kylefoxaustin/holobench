@@ -452,6 +452,19 @@ failed to launch. A board slower than that guess is indistinguishable from a bro
 is rule 2 hiding inside a default argument.
 ⭐ **A BADLY SCOPED SWEEP RETURNS A CLEAN TREE AND LOOKS FINISHED.**
 
+⭐⭐ **AND ASK FIRST WHETHER THE CONSTANT HAS TO BE CHOSEN AT ALL** (pai-sizer). Of the three
+shapes that pass, the strongest is the one that *was never a guess*: a value with an
+**external referent and a verification** — a protocol field checked gate-for-gate against the
+source that defines it. Every failing constant in either repo is one that HAD to be chosen.
+So the order for a new number is: *can this have an external referent?* → if not, *can its
+consumer decline to rely on it?* → only then, *how do I justify what I picked?*
+**Documentation is the fallback, not the standard.**
+
+⚠️ **AND AN ARTIFACT WRITTEN MID-CONVERSATION IS ALREADY STALE.** Both audits produced by this
+exchange omitted material sent minutes after they were committed — *the same decay as a commit
+message, with a later start date.* Durability is not a property of the medium; it is a
+property of going back and checking.
+
 ⭐ **RECORD WHAT PASSES, NOT ONLY WHAT FAILS** (pai-sizer, and this corrects how the section
 above was written). Four rounds of this produced only defects, and treating "documented
 constant" as a synonym for "unexamined" is its own failure — it trains uniform distrust rather

@@ -1,5 +1,11 @@
 # Holobench constants audit (2026-09-20)
 
+> ⚠️ **This file was already stale when committed.** It was written mid-exchange and omitted
+> two things sent minutes later — a third passing shape, and the reframe now at the top of the
+> PASSES section. **An artifact written during a conversation captures it up to that point and
+> then stops: the same decay as a commit message, with a later start date** (pai-sizer). The
+> fix is not a better medium, it is going back and checking. Revision 2, 2026-09-20.
+
 Every magic number in this repo that decides or scales something, classified. Produced during
 a seven-round exchange with `pai-sizer`; the method lives in
 `docs/fleet/validation-standard.md` rule 11, this file is the *instances*.
@@ -44,13 +50,28 @@ loaded CI runner or NFS asset dir is outside that sample and the 17× does not e
 ## PASSES — and these are the point, not the failures
 
 Treating "documented constant" as a synonym for "unexamined" trains uniform distrust rather
-than discrimination. Two shapes pass here, by different routes:
+than discrimination.
+
+⭐⭐ **ASK FIRST WHETHER THE CONSTANT HAS TO BE CHOSEN AT ALL** (pai-sizer's reframe, from
+reading the third shape below). **Documentation is the fallback, not the standard.** Every
+constant in the FAILS table is one that *had* to be chosen; the strongest pass is the one that
+was never a choice. So for a new number the order is: *can this be given an external referent
+and verified?* → if not, *can its consumer decline to rely on it?* → only then, *how do I
+justify the value I picked?*
+
+**Three shapes pass, by different routes** — the set matters more than any one, and the third
+is the one to reach for:
 
 - **`BEAT_TIMEOUT_S = 20.0`** — passes by **declining to be relied on**. Its consumer does not
   trust it: §0 of the scorer *measures* whether that timeout is defensible for each node and
   refuses to score the ones it is not. It exists because mcxn947 once tuned the equivalent
   value and manufactured 75 departures that never happened — *the number was never the
   problem, the fact that it was a guess was.*
+- **`llm_prefill_util_factor = 0.10`** (pai-sizer's, recorded here because a reader of this
+  file should see all three shapes, not only mine) — passes by **justifying the value**: it
+  states a mechanism, an empirical range (*"LLM prefill achieves 5-15% of vendor peak due to
+  small per-layer matmuls, MoE expert routing, KV writes"*), the value's position within that
+  range, and an ADR fixing what it must *not* be multiplied against.
 - **The wire contract** — `FRAME_LEN=64`, `BEACON_MAGIC`, the field offsets, the ethertype
   block. Not guesses at all: an **externally specified** protocol shared with 95emulator's
   `enet-lab3.c` and verified gate-for-gate against that source at a pinned commit. A constant
