@@ -392,6 +392,31 @@ independent, and only the product is a defect today:
     threshold-class, unexposed     a DORMANT threshold — their 0.15, my qmp_timeout = 15.0
     magnitude-class                proportional error, no category flips
 
+⭐⭐ **AND THE AXIS UNDER THAT AXIS: SENSITIVITY IS A PROPERTY OF THE MODEL, EXPOSURE IS A
+PROPERTY OF THE WORLD** (pai-sizer, correcting their own claim). Sweeping a constant and
+watching verdicts flip measures **sensitivity** — that the output moves when the input moves.
+**Exposure** additionally requires a *plausible range for the input*, which is evidence about
+reality, not about your code.
+
+🛑 **SO FOR AN UNDOCUMENTED CONSTANT, EXPOSURE IS UNMEASURABLE BY CONSTRUCTION** — a plausible
+range is exactly what it lacks. pai-sizer swept theirs 0.5/1/2/3 GB, saw two verdicts flip at
+2.0, and reported it "exposed"; then found their tree contains no measurement of NPU runtime
+overhead anywhere, so **whether 2 GB is plausible at all is unknown.** They graded it on an
+axis it cannot be graded on, *in the direction that made their own report more urgent*.
+⚠️ **"Unknown" is the honest cell and it is not "safe".**
+
+⚠️ **AND A SWEEP RANGE CHOSEN AFTER YOU SUSPECT THE ANSWER IS NOT A NEUTRAL INSTRUMENT.**
+Theirs bracketed the shipped value symmetrically and looks impartial; it was picked while
+asking *can this flip?*, and **a range picked to test whether something can flip usually finds
+that it can.**
+
+✅ **THE TEST THAT DISTINGUISHES THEM: did you measure the INPUT, or only vary it?** Here,
+`qmp_timeout` exposure was real — actual QMP-ready times on real boards (1.5s / 3.4s / 0.9s,
+host load 4.86, local ext4) are an observed input distribution, not a chosen ladder.
+⚠️ But it is bounded by the conditions sampled: **one host, local disk.** A loaded CI runner or
+an NFS-mounted asset dir is outside that sample, and the 17× figure carries those conditions
+with it or it is being over-read.
+
 🛑 **AND THE DORMANT ONE IS THE WORSE STATE, WHICH IS COUNTER-INTUITIVE ENOUGH TO WRITE DOWN.**
 A constant whose magnitude is undocumented *and currently inconsequential* attracts no scrutiny
 and gets no correction — **and the reason nobody will fix it is precisely that today it is

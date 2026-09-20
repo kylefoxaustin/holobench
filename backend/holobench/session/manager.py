@@ -384,6 +384,9 @@ class Session:
     #     imx95-evk-sd     0.9s        ← 11.9 GB golden + qemu-img overlay, the worst case
     #                                    (qcow2 overlay creation is O(1), not O(size))
     # 17x headroom at the slowest board. NOTHING SITS NEAR 15.
+    # ⚠️ SCOPED: one host, LOCAL ext4, load average 4.86. That is an observed input
+    # distribution (exposure), not a chosen ladder (sensitivity) — but a loaded CI runner or
+    # an NFS asset dir is outside the sample, and the 17x carries those conditions with it.
     # ⭐ Threshold-class by STRUCTURE, quiescent by DATA (pai-sizer's two-axis severity). That
     # is not "fine" — it is the state nobody ever corrects, BECAUSE TODAY IT IS RIGHT, and it
     # stops being harmless the first time a host is loaded enough or an asset dir remote
