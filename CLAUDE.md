@@ -114,6 +114,10 @@ backend without a strong reason.
   injection by `session/` (virtio-9p share), introspection by `api/`, and reservations by
   `session/` + `api/`. If you are about to create one of those four, put the code where its
   siblings already live instead.
+- **Magic numbers are audited, and the audit is `docs/CONSTANTS_AUDIT.md`.** Before adding a
+  constant that decides or scales anything, state a basis that justifies the VALUE and not
+  merely the direction — and if you cannot, say so there rather than inventing one. Several
+  in this tree have no defensible basis and are listed; two pass, for reasons worth copying.
 - Keep board-specific knowledge out of code. If you're writing `if soc ==
   "imx95"`, stop — that belongs in the profile.
 - Commit per phase milestone with a clear message; keep PRs reviewable.

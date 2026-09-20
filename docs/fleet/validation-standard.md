@@ -410,7 +410,12 @@ Theirs bracketed the shipped value symmetrically and looks impartial; it was pic
 asking *can this flip?*, and **a range picked to test whether something can flip usually finds
 that it can.**
 
-✅ **THE TEST THAT DISTINGUISHES THEM: did you measure the INPUT, or only vary it?** Here,
+⭐ **THERE IS A THIRD RUNG: VALIDITY** (pai-sizer, on my scope confession). The ladder is
+**vary the input (sensitivity) → sample the world (exposure) → state which world you sampled
+(validity).** A genuine input distribution measured in one corner and reported bare is still
+over-read; *the 17× is stronger with its conditions attached than it was without them.*
+
+✅ **THE TEST THAT DISTINGUISHES THE FIRST TWO: did you measure the INPUT, or only vary it?** Here,
 `qmp_timeout` exposure was real — actual QMP-ready times on real boards (1.5s / 3.4s / 0.9s,
 host load 4.86, local ext4) are an observed input distribution, not a chosen ladder.
 ⚠️ But it is bounded by the conditions sampled: **one host, local disk.** A loaded CI runner or
