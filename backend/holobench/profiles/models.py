@@ -567,13 +567,44 @@ class LabNodeBeacon(_Strict):
         return self
 
 
+class RenodeSpec(_Strict):
+    """A board driven by Renode instead of QEMU.
+
+    ⭐ THE UNIT IS STILL A BOARD (CLAUDE.md §8). This is not a generic emulator launcher:
+    a profile declares one board's facts, and `backend` says which emulator renders them.
+    Everything a board has that is not emulator-specific — its serial ports, its id, its
+    SoC — is shared with the QEMU path and not duplicated here.
+
+    Verified against Renode 1.17.0 on 2026-09-20: holobench's own console tap read a
+    Renode-emulated i.MX RT1180 CM33 byte-for-byte over `CreateServerSocketTerminal`.
+    """
+
+    binary: str = "renode"          # the launcher; portable tarballs ship one at its root
+    platform: str                   # .repl describing the machine
+    firmware: Optional[str] = None  # ELF loaded with `sysbus LoadELF`
+    machine_name: str = "board"     # `mach create "<name>"`
+    uart: str = "uart0"             # peripheral connected to the console terminal
+    # ⚠️ TWO HOOKS, NOT ONE, AND THE SPLIT IS LOAD-BEARING (found 2026-09-21 by running it).
+    # A single "pre_commands" list put everything before `mach create`, and Renode answered
+    # "No such command or device: sysbus" — because `sysbus Redirect` addresses a machine
+    # that does not exist until LoadPlatformDescription has run. The board's own script has
+    # the include BEFORE and the redirect AFTER; collapsing them into one list looked tidy
+    # and was wrong in a way no amount of reading the model would have shown.
+    pre_commands: list[str] = Field(default_factory=list)      # before `mach create`
+    post_platform: list[str] = Field(default_factory=list)     # after LoadPlatformDescription
+
+
 class Profile(_Strict):
     id: str
     display_name: str
     soc: str
     description: Optional[str] = None
 
-    qemu: QemuSpec
+    # ⭐ EXACTLY ONE BACKEND PER BOARD, enforced below. `qemu` was required until
+    # 2026-09-21; it is optional now so a Renode board can exist without a fabricated QEMU
+    # block, which would have been a lie in the profile to satisfy a type.
+    qemu: Optional[QemuSpec] = None
+    renode: Optional[RenodeSpec] = None
     boot: BootSpec = Field(default_factory=BootSpec)
     serial: list[SerialPort] = Field(default_factory=list)
     display: DisplaySpec = Field(default_factory=DisplaySpec)
@@ -590,6 +621,22 @@ class Profile(_Strict):
     power: PowerSpec = Field(default_factory=PowerSpec)
     introspection: Introspection = Field(default_factory=Introspection)
     reservation: Reservation = Field(default_factory=Reservation)
+
+    @model_validator(mode="after")
+    def _exactly_one_backend(self):
+        """A board is driven by one emulator. Zero is unlaunchable; two is ambiguous, and an
+        ambiguous profile would pick a backend by accident of field order."""
+        have = [n for n in ("qemu", "renode") if getattr(self, n) is not None]
+        if len(have) != 1:
+            raise ValueError(
+                f"profile '{self.id}' declares {len(have)} backends ({have or 'none'}); "
+                f"exactly one of qemu:/renode: is required")
+        return self
+
+    @property
+    def backend(self) -> str:
+        """Which emulator renders this board — 'qemu' or 'renode'."""
+        return "renode" if self.renode is not None else "qemu"
 
     @property
     def default_serial(self) -> Optional[SerialPort]:

@@ -1,0 +1,41 @@
+# i.MX RT1180 EVK — driven by RENODE rather than QEMU.
+#
+# ⭐ THE SAME BOARD EXISTS AS A QEMU PROFILE (imxrt1180-evk-uart-device). That is the point:
+# Kyle's goal for the renode session was "run the same software on Renode as on QEMU", and
+# holobench is where that becomes end-to-end testable — same harness, same liveness oracle,
+# two backends. A scorecard compares two reports; this compares two runs.
+#
+# ⚠️ FACTS TRANSCRIBED FROM rt1180renode, NOT GUESSED (CLAUDE.md §7). The platform .repl, the
+# secure-alias redirect and the console peripheral are theirs; holobench never adds files to
+# an emulator repo and never invents its machine facts.
+id:           imxrt1180-renode
+display_name: "NXP i.MX RT1180 EVK (Renode, CM33)"
+soc:          "NXP i.MX RT1180 (Cortex-M33)"
+description:  "Stock NXP SDK hello_world on the CM33, under Renode — the cross-emulator twin of imxrt1180-evk-uart-device."
+
+renode:
+  binary:       /home/kyle/opt/renode_1.17.0-portable/renode
+  platform:     /home/kyle/Documents/GitHub/rt1180renode/platforms/mimxrt1189_cm33.repl
+  # ⚠️ THE STABLE ARTIFACT, NOT THE FIRST GREP HIT. rt1180renode's hello script contains TWO
+  # .elf references — a "/path/to/..." PLACEHOLDER and the real one. `head -1` takes the
+  # placeholder, and an earlier spike took a path under another session's SCRATCHPAD, which
+  # would have evaporated. A grep hit is not a finding until you read what it hit.
+  firmware:     /home/kyle/.cache/rt1180-artifacts/sdk/hello_world_cm33.elf
+  machine_name: rt1180
+  uart:         lpuart1
+  pre_commands:
+    - "include @/home/kyle/Documents/GitHub/rt1180renode/scripts/load_peripherals.resc"
+  post_platform:
+    # ⚠️ AFTER LoadPlatformDescription, not before — sysbus addresses a machine that does not
+    # exist until the platform is loaded. Renode says "No such command or device: sysbus".
+    # Blanket TrustZone-M secure mirror: the NS peripheral window aliased at 0x5000_0000.
+    # rt1180renode's comment explains why a blanket mirror beats per-peripheral aliasing —
+    # S3MU was the one block whose secure alias was missing, because every SDK example runs
+    # non-secure and only Zephyr exposed it.
+    - "sysbus Redirect 0x50000000 0x40000000 0x10000000"
+
+serial:
+  - { name: "CM33 console (LPUART1)", chardev: console0, role: m-core, default: true }
+
+display: { enabled: false, device: null, vnc: false }
+introspection: { snapshots: false }

@@ -118,6 +118,7 @@ def test_qemu_binary_override_wins(tmp_path, monkeypatch):
 
 
 def test_no_profile_hardcodes_host_bsp_path():
+    checked = 0
     # Guard: an absolute /home/... loader path in extra_args would mean a restricted
     # artifact pinned to the build host (the thing that caused the redistribution
     # incident). Profiles must use {asset_dir} instead.
@@ -126,9 +127,18 @@ def test_no_profile_hardcodes_host_bsp_path():
             p = load_profile(pid)
         except ProfileError:
             continue
+        # ⚠️ SKIP BY BACKEND, EXPLICITLY — never by catching the AttributeError. A Renode
+        # board legitimately has no qemu block; a BROKEN qemu profile also raises, and a
+        # try/except would swallow both identically — rule 2 hidden inside a guard.
+        if p.backend != "qemu":
+            continue
+        checked += 1
         for a in p.qemu.extra_args:
             assert "/home/" not in a, f"{pid} extra_args has a host path: {a}"
 
+
+    # ⭐ A counter nobody asserts on is not coverage.
+    assert checked >= 20, f"only {checked} QEMU profiles checked; filter over-matching"
 
 def test_audio_defaults_to_none(tmp_path):
     p = load_profile("virt-smoke")
@@ -675,9 +685,13 @@ def test_no_profile_can_produce_an_UNREAPABLE_qemu():
     from pathlib import Path as _P
 
     offenders = []
+    checked = 0
     for entry in list_profiles():
         pid = entry.id if hasattr(entry, "id") else entry
         p = load_profile(pid)
+        if p.backend != "qemu":
+            continue          # a Renode board has no argv; see build_renode_script
+        checked += 1
         wd = _P("/tmp/hb-invariant-probe")
         rt = SessionRuntime(
             work_dir=wd, qmp_socket=wd / "qmp.sock", asset_dir=_P("/tmp/hb-assets"),
@@ -689,3 +703,6 @@ def test_no_profile_can_produce_an_UNREAPABLE_qemu():
             offenders.append(f"{pid}: starts PAUSED — unwakeable if its launcher dies")
 
     assert not offenders, "\n  ".join(["unreapable spawn(s) possible:"] + offenders)
+    # ⭐ A backend filter that silently matched zero profiles would pass forever while
+    # checking nothing — inert by wiring, one level up.
+    assert checked >= 20, f"only {checked} QEMU profiles checked; filter over-matching"

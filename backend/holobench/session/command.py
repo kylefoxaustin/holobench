@@ -43,6 +43,8 @@ class SessionRuntime:
     # purpose — see BatchShare. None unless a batch was requested for this session.
     batch_in_dir: Optional[Path] = None
     batch_out_dir: Optional[Path] = None
+    # TCP port Renode exposes the guest UART on (QEMU uses a unix chardev socket instead).
+    renode_console_port: Optional[int] = None
     # Scratch qcow2 backing savevm/loadvm snapshots (not used by the guest).
     snapshot_disk: Optional[Path] = None
     # Per-session qcow2 overlay over the golden disk (image-swap / reinstall).
@@ -211,8 +213,48 @@ def _boot_args(profile: Profile, rt: SessionRuntime) -> list[str]:
     return args
 
 
+def build_renode_script(profile: Profile, rt: SessionRuntime) -> str:
+    """Render the .resc a Renode board launches from — the analogue of build_command's argv.
+
+    ⭐ ONE CHOICE HERE IS LOAD-BEARING AND WAS MEASURED, NOT ASSUMED (2026-09-20):
+    `CreateServerSocketTerminal <port> <name> false` — the THIRD ARGUMENT is telnetMode and it
+    DEFAULTS TO TRUE. Left at the default, the stream is prefixed with IAC negotiation bytes
+    and stops being the guest's output; the whole point of a QEMU-vs-Renode comparison is that
+    both sides deliver the same bytes. Verified: b'MCUX SDK version: 2026.06.00\r\nhello
+    world.\r\n' off an RT1180 CM33, byte-identical in kind to a QEMU chardev.
+    ⚠️ Do not "simplify" this to showAnalyzer — that path wraps every line in Renode's log
+    format ("[time] [INFO] lpuart1: ...") and is a RENDERING of the guest's output, not the
+    output. Fine for a liveness grep, useless for byte-exact work.
+    """
+    r = profile.renode
+    if r is None:
+        raise CommandError(f"profile '{profile.id}' is not a Renode board")
+
+    lines: list[str] = ["using sysbus"]
+    lines += list(r.pre_commands)                 # board knowledge, verbatim from the profile
+    lines.append(f'mach create "{r.machine_name}"')
+    lines.append(f"machine LoadPlatformDescription @{_resolve_artifact(r.platform, rt.asset_dir)}")
+
+    lines += list(r.post_platform)                # machine exists now: sysbus &c addressable
+
+    port = rt.renode_console_port
+    if port:
+        lines.append(f'emulation CreateServerSocketTerminal {port} "hbterm" false')
+        lines.append(f"connector Connect {r.uart} hbterm")
+
+    if r.firmware:
+        lines.append(f"sysbus LoadELF @{_resolve_artifact(r.firmware, rt.asset_dir)}")
+    lines.append("start")
+    return "\n".join(lines) + "\n"
+
+
 def build_command(profile: Profile, rt: SessionRuntime) -> list[str]:
     """Build the full QEMU argv for a session. Pure function, no side effects."""
+    if profile.qemu is None:
+        raise CommandError(
+            f"profile '{profile.id}' is a {profile.backend} board, not a QEMU one — "
+            f"use build_renode_script(). (An AttributeError on NoneType here would have "
+            f"named pathlib's cousin instead of the actual mismatch.)")
     q = profile.qemu
     # Priority: a wizard-built per-board binary (rt.qemu_binary) > $HOLOBENCH_QEMU
     # (container's one baked qemu) > the profile's path (with ${VARS} expanded).
