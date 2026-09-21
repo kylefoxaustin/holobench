@@ -213,7 +213,8 @@ def _boot_args(profile: Profile, rt: SessionRuntime) -> list[str]:
     return args
 
 
-def build_renode_script(profile: Profile, rt: SessionRuntime) -> str:
+def build_renode_script(profile: Profile, rt: SessionRuntime, *,
+                        autostart: bool = True) -> str:
     """Render the .resc a Renode board launches from — the analogue of build_command's argv.
 
     ⭐ ONE CHOICE HERE IS LOAD-BEARING AND WAS MEASURED, NOT ASSUMED (2026-09-20):
@@ -241,10 +242,33 @@ def build_renode_script(profile: Profile, rt: SessionRuntime) -> str:
     if port:
         lines.append(f'emulation CreateServerSocketTerminal {port} "hbterm" false')
         lines.append(f"connector Connect {r.uart} hbterm")
+    else:
+        # ⚠️ SAY SO. This used to be a bare `if port:` that dropped the console silently,
+        # and `holobench command <id>` — whose entire job is to show what launch will run —
+        # printed a script with no console wiring and no hint that two lines were missing.
+        # A renderer that omits things quietly cannot be used to review what will run.
+        lines.append("# (no console: renode_console_port unset — the session allocates a")
+        lines.append("#  free TCP port at launch and inserts the socket terminal here)")
 
     if r.firmware:
         lines.append(f"sysbus LoadELF @{_resolve_artifact(r.firmware, rt.asset_dir)}")
-    lines.append("start")
+    # ⭐ AUTOSTART IS A CHOICE, AND THE SESSION DECLINES IT — DEFENSIVELY, NOT AS A FIX.
+    # ⚠️ READ THIS BEFORE CITING IT AS A BUGFIX. The first version of this comment said a
+    # .resc ending in `start` loses the firmware's opening bytes to a terminal with nobody
+    # reading. That is FALSE for Renode, and a planted regression proved it: with `start`
+    # restored the suite stayed green, so the claim was measured directly —
+    #
+    #   MEASURED 2026-09-21: Renode's CreateServerSocketTerminal BUFFERS. A client that
+    #   connects 12 SECONDS after the guest has printed its banner still receives it in
+    #   full ("MCUX SDK version: 2026.06.00\r\nhello world.\r\n").
+    #
+    # So autostart=False prevents no loss we have ever observed. It is kept because it is
+    # still the better shape — the session decides when the board runs, rather than
+    # inheriting whatever the script did, and nothing here depends on a buffer whose size
+    # is undocumented and which a long boot could plausibly exceed. Standalone callers (a
+    # human running the rendered script by hand) keep `start` by default.
+    if autostart:
+        lines.append("start")
     return "\n".join(lines) + "\n"
 
 

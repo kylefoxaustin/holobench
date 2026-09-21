@@ -20,9 +20,29 @@ special cases. The design must stay board-agnostic.
 
 ## 2. The Prime Directive (do not violate)
 
-> **Holobench drives QEMU only through standard, upstreamable interfaces.**
+> **Holobench drives its emulator only through standard, upstreamable interfaces.**
 
-Allowed control surface:
+⭐ **THERE ARE TWO EMULATORS NOW (added 2026-09-21).** A profile declares `backend:`
+implicitly by carrying either a `qemu:` or a `renode:` block — exactly one, enforced by a
+model validator. The Prime Directive is unchanged in substance and applies to both: drive
+the emulator the way its own users and its own docs drive it, and never fork it.
+
+Renode's equivalent allowed surface — all stock CLI/Monitor, nothing added for Holobench:
+- **Monitor over TCP** (`--port`) — the QMP analogue: `machine IsPaused`, `machine Reset`,
+  `pause`, `start`, `peripherals`, `currentTime`, `Save`, `quit`.
+- **Console** — `emulation CreateServerSocketTerminal <port> "<name>" false`
+  (⚠️ the third argument is telnetMode and **defaults to true**; left at the default the
+  stream is no longer the guest's bytes).
+- **Lifecycle** — `--pid-file`; headless via `--disable-xwt --hide-log --plain`.
+- **Machine description** — the board's own `.repl`/`.resc`, read from the emulator repo,
+  never copied into or edited from here.
+
+⚠️ **THE TWO BACKENDS ARE NOT SUBSETS OF EACH OTHER.** QEMU has `screendump`, a QMP event
+stream and HMP `info`; Renode has a one-command device tree, virtual-vs-real uptime, and a
+real state `Save`. Ask `Session.capabilities()` — never assume a verb exists, and never
+make a board look broken for lacking one. `UnsupportedVerb` is the honest answer.
+
+Allowed control surface (QEMU):
 - **QMP** — standard commands only (`query-status`, `system_reset`, `stop`,
   `cont`, `quit`, `screendump`, `query-block`, `qom-list`, `qom-get`,
   `human-monitor-command` for read-only `info` queries, etc.).
@@ -109,6 +129,9 @@ backend without a strong reason.
   aspirational for months and a session obeying it would have created directories beside
   the ones that already do the job):
   `profiles/`, `session/`, `bridges/console.py`, `api/`, `labs/`, `auth/`, `setup/`.
+  The Renode backend lives in `session/renode.py` (the Monitor client) and
+  `session/command.py` (`build_renode_script`) — beside their QEMU siblings, not in a
+  parallel tree.
   ⚠️ `bridges/display.py`, `bridges/files.py`, `introspect/` and `scheduler/` **do not
   exist and never did** — display is served by `api/` (QMP `screendump` → PNG), file
   injection by `session/` (virtio-9p share), introspection by `api/`, and reservations by

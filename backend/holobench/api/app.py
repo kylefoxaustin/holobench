@@ -297,10 +297,17 @@ def _session_view(s: Session) -> dict:
         # profile carries a binary_pin. Recording the hash does not gate anything and
         # needs no validation — it just means a result can be tied to the program that
         # produced it, instead of to a path that happened to hold something that day.
+        "backend": s.profile.backend,
+        # ⭐ CAPABILITIES ARE PART OF THE SESSION, not a client-side guess. The UI must be
+        # able to hide the screendump panel and the HMP console for a Renode board without
+        # knowing what Renode is — it asks the board what it can do.
+        "capabilities": s.capabilities(),
         "qemu_binary": {
-            "path": (s.argv[0] if getattr(s, "argv", None) else s.profile.qemu.binary),
+            "path": (s.argv[0] if getattr(s, "argv", None)
+                     else (s.profile.qemu.binary if s.profile.backend == "qemu"
+                           else s.profile.renode.binary)),
             "md5": getattr(s, "qemu_binary_md5", None),
-            "pinned": bool(s.profile.qemu.binary_pin),
+            "pinned": bool(s.profile.qemu.binary_pin) if s.profile.backend == "qemu" else False,
         },
         "serial": [
             {"name": p.name, "chardev": p.chardev, "role": p.role, "default": p.default}
@@ -635,7 +642,9 @@ def get_profiles() -> list[dict]:
                 "display_name": p.display_name,
                 "soc": p.soc,
                 "description": p.description,
-                "machine": p.qemu.machine,
+                "backend": p.backend,
+                "machine": (p.qemu.machine if p.backend == "qemu"
+                            else p.renode.machine_name),
                 "assets_ready": default_asset_dir(p.id) is not None,
             }
         )

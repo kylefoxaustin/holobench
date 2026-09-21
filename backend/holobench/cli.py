@@ -9,6 +9,7 @@ system_reset + quit). `serve` runs the full web UI (console, LCD, memory map, de
 from __future__ import annotations
 
 import argparse
+import pathlib
 import asyncio
 import json
 import sys
@@ -19,6 +20,7 @@ from .labs import LabCoordinator, LabError, list_labs, load_lab
 from .profiles import ProfileError, list_profiles, load_profile
 from .profiles.loader import default_asset_dir
 from .session import SessionError, build_command, command_str
+from .session.command import build_renode_script
 from .session import control
 from .session.command import SessionRuntime
 from .session.manager import DEFAULT_BASE_DIR, Session, SessionManager
@@ -43,7 +45,11 @@ def cmd_profiles(_args: argparse.Namespace) -> int:
     for pid in ids:
         try:
             p = load_profile(pid)
-            print(f"{pid:16}  {p.display_name:20}  machine={p.qemu.machine}")
+            # A board's identifying fact is machine-type for QEMU and platform for
+            # Renode. Printing "machine=" for both would be a lie about one of them.
+            what = (f"machine={p.qemu.machine}" if p.backend == "qemu"
+                    else f"renode={pathlib.Path(p.renode.platform).name}")
+            print(f"{pid:16}  {p.display_name:20}  {what}")
         except ProfileError as exc:
             print(f"{pid:16}  <invalid: {exc.__class__.__name__}>")
     return 0
@@ -79,6 +85,11 @@ def cmd_command(args: argparse.Namespace) -> int:
         asset_dir=_resolve_assets(p.id, args.assets),
         share_dir=work / "share" if (fi.nine_p.enabled or fi.tftp.enabled) else None,
     )
+    if p.backend == "renode":
+        # DRY RUN: leave the console port unset. build_renode_script then renders an
+        # explicit note where the two console lines would go, rather than dropping them.
+        print(build_renode_script(p, rt, autostart=False))
+        return 0
     print(command_str(build_command(p, rt)))
     return 0
 
@@ -96,7 +107,14 @@ async def _launch(args: argparse.Namespace) -> int:
     if asset_dir:
         print(f"assets:    {asset_dir}")
     print(f"launching: {profile.display_name}  (session {session.id})")
-    print(f"command:   {command_str(build_command(profile, session.runtime))}")
+    if profile.backend == "renode":
+        # The .resc IS this backend's command line; showing an argv would hide the part
+        # that actually decides the boot.
+        print(f"backend:   renode ({profile.renode.binary})")
+        print("script:    " + "\n           ".join(
+            build_renode_script(profile, session.runtime, autostart=False).splitlines()))
+    else:
+        print(f"command:   {command_str(build_command(profile, session.runtime))}")
 
     try:
         await session.launch()
@@ -111,7 +129,13 @@ async def _launch(args: argparse.Namespace) -> int:
                 print("\n".join(tail), file=sys.stderr)
         return 1
 
-    print(f"running:   pid={session.pid}  qmp={session.runtime.qmp_socket}")
+    # ⚠️ NAME THE CONTROL CHANNEL THAT EXISTS. This printed the qmp.sock path for every
+    # board, including Renode ones that have no QMP socket and never create that file —
+    # an operator following it to debug a hang would find nothing and doubt the tool.
+    ctl = (f"monitor=127.0.0.1:{session._renode_monitor_port}"
+           if session.profile.backend == "renode"
+           else f"qmp={session.runtime.qmp_socket}")
+    print(f"running:   pid={session.pid}  {ctl}")
 
     rc = 0
     try:

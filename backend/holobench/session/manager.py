@@ -34,8 +34,10 @@ from .command import (
     SessionRuntime,
     _resolve_artifact,
     build_command,
+    build_renode_script,
     command_str,
 )
+from .renode import RenodeMonitor, RenodeError, RenodeCaps
 from .isolation import SessionCgroup, memory_max_bytes
 
 
@@ -170,6 +172,19 @@ class SessionState(str, Enum):
 
 class SessionError(Exception):
     pass
+
+
+class UnsupportedVerb(SessionError):
+    """This backend genuinely cannot do this, and says so instead of failing oddly.
+
+    ⭐ NOT AN ERROR CONDITION — A CAPABILITY STATEMENT. Holobench now drives two emulators
+    whose control surfaces are not the same shape: QEMU has `screendump` and a QMP event
+    stream, Renode has `currentTime` and a real state `Save`. Neither is a subset of the
+    other. A caller asking for a verb the running backend does not have must get a clear
+    "this backend cannot", so the UI can hide the control — the same graceful degradation
+    CLAUDE.md §2 requires when a board has no framebuffer — rather than a traceback that
+    looks like Holobench is broken.
+    """
 
 
 def live_orphan_boards(base_dir: Optional[Path] = None,
@@ -320,11 +335,28 @@ class Session:
         self.camera_frames_dir: Optional[Path] = (
             self.work_dir / "frames" if profile.camera.enabled else None
         )
+        # ⭐ RENODE'S TRANSPORTS ARE TCP, NOT UNIX SOCKETS, and that is Renode's choice,
+        # not ours: `--port` puts the Monitor on TCP and CreateServerSocketTerminal puts
+        # each UART on TCP. Both are allocated here, per session, from the ephemeral range
+        # — the same per-session isolation the QEMU path gets from per-session socket paths
+        # (CLAUDE.md §6). SerialTap already speaks either transport.
+        is_renode = profile.backend == "renode"
+        self._renode_monitor_port = _free_tcp_port() if is_renode else None
+        renode_console_port = _free_tcp_port() if is_renode else None
         self.runtime = SessionRuntime(
             work_dir=self.work_dir,
             qmp_socket=self.work_dir / "qmp.sock",
+            renode_console_port=renode_console_port,
             serial_sockets={
-                port.chardev: self.work_dir / f"{port.chardev}.sock"
+                port.chardev: (
+                    # ⚠️ A "host:port" STRING IN A Path FIELD. SerialTap splits on ':' and
+                    # dials TCP when it finds one. Renode exposes ONE socket terminal per
+                    # run today, so every declared chardev maps to the same port; when a
+                    # board declares a second UART the profile must give it its own
+                    # terminal and this mapping must stop being one-to-many.
+                    Path(f"127.0.0.1:{renode_console_port}")
+                    if is_renode else self.work_dir / f"{port.chardev}.sock"
+                )
                 for port in profile.serial
             },
             asset_dir=asset_dir,
@@ -354,6 +386,7 @@ class Session:
         self.argv: list[str] = []
         self._proc: Optional[asyncio.subprocess.Process] = None
         self._qmp: Optional[QMPClient] = None
+        self._renode: Optional[RenodeMonitor] = None
         self._cgroup: Optional[SessionCgroup] = None
         self._log_path = self.work_dir / "qemu.log"
         # QEMU's stdout AND stderr both land here (stderr=STDOUT at launch). Public so the
@@ -425,6 +458,15 @@ class Session:
             ) from exc
         if self.share_dir is not None:
             self.share_dir.mkdir(parents=True, exist_ok=True)
+        # ⭐ THE BACKEND FORK. Everything above is board-agnostic (work dir, share dir);
+        # everything below this line until _launch_renode returns is QEMU's argv world —
+        # snapshot qcow2s, cgroup memory caps parsed from profile.qemu.memory, binary and
+        # argv pins. None of it has a Renode meaning, so Renode does not walk through it
+        # with a pile of `if`s; it takes its own path and returns.
+        if self.profile.backend == "renode":
+            await self._launch_renode(qmp_timeout, tap_serial)
+            return
+
         if self.camera_frames_dir is not None:
             # Keep the upload target dir present, but ARM the ISI host-frame-source
             # only when frames are actually staged: the ISI model fatally errors on
@@ -494,6 +536,74 @@ class Session:
         if tap_serial and not self._lazy_serial:
             await self._start_serial_taps()
         self._start_event_capture()
+        self.state = SessionState.RUNNING
+
+    async def _launch_renode(self, timeout: float, tap_serial: bool) -> None:
+        """Bring up a Renode-backed board: render the .resc, spawn, connect, then start.
+
+        We render the script with autostart=False, spawn Renode, connect the Monitor,
+        attach the console tap, and only then send `start`, so the session decides when the
+        board runs instead of inheriting whatever the script did.
+
+        ⚠️ NOT A FIX FOR LOST OUTPUT, THOUGH IT WAS FIRST WRITTEN UP AS ONE. Renode's
+        socket terminal BUFFERS (measured: a client attaching 12s late still gets the full
+        banner), so `start` inside the .resc loses nothing. The ordering is defensive —
+        it stops this path depending on an undocumented buffer — and the honest test of it
+        is structural (build_renode_script is called with autostart=False), not behavioural.
+        """
+        r = self.profile.renode
+        assert r is not None  # Profile._exactly_one_backend guarantees this
+
+        resc = self.work_dir / "board.resc"
+        resc.write_text(build_renode_script(self.profile, self.runtime, autostart=False))
+        pidfile = self.work_dir / "renode.pid"
+
+        # Standard Renode CLI only (CLAUDE.md §2 applies to Renode as well):
+        #   --disable-xwt  headless, no GUI            --plain  no ANSI steering codes
+        #   --hide-log     keep Renode's own log out of the console stream
+        #   --port         the Monitor on TCP          --pid-file  lifecycle
+        self.argv = [
+            r.binary, "--disable-xwt", "--hide-log", "--plain",
+            "--port", str(self._renode_monitor_port),
+            "--pid-file", str(pidfile),
+            str(resc),
+        ]
+        self._verify_pins()
+
+        log = self._log_path.open("wb")
+        try:
+            self._proc = await asyncio.create_subprocess_exec(
+                *self.argv, stdout=log, stderr=asyncio.subprocess.STDOUT,
+                preexec_fn=_make_qemu_preexec(None, self.reap_with_parent),
+            )
+        except FileNotFoundError as exc:
+            self.state = SessionState.FAILED
+            raise SessionError(
+                f"Renode binary not found: {r.binary}. The portable tarball ships one at "
+                f"its root; set renode.binary in profiles/{self.profile.id}.yaml to that "
+                f"path."
+            ) from exc
+
+        mon = RenodeMonitor(port=int(self._renode_monitor_port or 0),
+                            machine_name=r.machine_name)
+        try:
+            await mon.connect(timeout)
+        except RenodeError as exc:
+            self.state = SessionState.FAILED
+            await self._kill_proc()
+            # ⚠️ NAME THE LOG. Renode's script errors (a missing .repl, a bad peripheral)
+            # appear ONLY in its stdout; the Monitor just never prompts. Without this the
+            # operator gets "no prompt" and no idea that the real message is on disk.
+            raise SessionError(
+                f"Renode came up but its Monitor never prompted: {exc}\n"
+                f"  Renode's own output is the place the cause will be: {self._log_path}"
+            ) from exc
+        self._renode = mon
+
+        if tap_serial and not self._lazy_serial:
+            await self._start_serial_taps()
+        # The console is attached; NOW let the guest run.
+        await mon.resume()
         self.state = SessionState.RUNNING
 
     def _verify_pins(self) -> None:
@@ -804,27 +914,90 @@ class Session:
             raise SessionError("QMP not connected")
         return await self._qmp.execute(cmd, args)
 
+    # ⭐ EVERY VERB BELOW IS BACKEND-AGNOSTIC AT ITS EDGE. Callers (the API, the CLI, the
+    # labs) ask a Session to reset a board; which emulator's dialect that becomes is
+    # decided here and nowhere else. This is the ONE place a `backend ==` test is correct
+    # — it is emulator dispatch, not board logic, and CLAUDE.md §8 bans the latter.
+
+    @property
+    def backend(self) -> str:
+        return self.profile.backend
+
+    def capabilities(self) -> dict[str, bool]:
+        """What this session's backend can actually do — for the UI to hide the rest.
+
+        ⚠️ NEITHER BACKEND IS A SUBSET OF THE OTHER. QEMU has screendump, an event stream
+        and HMP `info`; Renode has a device tree in one command, virtual-vs-real uptime,
+        and a real state Save. Reporting a single "features" list that assumed QEMU would
+        make the Renode board look broken and the QEMU board look poorer than it is.
+        """
+        if self.backend == "renode":
+            c = self._renode.caps if self._renode is not None else RenodeCaps()
+            return {"status": c.status, "reset": c.reset, "pause": c.pause,
+                    "resume": c.resume, "device_tree": c.device_tree,
+                    "uptime": c.uptime, "snapshot_save": c.snapshot_save,
+                    "snapshot_load": c.snapshot_load, "screendump": c.screendump,
+                    "hmp": c.hmp, "events": c.qmp_events}
+        return {"status": True, "reset": True, "pause": True, "resume": True,
+                "device_tree": True, "uptime": False,
+                "snapshot_save": self.runtime.snapshot_disk is not None,
+                "snapshot_load": self.runtime.snapshot_disk is not None,
+                "screendump": self.profile.display.enabled, "hmp": True, "events": True}
+
+    def _require(self, verb: str) -> None:
+        """Refuse a verb this backend does not have, in words an operator can act on."""
+        if not self.capabilities().get(verb, False):
+            raise UnsupportedVerb(
+                f"the {self.backend} backend cannot '{verb}' for board "
+                f"{self.profile.id}. This is a capability of the emulator, not a fault: "
+                f"see Session.capabilities() for what it can do.")
+
     async def query_status(self) -> dict[str, Any]:
+        if self._renode is not None:
+            return await self._renode.query_status()
         return await self._execute("query-status")
 
     async def system_reset(self) -> None:
+        if self._renode is not None:
+            await self._renode.system_reset()
+            return
         await self._execute("system_reset")
 
     async def pause(self) -> None:
-        await self._execute("stop")
+        if self._renode is not None:
+            await self._renode.pause()
+        else:
+            await self._execute("stop")
         self.state = SessionState.PAUSED
 
     async def resume(self) -> None:
-        await self._execute("cont")
+        if self._renode is not None:
+            await self._renode.resume()
+        else:
+            await self._execute("cont")
         self.state = SessionState.RUNNING
+
+    async def uptime(self) -> dict[str, str]:
+        """Virtual vs real elapsed time. Renode-only — QEMU exposes no QMP equivalent."""
+        self._require("uptime")
+        assert self._renode is not None
+        return await self._renode.uptime()
 
     # -- introspection (read-only; the "beat the hardware" panel) -----------
 
     async def hmp(self, command: str) -> str:
         """Run a read-only HMP `info` query via human-monitor-command."""
+        self._require("hmp")
         return await self._execute("human-monitor-command", {"command-line": command})
 
     async def qom_list(self, path: str = "/machine") -> Any:
+        if self._renode is not None:
+            # ⚠️ SHAPE-COMPATIBLE, NOT IDENTICAL. Renode's `peripherals` is one flat text
+            # tree with classes and address ranges, not QMP's per-path child list, so the
+            # `path` argument has no meaning and is ignored rather than faked. Callers that
+            # walk /machine recursively must read capabilities() first.
+            return {"backend": "renode", "path": None,
+                    "tree": await self._renode.device_tree()}
         return await self._execute("qom-list", {"path": path})
 
     async def qom_get(self, path: str, prop: str) -> Any:
@@ -917,15 +1090,37 @@ class Session:
             )
 
     async def snapshot_save(self, name: str) -> str:
+        self._require("snapshot_save")
+        if self._renode is not None:
+            # ⚠️ A DIFFERENT THING WITH THE SAME NAME, AND THE CALLER MUST BE ABLE TO TELL.
+            # QEMU's savevm writes a named tag INSIDE the scratch qcow2; Renode's `Save`
+            # writes a standalone file (measured: 1.6 MB for the RT1180). We keep the file
+            # in the session work dir so cleanup() reaps it with everything else, and
+            # return its PATH — which is what a Renode snapshot actually is.
+            safe = "".join(c for c in name if c.isalnum() or c in "-_.")
+            if not safe:
+                raise SessionError(f"snapshot name {name!r} has no usable characters")
+            return await self._renode.save_snapshot(
+                str(self.work_dir / f"snap-{safe}.bin"))
         return await self.hmp(f"savevm {name}")
 
     async def snapshot_load(self, name: str) -> str:
+        self._require("snapshot_load")
         return await self.hmp(f"loadvm {name}")
 
     async def snapshot_delete(self, name: str) -> str:
+        self._require("snapshot_load")
         return await self.hmp(f"delvm {name}")
 
     async def snapshot_list(self) -> list[dict]:
+        if self._renode is not None:
+            # Renode snapshots are FILES, so the list is a directory listing. There is no
+            # Monitor command that enumerates them — this is Holobench's own bookkeeping
+            # over the files it wrote, and it says so rather than implying Renode tracks them.
+            return [{"name": f.stem.removeprefix("snap-"), "path": str(f),
+                     "bytes": f.stat().st_size, "backend": "renode"}
+                    for f in sorted(self.work_dir.glob("snap-*.bin"))]
+        self._require("snapshot_save")
         text = await self.hmp("info snapshots")
         snaps: list[dict] = []
         for line in text.splitlines():
@@ -942,6 +1137,7 @@ class Session:
 
     async def screendump(self, path: Path, fmt: Optional[str] = "png") -> Path:
         """Capture the board's framebuffer (LCDIF/DPU) via QMP screendump."""
+        self._require("screendump")
         args: dict[str, Any] = {"filename": str(path)}
         if fmt:
             args["format"] = fmt
@@ -949,9 +1145,18 @@ class Session:
         return path
 
     async def quit(self) -> None:
-        """Graceful QMP quit, then ensure the process is gone."""
+        """Graceful shutdown in whichever dialect this backend speaks, then make sure.
+
+        ⭐ THE `_kill_proc()` BELOW IS NOT BELT-AND-BRACES, IT IS THE CONTRACT. Neither
+        emulator is trusted to have exited just because it was asked politely — Law 2
+        wants a corpse list, and the only way to owe none is to verify. Renode's measured
+        behaviour is clean (`quit` -> "Renode is quitting" -> process gone), and we still
+        check.
+        """
         try:
-            if self._qmp is not None:
+            if self._renode is not None:
+                await self._renode.quit()
+            elif self._qmp is not None:
                 await self._execute("quit")
         except Exception:
             pass
@@ -966,6 +1171,9 @@ class Session:
                 pass
             self._evtask = None
         await self._disconnect_qmp()
+        if self._renode is not None:
+            await self._renode.close()
+            self._renode = None
         await self._kill_proc()
         self.state = SessionState.STOPPED
 
