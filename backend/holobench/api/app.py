@@ -1207,9 +1207,16 @@ async def introspect_qtree(session_id: str) -> dict:
 async def introspect_qom(session_id: str, path: str = "/machine") -> dict:
     s = _get_session(session_id)
     try:
-        return {"path": path, "children": await s.qom_list(path)}
+        result = await s.qom_list(path)
     except SessionError as exc:
         raise HTTPException(status_code=503, detail=str(exc))
+    # ⚠️ DO NOT WRAP A RENODE TREE IN QMP'S SHAPE. Renode's `peripherals` is one flat text
+    # tree, and the `path` argument has no meaning to it. Returning
+    # {"path": "/machine", "children": {...text...}} tells a client two lies at once: that
+    # the tree was scoped to /machine, and that "children" is a child list it can iterate.
+    if isinstance(result, dict) and result.get("backend") == "renode":
+        return result
+    return {"path": path, "children": result}
 
 
 @app.get("/api/sessions/{session_id}/events")

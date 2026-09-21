@@ -343,6 +343,40 @@ def test_session_renders_the_script_with_autostart_disabled(monkeypatch, tmp_pat
         "Session must render with autostart=False; got " + repr(seen))
 
 
+def test_qom_endpoint_does_not_dress_a_renode_tree_as_qmp_children(monkeypatch):
+    """⚠️ THE API WRAPPER TOLD TWO LIES AT ONCE. It returned
+    {"path": "/machine", "children": <the renode dict>} — claiming the tree was scoped to
+    /machine (Renode ignores the argument entirely) and that "children" was a child list a
+    client could iterate (it is one flat text blob). Found by reading a LIVE response, not
+    by a test, which is why there is now a test — and it exercises the endpoint rather than
+    grepping its source, because the first version of this test grepped and was simply
+    wrong about where the source lived."""
+    import importlib
+    # ⚠️ import_module, NOT `import holobench.api.app as mod`. The package's __init__
+    # re-exports the FastAPI instance as `app`, so the attribute path `holobench.api.app`
+    # resolves to the OBJECT and attribute lookups on it fail with a confusing
+    # "'FastAPI' object has no attribute ...". import_module returns the module.
+    mod = importlib.import_module("holobench.api.app")
+
+    class _Stub:
+        async def qom_list(self, path="/machine"):
+            return {"backend": "renode", "path": None, "tree": "Available peripherals:\n"}
+
+    class _StubQemu:
+        async def qom_list(self, path="/machine"):
+            return ["child[0]", "child[1]"]
+
+    monkeypatch.setattr(mod, "_get_session", lambda sid: _Stub())
+    got = asyncio.run(mod.introspect_qom("sid"))
+    assert got["backend"] == "renode" and got["path"] is None
+    assert "children" not in got, f"renode tree wrapped in QMP's shape: {got}"
+
+    # and the QEMU shape must be untouched
+    monkeypatch.setattr(mod, "_get_session", lambda sid: _StubQemu())
+    got = asyncio.run(mod.introspect_qom("sid"))
+    assert got == {"path": "/machine", "children": ["child[0]", "child[1]"]}
+
+
 def test_build_command_refuses_a_renode_profile_by_name(tmp_path):
     p = load_profile("imxrt1180-renode")
     from holobench.session.command import build_command

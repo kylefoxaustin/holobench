@@ -4,7 +4,10 @@
 
 # Holobench
 
-**A board-farm-style web front end for QEMU machine models. A "virtual EVK."**
+**A board-farm-style web front end for emulated boards. A "virtual EVK."**
+
+*Drives **QEMU** and **Renode** — same UI, same console, same profile format, one board
+abstraction over two emulators.*
 
 ---
 
@@ -19,8 +22,8 @@
 
 You reserve a board, you get a browser tab with a live serial console, the
 board's LCD framebuffer, power/reset controls, and a way to push boot files
-onto it. Except there is no board. It's a QEMU machine model running on a
-server, presented through the exact UX of a hardware board farm.
+onto it. Except there is no board. It's an emulated machine running on a server —
+**QEMU or Renode** — presented through the exact UX of a hardware board farm.
 
 If you've used NXP's aiotcloud board farm (WEVK Remote Console: console window,
 framebuffer panel, Power / File / System management), Holobench is that — but
@@ -60,16 +63,29 @@ have spent months building. Holobench is the front end that gap was waiting for.
 
 ## The Prime Directive (read this before touching anything)
 
-Holobench drives the emulators **exclusively through standard, upstreamable
-QEMU mechanisms**: QMP (standard commands only), standard serial chardevs,
-standard VNC/display, standard block/SD/virtfs/netdev backends, and the
-standard gdbstub.
+Holobench drives its emulators **exclusively through the interfaces those emulators
+already ship for everyone else**. It must **never** require a custom command, a custom
+device, a model patch, or a forked binary.
 
-It must **never** require a custom QMP command, a custom device, a machine-model
-patch, or a forked QEMU. The companion machine models are being upstreamed to
-qemu.org; any coupling would both block that upstreaming and chain Holobench to
-a forked binary. See `CLAUDE.md` → *Prime Directive* for the full rule and the
-escalation path when something is genuinely missing from a model.
+| | **QEMU** | **Renode** |
+|---|---|---|
+| control | QMP, standard commands only | Monitor over TCP (`--port`) |
+| console | `-serial` / `-chardev` | `CreateServerSocketTerminal … false` |
+| display | `-vnc` / QMP `screendump` | *(none on the boards driven so far)* |
+| files | `-drive` / `-sd` / virtio-9p / usernet TFTP | *(not wired yet)* |
+| debug | `-gdb` / `-s` gdbstub | *(not wired yet)* |
+| lifecycle | process + QMP `quit` | `--pid-file` + Monitor `quit` |
+
+The companion machine models are being upstreamed to qemu.org; any coupling would both
+block that upstreaming and chain Holobench to a forked binary. The same rule applies to
+Renode: the board's `.repl`/`.resc` are read from the emulator repo and never edited or
+copied here. See `CLAUDE.md` → *Prime Directive* for the full rule and the escalation path
+when something is genuinely missing from a model.
+
+⚠️ **The two backends are not subsets of each other.** QEMU has `screendump`, a QMP event
+stream and HMP `info`; Renode has a one-command device tree, virtual-vs-real uptime, and a
+real state `Save`. The API exposes `capabilities` per session so the UI hides what a given
+board cannot do, rather than showing a broken control.
 
 ## Architecture at a glance
 
@@ -95,13 +111,33 @@ escalation path when something is genuinely missing from a model.
                                    └────────────────────┘
 ```
 
+**Two backends behind one Session.** A profile carries either a `qemu:` block or a
+`renode:` block — exactly one, enforced by the model. The session layer renders the right
+launch and speaks the right control dialect; everything above it (console bridge, REST/WS,
+the UI) is unchanged:
+
+```
+                       ┌── backend: qemu ──────────────────────────────────┐
+  Session.launch() ────┤   build_command()  -> argv  -> QEMU -> QMP socket │
+        │              └───────────────────────────────────────────────────┘
+        │              ┌── backend: renode ────────────────────────────────┐
+        └──────────────┤   build_renode_script() -> .resc -> Renode        │
+                       │                          -> Monitor over TCP      │
+                       └───────────────────────────────────────────────────┘
+       both expose: query-status · reset · pause/resume · device tree · console · quit
+       and Session.capabilities() for everything that differs
+```
+
 Full detail: `docs/ARCHITECTURE.md`. Profile schema: `docs/BOARD_PROFILES.md`.
 
 ## Status
 
 **Working.** Reserve a board in the browser, console into it, watch its LCD,
 push files onto it, inspect its internals, and attach a debugger — backed by
-QEMU i.MX SoC models, through stock interfaces only.
+QEMU i.MX SoC models, through stock interfaces only. A **second emulator, Renode**,
+drives its own boards through the same UI and the same profile format (console and
+control; see *[A second emulator](#a-second-emulator-renode-boards)* for what it does
+and does not yet do).
 
 | Phase | Capability | State |
 |---|---|---|
@@ -115,6 +151,7 @@ QEMU i.MX SoC models, through stock interfaces only.
 | 6 | Hardening — auth (token expiry, login throttle, WS-origin, persistent key), **per-session cgroup v2 caps** (memory/pids/cpu), asset-path lockdown, audit log, [deploy guide](docs/DEPLOY.md) | ◐ optional netns/mount-ns next |
 | 6+ | **Accounts & admin** — self-service register / first-run onboarding, user management (add / remove / set-role), and an **admin fleet view**: every running board across all users with per-board CPU (per-core + % of host) / RAM / disk / idle + one-click **kill** | ✅ |
 | 🧰 | **Build me a board** — build the real NXP BSP in a container (you accept the EULA; Holobench hosts/accepts nothing): pick the **image depth** (core / multimedia / full, per SoC), **pre-cache** sources for offline & restart-safe builds, SSD-backed. All 3 SoCs × 3 depths build clean. | ✅ |
+| 🎛 | **A second emulator — Renode** — the same board abstraction over Renode as over QEMU: launch from a profile, live console, reset / pause / resume, device tree, virtual-vs-real uptime, state snapshots, clean reap. All through stock Renode (`--port` Monitor, `CreateServerSocketTerminal`, `--pid-file`). First board: **i.MX RT1180 CM33**. | ✅ console + control; ◐ no file-injection / labs / framebuffer yet |
 | 🔗 | **Connect boards — multi-board labs (v3.0)** — wire 2+ boards over a real bus and message-pass between them: **eth / USB / UART / SPI / CAN / I2C**, all stock QEMU sockets (no host `vcan`/root/custom device), all validated byte-exact — *including mixed-SoC, cross-arch* (a Linux i.MX ↔ a bare-metal MCXN947), and a **4-SoC staggered segment with scheduled departures**. See *[Connect boards](#connect-boards-multi-board-labs)*. | ✅ |
 
 Boards: **i.MX 91 / 93 / 95**, each in two flavors — a quick **busybox** profile
@@ -286,6 +323,104 @@ it. None of that is doable on a bench.
 Adding a board to a link, or a whole new link type, is a small profile block — no
 code. Full detail (the socket contracts + how to author your own lab):
 **[`docs/TOPOLOGIES.md`](docs/TOPOLOGIES.md)**.
+
+## A second emulator: Renode boards
+
+Holobench is not a QEMU front end that grew a plugin — a **board** is the unit, and the
+emulator is an implementation detail of the profile. A Renode board is declared the same
+way a QEMU one is, and is driven through the same Session API:
+
+```yaml
+# profiles/imxrt1180-renode.yaml   (abridged)
+id:           imxrt1180-renode
+display_name: "NXP i.MX RT1180 EVK (Renode, CM33)"
+soc:          "NXP i.MX RT1180 (Cortex-M33)"
+
+renode:
+  binary:       /path/to/renode_1.17.0-portable/renode
+  platform:     /path/to/renode-imxrt1180/platforms/mimxrt1189_cm33.repl
+  firmware:     /path/to/hello_world_cm33.elf
+  machine_name: rt1180
+  uart:         lpuart1
+  pre_commands:                     # before `mach create`
+    - "include @/path/to/renode-imxrt1180/scripts/load_peripherals.resc"
+  post_platform:                    # after LoadPlatformDescription — sysbus exists now
+    - "sysbus Redirect 0x50000000 0x40000000 0x10000000"
+
+serial:
+  - { name: "CM33 console (LPUART1)", chardev: console0, role: m-core, default: true }
+```
+
+```console
+$ holobench launch imxrt1180-renode
+launching: NXP i.MX RT1180 EVK (Renode, CM33)  (session imxrt1180-renode-3161118c)
+backend:   renode (/home/kyle/opt/renode_1.17.0-portable/renode)
+script:    using sysbus
+           include @…/scripts/load_peripherals.resc
+           mach create "rt1180"
+           machine LoadPlatformDescription @…/platforms/mimxrt1189_cm33.repl
+           sysbus Redirect 0x50000000 0x40000000 0x10000000
+           emulation CreateServerSocketTerminal 56371 "hbterm" false
+           connector Connect lpuart1 hbterm
+           sysbus LoadELF @…/hello_world_cm33.elf
+running:   pid=470452  monitor=127.0.0.1:56371
+query-status: {"running": true, "status": "running", "singlestep": false}
+```
+
+`holobench command imxrt1180-renode` prints the `.resc` without launching anything —
+the Renode equivalent of printing the stock-QEMU command line.
+
+**What the Renode backend gives you that QEMU doesn't:**
+
+- **`peripherals`** — the whole device tree, with each peripheral's class *and* address
+  range, in one command.
+- **`currentTime`** — virtual vs. real elapsed time. QEMU exposes no QMP equivalent, so
+  "how much guest time has this board actually burned" is a Renode-only answer.
+- **State `Save`** — a standalone snapshot file, no scratch qcow2 required.
+
+**And what it doesn't — stated plainly, because a board farm that hides this is worse
+than one that admits it:**
+
+- **No file injection, no labs, no framebuffer.** The multi-board lab layer speaks
+  `-netdev socket,mcast=`, which Renode has no equivalent for; the RT1180 model has no
+  display device. Those panels are hidden for a Renode board, not broken.
+- **Snapshot *restore* is deliberately withheld.** Renode's `Load` works, and measured, it
+  also **kills the guest console**: the socket terminal accepts connections before the
+  restore and returns `ConnectionRefusedError` after, because the restored emulation never
+  had a terminal created against it. Recreating one would hand out a new port while every
+  attached browser still holds the old one — the operator would watch their console go
+  silent on a board that still answers status. `capabilities().snapshot_load` is `false`
+  and the API refuses with `UnsupportedVerb` rather than pretending.
+- **One socket terminal per run**, so a board declaring a second UART needs profile work
+  before both consoles are real.
+
+Ask any session what it can do — the UI does exactly this before it decides which panels
+to render:
+
+```console
+$ curl -s localhost:8080/api/sessions/<id> | jq '.backend, .capabilities'
+"renode"
+{ "status": true, "reset": true, "pause": true, "resume": true,
+  "device_tree": true, "uptime": true, "snapshot_save": true,
+  "snapshot_load": false, "screendump": false, "hmp": false, "events": false }
+```
+
+The same REST surface drives both backends — `POST /api/sessions/{id}/actions/{reset,
+pause,resume}` all return `200` on a Renode board — and a verb the backend lacks refuses
+with a **503** that says why, instead of a stack trace:
+
+```console
+$ curl -s localhost:8080/api/sessions/<id>/introspect/mtree        # HMP: QEMU-only
+{"detail":"the renode backend cannot 'hmp' for board imxrt1180-renode. This is a
+ capability of the emulator, not a fault: see Session.capabilities() for what it can do."}
+
+$ curl -s localhost:8080/api/sessions/<id>/introspect/qom          # the device tree
+{"backend":"renode","path":null,"tree":"Available peripherals:\n\n  sysbus (SystemBus)\n…"}
+```
+
+⚠️ Note `"path": null` — Renode's `peripherals` is one flat tree and the QMP `path`
+argument has no meaning to it, so the response says so rather than echoing `/machine` and
+implying a scoped query that never happened.
 
 ## Why the i.MX95 needs the M33 System Manager
 
@@ -543,14 +678,17 @@ holobench/
   profiles/    imx9{1,3,5}-evk.yaml (busybox initramfs)
                imx9{1,3,5}-evk-sd.yaml (full BSP distro, disk boot)
                mcxn947-*.yaml / imxrt1180-*.yaml (bare-metal MCU link nodes)
+               imxrt1180-renode.yaml (the same board under RENODE, not QEMU)
                *-enet-lab3.yaml (raw-L2 segment nodes)  virt-smoke.yaml
   labs/        *.yaml — multi-board topologies (eth/USB/UART/SPI/CAN/I2C links,
                incl. the staggered N-node segment mcx-rt1180-95-l2)
   backend/     pyproject.toml
-    holobench/ profiles/ (models+loader)  session/ (command+manager+control)
+    holobench/ profiles/ (models+loader)  session/ (command+manager+control,
+               renode.py = the Renode Monitor client)
                labs/ (coordinator)  bridges/ (console tap)  api/ (FastAPI app)  cli.py
-    tests/     pytest — profiles, command resolver, and the lab layer (coordinator
-               wiring, artifact/invocation pins, guest-clock + backlog scoring)
+    tests/     pytest — profiles, command resolver, the Renode backend (fake Monitor
+               built from measured bytes + a real-Renode e2e), and the lab layer
+               (coordinator wiring, artifact/invocation pins, guest-clock + backlog scoring)
   frontend/    index.html (React+htm+Tailwind+xterm.js)  vendor/ (offline deps)
   vendor/      camera/ (GPL-2.0 ISI capture helpers: source + static aarch64 bin)
   tools/       make-initramfs.sh  make-golden-disk.sh  build-capture-helpers.sh
@@ -577,6 +715,23 @@ companion forks and point each profile's `qemu.binary` at the result:
 The last two are **bare-metal MCU** models (Cortex-M33), not Linux SoCs — they join the
 multi-board labs above as firmware nodes (SPI/UART/CAN/USB gadgets, and the raw-L2 segment).
 
+**Renode boards** come from a different kind of companion repo — a platform description
+rather than a machine model, and nothing to build:
+
+| Repo | What Holobench reads | Driven as |
+|---|---|---|
+| `renode-imxrt1180` | `platforms/mimxrt1189_cm33.repl`, `scripts/load_peripherals.resc` | `profiles/imxrt1180-renode.yaml` |
+
+Plus a stock **Renode** (validated against **1.17.0**); the portable tarball ships a
+`renode` launcher at its root, which is what `renode.binary` points at. Holobench reads
+those files and never edits or copies them — same read-only, one-directional contract as
+the QEMU repos.
+
+⭐ **The RT1180 exists in both worlds**, as `imxrt1180-evk-uart-device` (QEMU) and
+`imxrt1180-renode` (Renode). That is the point: the same board, the same harness, the same
+console oracle, two independent emulators — so "does this firmware behave the same on
+both?" becomes a thing you can actually run instead of two reports to compare by eye.
+
 These are the source of truth for each board's machine type, serial topology,
 display device, and boot flow. Holobench consumes them via profiles. It never
 modifies them. Want to see exactly what a profile resolves to before you boot?
@@ -597,6 +752,16 @@ make these SoCs boot under emulation:
 
 All three use direct-kernel boot (`-kernel`/`-dtb`), TCG (no KVM), and a
 standard `-serial` chardev for the A-core console.
+
+- **i.MX RT1180 under Renode** — a bare-metal **CM33** boot core, loaded with
+  `sysbus LoadELF` and consoled over **LPUART1**. Two non-obvious bits, both in the
+  profile rather than in code: the board's peripheral script must be `include`d **before**
+  `mach create`, while `sysbus Redirect 0x50000000 0x40000000 0x10000000` — the blanket
+  TrustZone-M secure mirror the SDK needs — must run **after** `LoadPlatformDescription`,
+  because `sysbus` addresses a machine that does not exist until the platform is loaded.
+  Get that order wrong and Renode answers `No such command or device: sysbus`. The socket
+  terminal is created with `telnetMode` **false**; left at its default (`true`) the guest
+  stream is prefixed with IAC negotiation bytes and stops being the guest's bytes.
 
 ## Renaming / rebranding
 
