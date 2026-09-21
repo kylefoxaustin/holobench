@@ -1,0 +1,32 @@
+{
+  "imx91-evk": {
+    "booted_on": "2026-09-21",
+    "claim": "OBSERVED TO BOOT (smoke liveness). NOT a binary_pin \u2014 no lab, no silicon.",
+    "qemu_md5": "d734b50d89c19b6403b778aa0f4948af",
+    "qemu_path": "/home/kyle/Documents/GitHub/91emulator/build/qemu-system-aarch64"
+  },
+  "imx93-evk": {
+    "booted_on": "2026-09-21",
+    "claim": "OBSERVED TO BOOT (smoke liveness). NOT a binary_pin \u2014 no lab, no silicon.",
+    "qemu_md5": "4f9fa5415630bac35a88c57ef5343cc5",
+    "qemu_path": "/home/kyle/Documents/GitHub/93emulator/build-imx93/qemu-system-aarch64"
+  },
+  "imx95-evk": {
+    "booted_on": "2026-09-21",
+    "claim": "OBSERVED TO BOOT (smoke liveness). NOT a binary_pin \u2014 no lab, no silicon.",
+    "qemu_md5": "8af07982dd6a423332bdea24002cde0a",
+    "qemu_path": "/home/kyle/Documents/GitHub/95emu-tagbuild/build/qemu-system-aarch64"
+  },
+  "imxrt1180-evk-uart-device": {
+    "booted_on": "2026-09-21",
+    "claim": "OBSERVED TO BOOT (smoke liveness). NOT a binary_pin \u2014 no lab, no silicon.",
+    "qemu_md5": "cda70ec68af894a6da044da5474b890d",
+    "qemu_path": "/home/kyle/Documents/GitHub/rt1180emulator/build/qemu-system-arm"
+  },
+  "mcxn947-evk": {
+    "booted_on": "2026-09-21",
+    "claim": "OBSERVED TO BOOT (smoke liveness). NOT a binary_pin \u2014 no lab, no silicon.",
+    "qemu_md5": "1b4b1905a85cc58f2587055f5c778701",
+    "qemu_path": "/home/kyle/Documents/GitHub/mcxn947qemu/build/qemu-system-arm"
+  }
+}
