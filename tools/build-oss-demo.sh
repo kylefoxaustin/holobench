@@ -29,8 +29,22 @@ OUT="${3:-$REPO/dist}"
 
 # Refuse to package anything that looks like an NXP-built BSP binary by name/marker.
 # (Heuristic guard — the human still confirms the inputs are OSS.)
-if find "$SRC" -name 'm33_image*' -o -name '*imx-sm*' 2>/dev/null | grep -q .; then
-  echo "error: refusing — found an M33/imx-sm firmware (NXP, non-redistributable) in $SRC"; exit 1
+# ⚠️ THE VERDICT COMES FROM WHAT WAS FOUND, NEVER FROM THE PIPELINE'S EXIT STATUS.
+# This was `find ... | grep -q .`, and under `set -o pipefail` (line 21) that is a guard
+# that can report CLEAN ON A DIRTY TREE: grep -q exits on the FIRST match, closing the
+# pipe; find then dies of SIGPIPE; the pipeline exits 141; the `if` takes the else branch
+# and the bundle is packaged. Measured: `seq 1 100000 | grep -q .` reports NO MATCH with
+# status 141. It survives today only because this find's output is small enough to fit the
+# pipe buffer — i.e. the guard is sound by luck and its failure mode is SILENT.
+# ⭐ This is a LICENSE guard; "usually right" is not a standard it gets to be held to.
+# (Pattern from splat-vla's COLMAP CUDA probe, 2026-09-21 — fleet rule 2.)
+# The \( \) grouping is not cosmetic either: with `-o` and no parens, any predicate added
+# later binds to one branch only.
+nxp_hits="$(find "$SRC" \( -name 'm33_image*' -o -name '*imx-sm*' \) 2>/dev/null || true)"
+if [ -n "$nxp_hits" ]; then
+  echo "error: refusing — found an M33/imx-sm firmware (NXP, non-redistributable) in $SRC"
+  printf '  %s\n' $nxp_hits >&2
+  exit 1
 fi
 [ -f "$SRC/Image" ] || echo "warn: no kernel 'Image' in $SRC (continuing — boot recipe is the emulator's call)"
 

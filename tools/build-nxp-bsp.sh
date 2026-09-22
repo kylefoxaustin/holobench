@@ -111,15 +111,19 @@ mkdir -p "$CACHE"
 # until docker actually releases the name before starting, so a quick re-click /
 # re-run can't race the old container's teardown. (^name$ = exact match; the docker
 # name filter is a substring match otherwise.)
-if docker ps -aq -f "name=^${NAME}$" 2>/dev/null | grep -q .; then
+# ⚠️ Same fix as build-oss-demo.sh: decide on the OUTPUT, not the pipeline status. Under
+# `set -o pipefail`, `... | grep -q .` reports "absent" when grep's early exit SIGPIPEs the
+# producer — here that would skip the removal and hand the user the "name already in use"
+# error this block exists to prevent.
+if [ -n "$(docker ps -aq -f "name=^${NAME}$" 2>/dev/null || true)" ]; then
   echo "==> a container named '$NAME' from a prior run is still present — removing it"
   docker rm -f "$NAME" >/dev/null 2>&1 || true
 fi
 for _ in $(seq 1 40); do
-  docker ps -aq -f "name=^${NAME}$" 2>/dev/null | grep -q . || break
+  [ -n "$(docker ps -aq -f "name=^${NAME}$" 2>/dev/null || true)" ] || break
   sleep 0.5
 done
-if docker ps -aq -f "name=^${NAME}$" 2>/dev/null | grep -q .; then
+if [ -n "$(docker ps -aq -f "name=^${NAME}$" 2>/dev/null || true)" ]; then
   echo "error: container '$NAME' could not be removed; clear it manually with 'docker rm -f $NAME' and retry" >&2
   exit 1
 fi

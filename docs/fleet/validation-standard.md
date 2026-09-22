@@ -175,7 +175,28 @@ visible rather than silently pessimistic **or** silently optimistic.
   gap) — rendering identically let a setup gap wear the costume of correct behaviour, complete
   with the reassuring sentence *"faithful to real hardware"*;
 - an ISI falling back to a synthetic gradient when its frame source is missing **or** the wrong
-  geometry — two different mistakes absorbed into one healthy-looking image (95emulator).
+  geometry — two different mistakes absorbed into one healthy-looking image (95emulator);
+- ⭐ **a capability probe whose verdict came from the PIPELINE'S EXIT STATUS instead of from
+  what it saw** (splat-vla, 2026-09-21). The probe was
+
+      if colmap -h 2>&1 | head -3 | grep -q "without CUDA"; then GPU=0; else GPU=1; fi
+
+  Under `set -o pipefail`, `head` closes the pipe, `colmap` dies of **SIGPIPE**, and the
+  pipeline exits non-zero *no matter what grep found*. The `else` branch therefore fired and
+  the preflight printed **"colmap has CUDA"** about a build whose own banner reads
+  *"(Commit Unknown on Unknown without CUDA)"* — and the fleet's only GPU was reserved on the
+  strength of it. The fix separates observing from judging:
+
+      BANNER=$(colmap -h 2>&1 || true)
+      case "$BANNER" in *"without CUDA"*) GPU=0 ;; *) GPU=1 ;; esac
+
+  ⭐ **A PROBE MUST BE DECIDED BY WHAT IT OBSERVED, NEVER BY WHETHER THE OBSERVING COMMAND
+  SURVIVED.** "I could not complete the measurement" is state three; an `if` on a pipeline's
+  status has only two branches, so state three is silently dealt into one of them — and here it
+  landed on the *optimistic* side, which is the side that spends a resource.
+  ⚠️ This is a DIFFERENT defect from rule 1's `$?`-through-a-pipe bullet, and both are listed
+  on purpose: there, the wrong command's status was read; here the *right* pipeline's status was
+  read and the status itself was never about the question being asked.
 
 ⭐ **Faithfulness is a hiding place.** The more accurately a model reproduces "this is supposed
 to look broken", the better a genuine break hides inside it.
@@ -298,6 +319,13 @@ as a fault in the instrument.
   · **session** → cwd + session id. **NEVER the bus tag** — tags and directories diverge.
   · **"new results"** → content. **NEVER mtime** — find-by-mtime answers *what changed*, which
     is not *what was produced*.
+  · **"is this lease-holder actually using the resource?"** → what the process has **mapped**
+    (`/proc/<pid>/maps` for `libcuda`). **NEVER utilisation** (splat-vla → resource-watchdog,
+    2026-09-21). Idle-based reclaim got the COLMAP case right *for the wrong reason*: a genuine
+    CUDA build would ALSO look idle for an hour during single-threaded incremental SfM, so
+    utilisation cannot separate **wrongly holding** from **legitimately between phases**. A
+    process with no driver mapping is holding a lease it *cannot* use — a claim about capability,
+    not about this moment's activity.
 
 ⚠️ **RULE 1 DOES NOT COVER THIS CASE, WHICH IS WHY BOTH EXIST.** A positive control passes here:
 the scan finds other processes fine, so the instrument demonstrably works. **The instrument is
